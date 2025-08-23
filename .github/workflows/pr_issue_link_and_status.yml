@@ -8,10 +8,10 @@ permissions:
   contents: read
   issues: write
   pull-requests: write
-  repository-projects: read
+  repository-projects: write
 
 env:
-  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GH_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
   OWNER: ethanhanderson
   PROJECT_NUMBER: 2
   REPO: ethanhanderson/PickleballGameTracker
