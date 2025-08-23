@@ -13,7 +13,7 @@ permissions:
 
 env:
   GH_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
-  OWNER: "@me"
+  OWNER: ${{ github.repository_owner }}
   PROJECT_NUMBER: 2
   REPO: ethanhanderson/PickleballGameTracker
 
@@ -96,5 +96,3 @@ jobs:
               Todo|In\ Progress|"") [ "$STATE" != "open" ] && gh api -X PATCH repos/$REPO/issues/$NUM -f state=open >/dev/null ;;
             esac
           done
-
-
