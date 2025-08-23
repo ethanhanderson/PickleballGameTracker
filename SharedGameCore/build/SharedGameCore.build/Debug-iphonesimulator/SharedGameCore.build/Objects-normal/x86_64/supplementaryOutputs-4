@@ -1,0 +1,30 @@
+{
+  "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/Sources/SharedGameCore/PreviewData.swift" : {
+    "const-values" : "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/build/SharedGameCore.build/Debug-iphonesimulator/SharedGameCore.build/Objects-normal/x86_64/PreviewData.swiftconstvalues",
+    "dependencies" : "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/build/SharedGameCore.build/Debug-iphonesimulator/SharedGameCore.build/Objects-normal/x86_64/PreviewData.d",
+    "diagnostics" : "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/build/SharedGameCore.build/Debug-iphonesimulator/SharedGameCore.build/Objects-normal/x86_64/PreviewData.dia",
+    "object" : "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/build/SharedGameCore.build/Debug-iphonesimulator/SharedGameCore.build/Objects-normal/x86_64/PreviewData.o",
+    "swift-dependencies" : "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/build/SharedGameCore.build/Debug-iphonesimulator/SharedGameCore.build/Objects-normal/x86_64/PreviewData.swiftdeps"
+  },
+  "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/Sources/SharedGameCore/Services/ActiveGameStateManager.swift" : {
+    "const-values" : "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/build/SharedGameCore.build/Debug-iphonesimulator/SharedGameCore.build/Objects-normal/x86_64/ActiveGameStateManager.swiftconstvalues",
+    "dependencies" : "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/build/SharedGameCore.build/Debug-iphonesimulator/SharedGameCore.build/Objects-normal/x86_64/ActiveGameStateManager.d",
+    "diagnostics" : "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/build/SharedGameCore.build/Debug-iphonesimulator/SharedGameCore.build/Objects-normal/x86_64/ActiveGameStateManager.dia",
+    "object" : "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/build/SharedGameCore.build/Debug-iphonesimulator/SharedGameCore.build/Objects-normal/x86_64/ActiveGameStateManager.o",
+    "swift-dependencies" : "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/build/SharedGameCore.build/Debug-iphonesimulator/SharedGameCore.build/Objects-normal/x86_64/ActiveGameStateManager.swiftdeps"
+  },
+  "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/Sources/SharedGameCore/Services/ActiveGameSyncService.swift" : {
+    "const-values" : "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/build/SharedGameCore.build/Debug-iphonesimulator/SharedGameCore.build/Objects-normal/x86_64/ActiveGameSyncService.swiftconstvalues",
+    "dependencies" : "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/build/SharedGameCore.build/Debug-iphonesimulator/SharedGameCore.build/Objects-normal/x86_64/ActiveGameSyncService.d",
+    "diagnostics" : "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/build/SharedGameCore.build/Debug-iphonesimulator/SharedGameCore.build/Objects-normal/x86_64/ActiveGameSyncService.dia",
+    "object" : "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/build/SharedGameCore.build/Debug-iphonesimulator/SharedGameCore.build/Objects-normal/x86_64/ActiveGameSyncService.o",
+    "swift-dependencies" : "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/build/SharedGameCore.build/Debug-iphonesimulator/SharedGameCore.build/Objects-normal/x86_64/ActiveGameSyncService.swiftdeps"
+  },
+  "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/Sources/SharedGameCore/Services/DeepLinkBus.swift" : {
+    "const-values" : "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/build/SharedGameCore.build/Debug-iphonesimulator/SharedGameCore.build/Objects-normal/x86_64/DeepLinkBus.swiftconstvalues",
+    "dependencies" : "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/build/SharedGameCore.build/Debug-iphonesimulator/SharedGameCore.build/Objects-normal/x86_64/DeepLinkBus.d",
+    "diagnostics" : "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/build/SharedGameCore.build/Debug-iphonesimulator/SharedGameCore.build/Objects-normal/x86_64/DeepLinkBus.dia",
+    "object" : "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/build/SharedGameCore.build/Debug-iphonesimulator/SharedGameCore.build/Objects-normal/x86_64/DeepLinkBus.o",
+    "swift-dependencies" : "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking/SharedGameCore/build/SharedGameCore.build/Debug-iphonesimulator/SharedGameCore.build/Objects-normal/x86_64/DeepLinkBus.swiftdeps"
+  }
+}
