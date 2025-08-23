@@ -1,0 +1,100 @@
+name: Project↔Issues sync
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+  repository-projects: write
+
+env:
+  GH_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
+  OWNER: ethanhanderson
+  PROJECT_NUMBER: 2
+  REPO: ethanhanderson/PickleballGameTracker
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Create issues for Draft items and mirror status
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROJECT_ID=$(gh project view "$PROJECT_NUMBER" --owner "$OWNER" --format=json --jq .id)
+          FIELDS_JSON=$(gh project field-list "$PROJECT_NUMBER" --owner "$OWNER" --format=json)
+          STATUS_FIELD=$(jq -r '.fields[] | select(.name=="Status") | .id' <<<"$FIELDS_JSON")
+          STATUS_TODO=$(jq -r '.fields[] | select(.name=="Status") | .options[] | select(.name=="Todo") | .id' <<<"$FIELDS_JSON")
+          STATUS_IP=$(jq -r '.fields[] | select(.name=="Status") | .options[] | select(.name=="In Progress") | .id' <<<"$FIELDS_JSON")
+          STATUS_DONE=$(jq -r '.fields[] | select(.name=="Status") | .options[] | select(.name=="Done") | .id' <<<"$FIELDS_JSON")
+          CARD_ID_FIELD=$(jq -r '.fields[] | select(.name=="Card ID") | .id' <<<"$FIELDS_JSON")
+          VERSION_FIELD=$(jq -r '.fields[] | select(.name=="Version") | .id' <<<"$FIELDS_JSON")
+          AREA_FIELD=$(jq -r '.fields[] | select(.name=="Area") | .id' <<<"$FIELDS_JSON")
+          PRIORITY_FIELD=$(jq -r '.fields[] | select(.name=="Priority") | .id' <<<"$FIELDS_JSON")
+          SIZE_FIELD=$(jq -r '.fields[] | select(.name=="Size") | .id' <<<"$FIELDS_JSON")
+          OWNERS_FIELD=$(jq -r '.fields[] | select(.name=="Owners") | .id' <<<"$FIELDS_JSON")
+          DEPS_FIELD=$(jq -r '.fields[] | select(.name=="Dependencies") | .id' <<<"$FIELDS_JSON")
+          get_opt() { jq -r --arg fn "$1" --arg on "$2" '.fields[] | select(.name==$fn) | .options[] | select(.name==$on) | .id' <<<"$FIELDS_JSON" | head -n1; }
+          ITEMS=$(gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --limit 200 --format=json)
+          echo "$ITEMS" | jq -c '.items[] | select(.content.type=="DraftIssue")' | while read -r node; do
+            OLD_ID=$(jq -r '.id' <<<"$node")
+            TITLE=$(jq -r '.title' <<<"$node")
+            BODY=$(jq -r '.content.body // ""' <<<"$node")
+            CID=$(jq -r '."card ID" // ""' <<<"$node")
+            VERSION=$(jq -r '.version // ""' <<<"$node")
+            AREA=$(jq -r '.area // ""' <<<"$node")
+            PRIORITY=$(jq -r '.priority // ""' <<<"$node")
+            SIZE=$(jq -r '.size // ""' <<<"$node")
+            OWNERS=$(jq -r '.owners // ""' <<<"$node")
+            DEPS=$(jq -r '.dependencies // ""' <<<"$node")
+            ORIG_STATUS=$(jq -r '.status // "Todo"' <<<"$node")
+            NEW_TITLE="$TITLE"; [ -n "$CID" ] && NEW_TITLE="$CID: $TITLE"
+            LABEL_ARGS=()
+            [ -n "$AREA" ] && LABEL_ARGS+=( -l "area:$AREA" )
+            [ -n "$PRIORITY" ] && LABEL_ARGS+=( -l "priority:$PRIORITY" )
+            [ -n "$SIZE" ] && LABEL_ARGS+=( -l "size:$SIZE" )
+            LABEL_ARGS+=( -l "type:feature" )
+            MS_ARGS=()
+            [ -n "$VERSION" ] && MS_ARGS+=( -m "$VERSION" )
+            ISSUE_OUT=$(gh issue create -R "$REPO" -t "$NEW_TITLE" -b "${BODY:-$TITLE}" ${LABEL_ARGS[@]} ${MS_ARGS[@]} 2>&1 || true)
+            ISSUE_URL=$(grep -Eo 'https://github.com/[^ ]+/issues/[0-9]+' <<<"$ISSUE_OUT" | head -n1)
+            if [ -z "${ISSUE_URL:-}" ]; then
+              echo "Skipped (failed to create issue): $NEW_TITLE"
+              continue
+            fi
+            NEW_ITEM_JSON=$(gh project item-add "$PROJECT_NUMBER" --owner "$OWNER" --url "$ISSUE_URL" --format=json)
+            NEW_ID=$(jq -r .id <<<"$NEW_ITEM_JSON")
+            [ -n "$CID" ] && gh project item-edit --id "$NEW_ID" --project-id "$PROJECT_ID" --field-id "$CARD_ID_FIELD" --text "$CID" >/dev/null || true
+            for kv in Version:$VERSION Area:$AREA Priority:$PRIORITY Size:$SIZE; do
+              fname="${kv%%:*}"; val="${kv#*:}"; [ -z "$val" ] && continue; fid=$(jq -r --arg n "$fname" '.fields[] | select(.name==$n) | .id' <<<"$FIELDS_JSON"); oid=$(get_opt "$fname" "$val"); [ -n "$oid" ] && [ "$oid" != "null" ] && gh project item-edit --id "$NEW_ID" --project-id "$PROJECT_ID" --field-id "$fid" --single-select-option-id "$oid" >/dev/null || true
+            done
+            [ -n "$OWNERS" ] && gh project item-edit --id "$NEW_ID" --project-id "$PROJECT_ID" --field-id "$OWNERS_FIELD" --text "$OWNERS" >/dev/null || true
+            [ -n "$DEPS" ] && gh project item-edit --id "$NEW_ID" --project-id "$PROJECT_ID" --field-id "$DEPS_FIELD" --text "$DEPS" >/dev/null || true
+            case "$ORIG_STATUS" in "In Progress") SO="$STATUS_IP";; "Done") SO="$STATUS_DONE";; *) SO="$STATUS_TODO";; esac
+            gh project item-edit --id "$NEW_ID" --project-id "$PROJECT_ID" --field-id "$STATUS_FIELD" --single-select-option-id "$SO" >/dev/null || true
+            gh project item-delete "$PROJECT_NUMBER" --owner "$OWNER" --id "$OLD_ID" >/dev/null || true
+            echo "Created issue and replaced draft: $NEW_TITLE"
+          done
+          echo "$ITEMS" | jq -c '.items[] | select(.content.type=="Issue")' | while read -r node; do
+            ISSUE_URL=$(jq -r '.content.url' <<<"$node")
+            STATUS_NAME=$(jq -r '.status // empty' <<<"$node")
+            NUM=$(sed -E 's#.*/issues/([0-9]+).*#\1#' <<<"$ISSUE_URL")
+            [ -z "$NUM" ] && continue
+            STATE=$(gh api repos/$REPO/issues/$NUM --jq .state)
+            case "$STATUS_NAME" in
+              Done) [ "$STATE" != "closed" ] && gh api -X PATCH repos/$REPO/issues/$NUM -f state=closed >/dev/null ;;
+              Todo|In\ Progress|"") [ "$STATE" != "open" ] && gh api -X PATCH repos/$REPO/issues/$NUM -f state=open >/dev/null ;;
+            esac
+          done
+
+
