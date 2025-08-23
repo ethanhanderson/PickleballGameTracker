@@ -137,19 +137,6 @@ import SwiftData
 - **Tests**: Not required for preview data, but compile‑time coverage is expected; avoid heavy allocations
 - **Performance**: Keep scenarios small; use minimal data needed to illustrate UI
 
-## Deterministic Commands
-
-- iOS (pinned):
-  - `cd "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking" && xcodebuild -project "Pickleball Score Tracking.xcodeproj" -scheme "Pickleball Score Tracking" -destination "platform=iOS Simulator,name=iPhone 16" build`
-- watchOS (pinned):
-  - `cd "/Users/ethanhanderson/Documents/Development/eha dev/MatchTally Explorations/Pickleball Score Tracking" && xcodebuild -project "Pickleball Score Tracking.xcodeproj" -scheme "Pickleball Score Tracking Watch App" -destination "platform=watchOS Simulator,name=Apple Watch Series 10 (46mm)" build`
-
-## Test touchpoints
-
-- UI smoke previews compile across:
-  - `Pickleball Score Tracking/Features/*/Screens/*.swift`
-  - `Pickleball Score Tracking Watch App/Features/*/Screens/*.swift`
-
 ## Change impact
 
 - **Affected modules**: SharedGameCore, iOS, watchOS
@@ -163,16 +150,7 @@ import SwiftData
   - `SharedGameCore/Sources/SharedGameCore/PreviewData.swift`
   - `Pickleball Score Tracking/Infrastructure/Fixtures/PreviewData.swift`
 - **Related docs**:
-  - `docs/architecture/project-organization.md`
+  - `docs/architecture/overview.md#project-structure-code-map`
   - `docs/systems/ux/navigation.md#swiftui-preview-stability-guardrails`
 
 ---
-
-## Validation checklist (must meet for acceptance)
-
-- Baseline validation: see `docs/systems/observability/validation-baseline.md`
-- **Core provider compiles** against current `@Model` types (no deprecated fields/relationships)
-- **All previews reference the shared provider** or thin app wrappers that delegate to it (no inline/duplicated fixtures)
-- **Containers are in‑memory** for previews only; no production storage used
-- **Preview guardrails honored**: stable IDs, single scroll owner, top‑level destinations
-- **Builds green** on pinned iOS and watchOS destinations

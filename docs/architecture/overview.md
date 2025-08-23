@@ -19,7 +19,7 @@
 - **Version**: v0.3 baseline (notes for v0.6/v1.0 where relevant)
 
 - **Layer**: presentation (SwiftUI views) | domain (managers, rules) | data (SwiftData storage)
-- **Entry points**: `Pickleball_Score_TrackingApp` (iOS), `Pickleball_Score_Tracking_Watch_AppApp` (watchOS)
+- **Entry points**: `PickleballGameTrackerApp.swift` (iOS app shell), `PickleballGameTrackerWatchApp.swift` (watchOS app shell)
 - **Dependencies**: SwiftUI, SwiftData, `SharedGameCore`, SwiftCharts
 - **Data flow**: UI → `SwiftDataGameManager`/`ActiveGameStateManager` → `SwiftDataStorage` → SwiftData store; events via `LoggingService`; device sync via `ActiveGameSyncService`; Statistics aggregates derived metrics (Overview of grouped stat cards → per‑stat Detail). In v0.3, History displays all local completed games (archived hidden by default) with an Archive screen accessible from the toolbar; lazy/infinite loading and offload to cloud are deferred to v0.6. Completed Game deep links open a specific Statistics Detail with filters applied.
 
@@ -38,8 +38,50 @@
   - Presentation: `AppNavigationView`, `GameHomeView`, `GameHistoryView`, `GameSearchView`, `ActiveGameView` (iOS); `WatchGameCatalogView`, `WatchActiveGameView` (watchOS)
   - Domain: `SwiftDataGameManager`, `ActiveGameStateManager`
   - Data: `SwiftDataContainer`, `SwiftDataStorageProtocol`, `SwiftDataStorage`
-- **File locations**: `Pickleball Score Tracking/Views/...`, `Pickleball Score Tracking Watch App/Views/...`, `SharedGameCore/...`
+- **File locations**: `PickleballGameTrackerPackage/Sources/GameTrackerFeature/...`, `PickleballGameTrackerWatchPackage/Sources/WatchFeature/...`, `SharedGameCore/Sources/SharedGameCore/...`
 - **Initialization**: Single SwiftData container injected via `.modelContainer(SwiftDataContainer.shared.modelContainer)` in both app targets
+
+## Project structure (code map)
+
+The application logic and UI live in Swift packages; the app targets are thin shells that launch the packages.
+
+```text
+PickleballGameTracker/                         # iOS app shell (thin)
+  PickleballGameTrackerApp.swift               # @main entry point, imports package feature
+
+PickleballGameTrackerWatch/                    # watchOS app shell (thin)
+  PickleballGameTrackerWatchApp.swift          # @main entry point, imports package feature
+
+PickleballGameTrackerPackage/
+  Package.swift
+  Sources/
+    GameTrackerFeature/
+      App/                                     # app-scoped composition for iOS
+      Core/                                    # cross-feature wiring for iOS
+      Features/                                # feature-first folders (Screens + Components)
+      UI/                                      # shared UI for iOS target
+      Resources/
+
+PickleballGameTrackerWatchPackage/
+  Package.swift
+  Sources/
+    WatchFeature/
+      Features/                                # feature-first folders for watchOS
+      UI/                                      # shared UI for watchOS target
+      Resources/
+
+SharedGameCore/
+  Package.swift
+  Sources/
+    SharedGameCore/                            # models, services, design system, logging, storage
+```
+
+Notes
+
+- Features own their `Screens` (entry points) and `Components` (reusable leaf views) within the respective package.
+- App shells are minimal: they declare `@main` and compose views from the packages; no business logic.
+- Shared UI that spans features lives under `UI/` in the platform package and uses tokens from `SharedGameCore/DesignSystem.swift`.
+- Testable business logic remains in `SharedGameCore` (actors/services). Packages import and compose it; app targets stay UI-only.
 
 ## Platform Sections (use as needed)
 

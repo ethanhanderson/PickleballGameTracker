@@ -1,0 +1,78 @@
+name: Project Intake (Issues/PRs → Projects v2)
+
+on:
+  issues:
+    types: [opened, reopened]
+  pull_request:
+    types: [opened, ready_for_review]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  repository-projects: write
+
+env:
+  PROJECT_OWNER: ${{ vars.PROJECT_OWNER || github.repository_owner }}
+  PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+
+jobs:
+  add-to-project:
+    name: Add item to Project and set default status
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare GraphQL mutation
+        id: prep
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${PROJECT_OWNER:-}" || -z "${PROJECT_NUMBER:-}" ]]; then
+            echo "Missing PROJECT_OWNER/PROJECT_NUMBER repo variables" >&2
+            exit 1
+          fi
+
+          # Resolve ProjectV2 id from owner + number
+          # Prefer pre-resolved PROJECT_ID variable if present
+          if [[ -n "${{ vars.PROJECT_ID }}" ]]; then echo "project_id=${{ vars.PROJECT_ID }}" >> "$GITHUB_OUTPUT"; else
+            project_id=$(gh api graphql -f query='query($owner:String!, $number:Int!){ organization(login:$owner){ projectV2(number:$number){ id } } user(login:$owner){ projectV2(number:$number){ id } }}' -F owner="$PROJECT_OWNER" -F number="$PROJECT_NUMBER" --jq '.data.organization.projectV2.id // .data.user.projectV2.id')
+            if [[ -z "$project_id" ]]; then echo "Failed to resolve ProjectV2 id" >&2; exit 1; fi
+            echo "project_id=$project_id" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Determine content id depending on event
+          if [[ "${{ github.event_name }}" == "issues" ]]; then
+            content_node_id="${{ github.event.issue.node_id }}"
+          else
+            content_node_id="${{ github.event.pull_request.node_id }}"
+          fi
+          echo "content_node_id=$content_node_id" >> "$GITHUB_OUTPUT"
+
+      - name: Add Issue/PR to Project
+        env:
+          GH_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh api graphql -f query='mutation($project:ID!, $content:ID!){ addProjectV2ItemById(input:{projectId:$project, contentId:$content}){ item { id } } }' \
+            -F project='${{ steps.prep.outputs.project_id }}' \
+            -F content='${{ steps.prep.outputs.content_node_id }}' \
+            --silent || true
+
+      - name: Optionally set default Status = To do
+        if: ${{ vars.STATUS_FIELD_ID && vars.STATUS_TODO_OPTION_ID }}
+        env:
+          GH_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Find item id that was just added (by matching content id)
+          item_id=$(gh api graphql -f query='query($project:ID!, $content:ID!){ node(id:$project){ ... on ProjectV2 { items(first:50, query:"", orderBy:{field:CREATED_AT,direction:DESC}) { nodes { id content { id } } } } } }' \
+            -F project='${{ steps.prep.outputs.project_id }}' -F content='${{ steps.prep.outputs.content_node_id }}' --jq '.data.node.items.nodes[] | select(.content.id=="'${{ steps.prep.outputs.content_node_id }}'") | .id' | head -n1)
+          if [[ -z "$item_id" ]]; then exit 0; fi
+
+          gh api graphql -f query='mutation($project:ID!, $item:ID!, $field:ID!, $option: String!){ updateProjectV2ItemFieldValue(input:{ projectId:$project, itemId:$item, fieldId:$field, value:{ singleSelectOptionId:$option }}){ projectV2Item { id } } }' \
+            -F project='${{ steps.prep.outputs.project_id }}' \
+            -F item="$item_id" \
+            -F field='${{ vars.STATUS_FIELD_ID }}' \
+            -F option='${{ vars.STATUS_TODO_OPTION_ID }}' \
+            --silent || true

@@ -92,7 +92,7 @@
 
 - **Patterns**: Use tokens instead of hardcoded values; apply semantic roles
 - **Destinations**: N/A
-- **Components**: Button/layout helpers. Follow component sizing guidance from `docs/architecture/project-organization.md` — avoid micro-components; extract only when the view represents a coherent chunk (typically 5+ elements and/or nested groups) or is reused across screens.
+- **Components**: Button/layout helpers. Follow component sizing guidance in `docs/architecture/overview.md#project-structure-code-map` — avoid micro-components; extract only when the view represents a coherent chunk (typically 5+ elements and/or nested groups) or is reused across screens.
 - **Design System**: Central source of truth
 
 ## Systems Integration

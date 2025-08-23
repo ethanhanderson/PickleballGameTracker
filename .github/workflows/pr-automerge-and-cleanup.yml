@@ -1,0 +1,109 @@
+name: PR Auto-merge and Branch Cleanup
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, synchronize, labeled]
+  issues:
+    types: [closed, labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  repository-projects: write
+
+env:
+  PROJECT_OWNER: ${{ vars.PROJECT_OWNER || github.repository_owner }}
+  PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+  AUTO_MERGE_METHOD: ${{ vars.AUTO_MERGE_METHOD }}
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine candidate PR from issue event
+        id: pr
+        if: ${{ github.event_name == 'issues' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          issue_number='${{ github.event.issue.number }}'
+          # Find PRs that reference the issue via closing keywords or linked references
+          prs=$(gh api repos/${{ github.repository }}/issues/$issue_number/timeline --paginate --jq '.[] | select(.event=="cross-referenced" and .source.issue.pull_request!=null) | .source.issue.number' || true)
+          pr_number=$(echo "$prs" | sort -u | tail -n1)
+          if [[ -n "$pr_number" ]]; then echo "number=$pr_number" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Determine PR number from PR event
+        id: pr_from_pr
+        if: ${{ github.event_name == 'pull_request' }}
+        run: echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Pick PR number
+        id: pick
+        run: |
+          set -euo pipefail
+          echo "number=${{ steps.pr.outputs.number || steps.pr_from_pr.outputs.number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Enable auto-merge or merge immediately
+        if: ${{ steps.pick.outputs.number }}
+        env:
+          GH_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
+        run: |
+          set -euo pipefail
+          pr=${{ steps.pick.outputs.number }}
+          # Determine merge methods with sensible defaults
+          rest_method="${AUTO_MERGE_METHOD,,}"
+          if [[ -z "$rest_method" ]]; then rest_method="squash"; fi
+          gql_method="$AUTO_MERGE_METHOD"
+          if [[ -z "$gql_method" ]]; then gql_method="SQUASH"; fi
+          # Try immediate merge if mergeable and checks passed
+          mergeable_state=$(gh api repos/${{ github.repository }}/pulls/$pr --jq .mergeable_state || echo unknown)
+          if [[ "$mergeable_state" == "clean" || "$mergeable_state" == "has_hooks" ]]; then
+            gh api repos/${{ github.repository }}/pulls/$pr/merge -X PUT -f merge_method=$rest_method || true
+          else
+            # Enable auto-merge via GraphQL so it merges once checks pass
+            pr_node=$(gh api graphql -f query='query($owner:String!,$repo:String!,$number:Int!){ repository(owner:$owner,name:$repo){ pullRequest(number:$number){ id } } }' \
+              -F owner='${{ github.repository_owner }}' -F repo='${{ github.event.repository.name }}' -F number=$pr --jq '.data.repository.pullRequest.id')
+            if [[ -n "$pr_node" ]]; then
+              gh api graphql -f query='mutation($pr:ID!, $method: PullRequestMergeMethod!){ enablePullRequestAutoMerge(input:{pullRequestId:$pr, mergeMethod:$method}) { clientMutationId } }' \
+                -F pr="$pr_node" -F method="$gql_method" || true
+            fi
+          fi
+
+      - name: Cleanup source branch after merge
+        if: ${{ steps.pick.outputs.number }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pr=${{ steps.pick.outputs.number }}
+          merged=$(gh api repos/${{ github.repository }}/pulls/$pr --jq .merged)
+          if [[ "$merged" == "true" ]]; then
+            headRef=$(gh api repos/${{ github.repository }}/pulls/$pr --jq .head.ref)
+            headRepo=$(gh api repos/${{ github.repository }}/pulls/$pr --jq .head.repo.full_name)
+            # Do not delete protected or fork branches
+            if [[ "$headRepo" == "${{ github.repository }}" && "$headRef" != "main" && "$headRef" != "develop" ]]; then
+              gh api repos/${{ github.repository }}/git/refs/heads/$headRef -X DELETE || true
+            fi
+          fi
+
+      - name: Ensure Project Status = Done for linked Issue/PR
+        env:
+          GH_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${{ vars.PROJECT_OWNER }}" || -z "${{ vars.PROJECT_NUMBER }}" || -z "${{ vars.STATUS_FIELD_ID }}" || -z "${{ vars.STATUS_DONE_OPTION_ID }}" ]]; then
+            exit 0
+          fi
+          project_id=$(gh api graphql -f query='query($owner:String!, $number:Int!){ organization(login:$owner){ projectV2(number:$number){ id } } user(login:$owner){ projectV2(number:$number){ id } }}' -F owner='${{ vars.PROJECT_OWNER }}' -F number='${{ vars.PROJECT_NUMBER }}' --jq '.data.organization.projectV2.id // .data.user.projectV2.id')
+          pr=${{ steps.pick.outputs.number || 0 }}
+          if [[ "$pr" -gt 0 ]]; then
+            pr_node=$(gh api graphql -f query='query($owner:String!,$repo:String!,$number:Int!){ repository(owner:$owner,name:$repo){ pullRequest(number:$number){ id } } }' \
+              -F owner='${{ github.repository_owner }}' -F repo='${{ github.event.repository.name }}' -F number=$pr --jq '.data.repository.pullRequest.id')
+            item_id=$(gh api graphql -f query='query($project:ID!){ node(id:$project){ ... on ProjectV2 { items(first:200){ nodes { id content { id } } } } } }' -F project="$project_id" --jq '.data.node.items.nodes[] | select(.content.id=="'${pr_node}'") | .id' | head -n1)
+            if [[ -n "$item_id" ]]; then
+              gh api graphql -f query='mutation($project:ID!, $item:ID!, $field:ID!, $option:String!){ updateProjectV2ItemFieldValue(input:{projectId:$project,itemId:$item,fieldId:$field,value:{singleSelectOptionId:$option}}){ projectV2Item { id } } }' \
+                -F project="$project_id" -F item="$item_id" -F field='${{ vars.STATUS_FIELD_ID }}' -F option='${{ vars.STATUS_DONE_OPTION_ID }}' --silent || true
+            fi
+          fi

@@ -54,7 +54,7 @@
 - Do not extract trivial fragments. Keep small headers/sections (~1–3 lightweight elements) inline for readability.
 - Extract to a component when the UI contains ~5+ elements and/or nested groups, encapsulates interactions/state, or is reused.
 - Place feature-specific components under `Features/<Feature>/Components/`; promote to `UI/Components/` only when shared.
-- Reference: `docs/architecture/project-organization.md#component-sizing--reuse-guidance-must`
+- Reference: `docs/architecture/overview.md#project-structure-code-map`
 
 ## Integration with Existing Systems
 
@@ -172,7 +172,7 @@ struct StatCard: View {
   - watchOS target: `Pickleball Score Tracking Watch App/Features/**`
   - Shared tokens/services: `SharedGameCore/Sources/SharedGameCore/**`
 - **Related docs**:
-  - `docs/architecture/project-organization.md`
+  - `docs/architecture/overview.md#project-structure-code-map`
   - `docs/systems/ux/design-system.md`
   - `docs/systems/ux/navigation.md`
   - `docs/systems/ux/previews.md`

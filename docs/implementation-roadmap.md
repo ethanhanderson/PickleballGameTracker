@@ -93,7 +93,7 @@ size: M
 owners: iOS/watchOS engineering
 links:
   docs:
-    - docs/architecture/project-organization.md
+    - docs/architecture/overview.md#project-structure-code-map
     - docs/systems/ux/design-system.md
   code:
     - Pickleball Score Tracking/App/**
@@ -111,7 +111,7 @@ acceptance:
   - iOS and watchOS builds succeed on pinned destinations with no new warnings
 validation:
   refs:
-    - docs/architecture/project-organization.md#validation-checklist
+    - docs/architecture/overview.md#project-structure-code-map
 tests:
   touchpoints:
     - Pickleball Score TrackingUITests/BasicSmokeUITests.swift
@@ -132,7 +132,7 @@ size: S
 owners: iOS/watchOS engineering
 links:
   docs:
-    - docs/architecture/project-organization.md
+    - docs/architecture/overview.md#project-structure-code-map
     - docs/systems/ux/navigation.md
     - docs/systems/ux/previews.md
   code:
@@ -148,7 +148,7 @@ acceptance:
   - Builds/tests green on pinned destinations; no new warnings
 validation:
   refs:
-    - docs/architecture/project-organization.md#validation-checklist
+    - docs/architecture/overview.md#project-structure-code-map
     - docs/systems/ux/navigation.md#swiftui-preview-stability-guardrails
     - docs/systems/ux/previews.md#validation-checklist-must-meet-for-acceptance
 tests:
@@ -171,7 +171,7 @@ owners: iOS/watchOS engineering
 dependencies: [1.3]
 links:
   docs:
-    - docs/architecture/project-organization.md
+    - docs/architecture/overview.md#project-structure-code-map
     - docs/systems/ux/previews.md
   code:
     - Pickleball Score Tracking/Features/**/Screens/*.swift
@@ -188,7 +188,7 @@ acceptance:
   - Project tree aligns with documented structure; builds green on pinned destinations with no new warnings
 validation:
   refs:
-    - docs/architecture/project-organization.md#validation-checklist
+    - docs/architecture/overview.md#project-structure-code-map
     - docs/systems/ux/previews.md#validation-checklist-must-meet-for-acceptance
 tests:
   touchpoints:
@@ -209,7 +209,7 @@ owners: iOS/watchOS engineering
 links:
   docs:
     - docs/systems/ux/previews.md
-    - docs/architecture/project-organization.md
+    - docs/architecture/overview.md#project-structure-code-map
   code:
     - SharedGameCore/Sources/SharedGameCore/PreviewData.swift
     - Pickleball Score Tracking/Features/**/Screens/*.swift
@@ -413,7 +413,7 @@ size: M
 owners: iOS/watchOS engineering
 links:
   docs:
-    - docs/architecture/project-organization.md
+    - docs/architecture/overview.md#project-structure-code-map
   code:
     - Pickleball Score Tracking/**
     - Pickleball Score Tracking Watch App/**
@@ -425,7 +425,7 @@ acceptance:
   - Builds/tests green on pinned destinations; no new warnings
 validation:
   refs:
-    - docs/architecture/project-organization.md#validation-checklist
+    - docs/architecture/overview.md#project-structure-code-map
 tests:
   touchpoints:
     - Pickleball Score TrackingUITests/BasicSmokeUITests.swift

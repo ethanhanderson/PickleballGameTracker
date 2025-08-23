@@ -64,10 +64,3 @@
 ## Testing & Performance
 
 - Doc: `docs/systems/observability/testing-and-performance.md`
-
-## Build & DevX
-
-- Build & CI: `docs/systems/devx/build-and-ci.md`
-- Chat Kickoff: `docs/systems/devx/chat-kickoff.md`
-- Roadmap governance: `docs/systems/devx/roadmap-governance.md`
-- Quick check script: `docs/systems/devx/roadmap-quick-check.sh`

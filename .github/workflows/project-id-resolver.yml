@@ -1,0 +1,110 @@
+name: Project ID Resolver (Projects v2)
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_number:
+        description: "Projects v2 number (from URL)"
+        required: true
+        type: string
+      status_field_name:
+        description: "Status field name"
+        required: false
+        default: "Status"
+        type: string
+      status_todo_name:
+        description: "Name of 'To do' option"
+        required: false
+        default: "To do"
+        type: string
+      status_inprogress_name:
+        description: "Name of 'In progress' option"
+        required: false
+        default: "In progress"
+        type: string
+      status_done_name:
+        description: "Name of 'Done' option"
+        required: false
+        default: "Done"
+        type: string
+
+permissions:
+  contents: read
+  repository-projects: write
+
+jobs:
+  resolve-and-store:
+    runs-on: ubuntu-latest
+    env:
+      OWNER: ${{ github.repository_owner }}
+      REPO: ${{ github.event.repository.name }}
+      PROJECT_NUMBER: ${{ inputs.project_number }}
+      STATUS_FIELD_NAME: ${{ inputs.status_field_name }}
+      TODO_NAME: ${{ inputs.status_todo_name }}
+      INPROGRESS_NAME: ${{ inputs.status_inprogress_name }}
+      DONE_NAME: ${{ inputs.status_done_name }}
+    steps:
+      - name: Resolve Project and field/option IDs
+        id: ids
+        env:
+          GH_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # Resolve ProjectV2 ID by owner (org or user) + number
+          project_id=$(gh api graphql -f query='query($owner:String!, $number:Int!){ organization(login:$owner){ projectV2(number:$number){ id fields(first:100){ nodes { __typename ... on ProjectV2FieldCommon { id name } ... on ProjectV2SingleSelectField { id name options { id name } } } } } } user(login:$owner){ projectV2(number:$number){ id fields(first:100){ nodes { __typename ... on ProjectV2FieldCommon { id name } ... on ProjectV2SingleSelectField { id name options { id name } } } } } }}' \
+            -F owner="$OWNER" -F number="$PROJECT_NUMBER" --jq '(.data.organization.projectV2 // .data.user.projectV2)')
+          if [[ "$project_id" == "null" || -z "$project_id" ]]; then
+            echo "Could not resolve project; check owner and number" >&2; exit 1
+          fi
+          echo "$project_id" | jq -r '.id' | tee /tmp/project_id
+
+          # Extract Status field and option IDs
+          status_field_id=$(echo "$project_id" | jq -r --arg name "$STATUS_FIELD_NAME" '.fields.nodes[] | select(.name==$name and .__typename=="ProjectV2SingleSelectField") | .id')
+          if [[ -z "$status_field_id" || "$status_field_id" == "null" ]]; then
+            echo "Status field not found; name=$STATUS_FIELD_NAME" >&2; exit 1
+          fi
+          echo "$status_field_id" | tee /tmp/status_field_id >/dev/null
+
+          todo_id=$(echo "$project_id" | jq -r --arg name "$STATUS_FIELD_NAME" --arg opt "$TODO_NAME" '.fields.nodes[] | select(.name==$name and .__typename=="ProjectV2SingleSelectField") | .options[] | select(.name==$opt) | .id')
+          inprogress_id=$(echo "$project_id" | jq -r --arg name "$STATUS_FIELD_NAME" --arg opt "$INPROGRESS_NAME" '.fields.nodes[] | select(.name==$name and .__typename=="ProjectV2SingleSelectField") | .options[] | select(.name==$opt) | .id')
+          done_id=$(echo "$project_id" | jq -r --arg name "$STATUS_FIELD_NAME" --arg opt "$DONE_NAME" '.fields.nodes[] | select(.name==$name and .__typename=="ProjectV2SingleSelectField") | .options[] | select(.name==$opt) | .id')
+
+          [[ -n "$todo_id" && "$todo_id" != "null" ]] || { echo "Missing option: $TODO_NAME" >&2; exit 1; }
+          [[ -n "$inprogress_id" && "$inprogress_id" != "null" ]] || { echo "Missing option: $INPROGRESS_NAME" >&2; exit 1; }
+          [[ -n "$done_id" && "$done_id" != "null" ]] || { echo "Missing option: $DONE_NAME" >&2; exit 1; }
+
+          echo "project_id=$(cat /tmp/project_id)" >> "$GITHUB_OUTPUT"
+          echo "status_field_id=$status_field_id" >> "$GITHUB_OUTPUT"
+          echo "todo_id=$todo_id" >> "$GITHUB_OUTPUT"
+          echo "inprogress_id=$inprogress_id" >> "$GITHUB_OUTPUT"
+          echo "done_id=$done_id" >> "$GITHUB_OUTPUT"
+
+      - name: Upsert repository variables
+        env:
+          GH_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
+        run: |
+          set -euo pipefail
+          upsert_var() {
+            local name="$1"; shift
+            local value="$1"; shift
+            # Try update; if not exists, create
+            gh api -X PATCH repos/$OWNER/$REPO/actions/variables/$name -f name="$name" -f value="$value" >/dev/null 2>&1 || \
+            gh api -X POST repos/$OWNER/$REPO/actions/variables -f name="$name" -f value="$value" >/dev/null
+          }
+
+          upsert_var PROJECT_OWNER "$OWNER"
+          upsert_var PROJECT_NUMBER "$PROJECT_NUMBER"
+          upsert_var PROJECT_ID "${{ steps.ids.outputs.project_id }}"
+          upsert_var STATUS_FIELD_ID "${{ steps.ids.outputs.status_field_id }}"
+          upsert_var STATUS_TODO_OPTION_ID "${{ steps.ids.outputs.todo_id }}"
+          upsert_var STATUS_INPROGRESS_OPTION_ID "${{ steps.ids.outputs.inprogress_id }}"
+          upsert_var STATUS_DONE_OPTION_ID "${{ steps.ids.outputs.done_id }}"
+
+      - name: Summary
+        run: |
+          echo "PROJECT_ID:         ${{ steps.ids.outputs.project_id }}"
+          echo "STATUS_FIELD_ID:    ${{ steps.ids.outputs.status_field_id }}"
+          echo "STATUS_TODO_ID:     ${{ steps.ids.outputs.todo_id }}"
+          echo "STATUS_INPROGRESS:  ${{ steps.ids.outputs.inprogress_id }}"
+          echo "STATUS_DONE_ID:     ${{ steps.ids.outputs.done_id }}"
