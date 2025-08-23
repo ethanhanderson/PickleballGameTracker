@@ -1,0 +1,102 @@
+name: PR↔Issue link and Project status
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, closed]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  repository-projects: write
+
+env:
+  GH_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
+  OWNER: ethanhanderson
+  PROJECT_NUMBER: 2
+  REPO: ethanhanderson/PickleballGameTracker
+
+jobs:
+  link-and-update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Derive issue number from PR body or branch
+        id: derive
+        shell: bash
+        run: |
+          set -euo pipefail
+          PR_BODY=$(jq -r .pull_request.body "$GITHUB_EVENT_PATH")
+          PR_HEAD_REF=$(jq -r .pull_request.head.ref "$GITHUB_EVENT_PATH")
+          # Try extract #123 from body
+          if grep -Eo '#[0-9]+' <<<"$PR_BODY" >/dev/null 2>&1; then
+            NUM=$(grep -Eo '#[0-9]+' <<<"$PR_BODY" | head -n1 | tr -dc '0-9')
+            echo "issue_number=$NUM" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Fallback: parse branch feature/<cardId>-slug and map to issue by title prefix '<cardId>:'
+          CARD_ID=$(sed -nE 's#^feature/([^/]+).*#\1#p' <<<"$PR_HEAD_REF" | head -n1)
+          if [ -n "${CARD_ID:-}" ]; then
+            Q="repo:${REPO} type:issue in:title \"${CARD_ID}:\" state:open"
+            RES=$(gh api -X GET --silent --jq '.items[0].number // 0' \
+              "search/issues?q=$(printf '%s' "$Q" | jq -sRr @uri)")
+            if [ "${RES:-0}" -gt 0 ]; then
+              echo "issue_number=$RES" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "issue_number=" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure PR body has Closes reference (if issue found)
+        if: steps.derive.outputs.issue_number != '' && github.event.action != 'closed'
+        shell: bash
+        run: |
+          set -euo pipefail
+          NUM=${{ steps.derive.outputs.issue_number }}
+          PR_NUMBER=$(jq -r .pull_request.number "$GITHUB_EVENT_PATH")
+          BODY=$(gh api repos/${REPO}/pulls/${PR_NUMBER} --jq .body)
+          if ! grep -q "#${NUM}" <<<"${BODY}"; then
+            NEW_BODY="$BODY\n\nCloses #${NUM}"
+            gh api -X PATCH repos/${REPO}/pulls/${PR_NUMBER} -f body="${NEW_BODY}"
+          fi
+
+      - name: Update Project status based on PR event
+        if: steps.derive.outputs.issue_number != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          ISSUE_NUM=${{ steps.derive.outputs.issue_number }}
+          PR_ACTION=${{ github.event.action }}
+          MERGED=$(jq -r .pull_request.merged "$GITHUB_EVENT_PATH")
+          PROJECT_ID=$(gh project view "$PROJECT_NUMBER" --owner "$OWNER" --format=json --jq .id)
+          FIELDS=$(gh project field-list "$PROJECT_NUMBER" --owner "$OWNER" --format=json)
+          STATUS_FIELD=$(jq -r '.fields[] | select(.name=="Status") | .id' <<<"$FIELDS")
+          STATUS_TODO=$(jq -r '.fields[] | select(.name=="Status") | .options[] | select(.name=="Todo") | .id' <<<"$FIELDS")
+          STATUS_IP=$(jq -r '.fields[] | select(.name=="Status") | .options[] | select(.name=="In Progress") | .id' <<<"$FIELDS")
+          STATUS_DONE=$(jq -r '.fields[] | select(.name=="Status") | .options[] | select(.name=="Done") | .id' <<<"$FIELDS")
+          # Find project item for issue
+          ITEMS=$(gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --limit 200 --format=json)
+          ITEM_ID=$(jq -r --arg url "https://github.com/${REPO}/issues/${ISSUE_NUM}" '.items[] | select(.content.url==$url) | .id' <<<"$ITEMS")
+          if [ -z "${ITEM_ID:-}" ]; then
+            echo "No project item found for issue #${ISSUE_NUM}"; exit 0
+          fi
+          if [ "$PR_ACTION" = "closed" ]; then
+            if [ "$MERGED" = "true" ]; then
+              # Set Done and close issue
+              gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field-id "$STATUS_FIELD" --single-select-option-id "$STATUS_DONE"
+              gh api -X PATCH repos/${REPO}/issues/${ISSUE_NUM} -f state=closed
+            else
+              # Back to Todo
+              gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field-id "$STATUS_FIELD" --single-select-option-id "$STATUS_TODO"
+            fi
+          else
+            # PR open/edited/synchronize -> In Progress
+            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field-id "$STATUS_FIELD" --single-select-option-id "$STATUS_IP"
+          fi
+
+
