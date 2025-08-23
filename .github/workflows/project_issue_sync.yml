@@ -31,68 +31,78 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          PROJECT_ID=$(gh project view "$PROJECT_NUMBER" --owner "$OWNER" --format=json --jq .id)
-          FIELDS_JSON=$(gh project field-list "$PROJECT_NUMBER" --owner "$OWNER" --format=json)
-          STATUS_FIELD=$(jq -r '.fields[] | select(.name=="Status") | .id' <<<"$FIELDS_JSON")
-          STATUS_TODO=$(jq -r '.fields[] | select(.name=="Status") | .options[] | select(.name=="Todo") | .id' <<<"$FIELDS_JSON")
-          STATUS_IP=$(jq -r '.fields[] | select(.name=="Status") | .options[] | select(.name=="In Progress") | .id' <<<"$FIELDS_JSON")
-          STATUS_DONE=$(jq -r '.fields[] | select(.name=="Status") | .options[] | select(.name=="Done") | .id' <<<"$FIELDS_JSON")
-          CARD_ID_FIELD=$(jq -r '.fields[] | select(.name=="Card ID") | .id' <<<"$FIELDS_JSON")
-          VERSION_FIELD=$(jq -r '.fields[] | select(.name=="Version") | .id' <<<"$FIELDS_JSON")
-          AREA_FIELD=$(jq -r '.fields[] | select(.name=="Area") | .id' <<<"$FIELDS_JSON")
-          PRIORITY_FIELD=$(jq -r '.fields[] | select(.name=="Priority") | .id' <<<"$FIELDS_JSON")
-          SIZE_FIELD=$(jq -r '.fields[] | select(.name=="Size") | .id' <<<"$FIELDS_JSON")
-          OWNERS_FIELD=$(jq -r '.fields[] | select(.name=="Owners") | .id' <<<"$FIELDS_JSON")
-          DEPS_FIELD=$(jq -r '.fields[] | select(.name=="Dependencies") | .id' <<<"$FIELDS_JSON")
-          get_opt() { jq -r --arg fn "$1" --arg on "$2" '.fields[] | select(.name==$fn) | .options[] | select(.name==$on) | .id' <<<"$FIELDS_JSON" | head -n1; }
-          ITEMS=$(gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --limit 200 --format=json)
-          echo "$ITEMS" | jq -c '.items[] | select(.content.type=="DraftIssue")' | while read -r node; do
-            OLD_ID=$(jq -r '.id' <<<"$node")
-            TITLE=$(jq -r '.title' <<<"$node")
+          # GraphQL helpers
+          q_project_id='query($owner:String!,$num:Int!){ user(login:$owner){ projectV2(number:$num){ id fields(first:50){ nodes{ __typename ... on ProjectV2Field{ id name } ... on ProjectV2SingleSelectField{ id name options{ id name } } } } items(first:200){ nodes{ id content{ __typename ... on DraftIssue{ title body } ... on Issue{ number url id } } fieldValues(first:20){ nodes{ __typename ... on ProjectV2ItemFieldTextValue{ text field{ ... on ProjectV2Field{ name id }}} ... on ProjectV2ItemFieldSingleSelectValue{ name field{ ... on ProjectV2SingleSelectField{ name id options{ id name }}}}}}}}} }'
+          PJSON=$(gh api graphql -f owner="$OWNER" -F num="$PROJECT_NUMBER" -f query="$q_project_id")
+          PROJECT_ID=$(jq -r '.data.user.projectV2.id' <<<"$PJSON")
+          FIELDS=$(jq -r '.data.user.projectV2.fields.nodes' <<<"$PJSON")
+          # Field ids
+          get_field_id(){ jq -r --arg n "$1" '.[] | select(.name==$n) | .id' <<<"$FIELDS" | head -n1; }
+          get_option_id(){ jq -r --arg n "$1" --arg o "$2" '.[] | select(.name==$n) | .options[]? | select(.name==$o) | .id' <<<"$FIELDS" | head -n1; }
+          STATUS_FIELD=$(get_field_id Status)
+          STATUS_TODO=$(get_option_id Status "Todo")
+          STATUS_IP=$(get_option_id Status "In Progress")
+          STATUS_DONE=$(get_option_id Status "Done")
+          CARD_ID_FIELD=$(get_field_id "Card ID")
+          VERSION_FIELD=$(get_field_id "Version")
+          AREA_FIELD=$(get_field_id "Area")
+          PRIORITY_FIELD=$(get_field_id "Priority")
+          SIZE_FIELD=$(get_field_id "Size")
+          OWNERS_FIELD=$(get_field_id "Owners")
+          DEPS_FIELD=$(get_field_id "Dependencies")
+          # Iterate draft items
+          echo "$PJSON" | jq -c '.data.user.projectV2.items.nodes[] | select(.content.__typename=="DraftIssue")' | while read -r node; do
+            OLD_ITEM_ID=$(jq -r '.id' <<<"$node")
+            TITLE=$(jq -r '.content.title' <<<"$node")
             BODY=$(jq -r '.content.body // ""' <<<"$node")
-            CID=$(jq -r '."card ID" // ""' <<<"$node")
-            VERSION=$(jq -r '.version // ""' <<<"$node")
-            AREA=$(jq -r '.area // ""' <<<"$node")
-            PRIORITY=$(jq -r '.priority // ""' <<<"$node")
-            SIZE=$(jq -r '.size // ""' <<<"$node")
-            OWNERS=$(jq -r '.owners // ""' <<<"$node")
-            DEPS=$(jq -r '.dependencies // ""' <<<"$node")
-            ORIG_STATUS=$(jq -r '.status // "Todo"' <<<"$node")
+            CID=$(jq -r '.fieldValues.nodes[]? | select(.field.name=="Card ID") | .text // ""' <<<"$node")
+            VERSION=$(jq -r '.fieldValues.nodes[]? | select(.field.name=="Version") | .name // ""' <<<"$node")
+            AREA=$(jq -r '.fieldValues.nodes[]? | select(.field.name=="Area") | .name // ""' <<<"$node")
+            PRIORITY=$(jq -r '.fieldValues.nodes[]? | select(.field.name=="Priority") | .name // ""' <<<"$node")
+            SIZE=$(jq -r '.fieldValues.nodes[]? | select(.field.name=="Size") | .name // ""' <<<"$node")
+            OWNERS=$(jq -r '.fieldValues.nodes[]? | select(.field.name=="Owners") | .text // ""' <<<"$node")
+            DEPS=$(jq -r '.fieldValues.nodes[]? | select(.field.name=="Dependencies") | .text // ""' <<<"$node")
+            ORIG_STATUS=$(jq -r '.fieldValues.nodes[]? | select(.field.name=="Status") | .name // "Todo"' <<<"$node")
             NEW_TITLE="$TITLE"; [ -n "$CID" ] && NEW_TITLE="$CID: $TITLE"
-            LABEL_ARGS=()
-            [ -n "$AREA" ] && LABEL_ARGS+=( -l "area:$AREA" )
-            [ -n "$PRIORITY" ] && LABEL_ARGS+=( -l "priority:$PRIORITY" )
-            [ -n "$SIZE" ] && LABEL_ARGS+=( -l "size:$SIZE" )
-            LABEL_ARGS+=( -l "type:feature" )
-            MS_ARGS=()
-            [ -n "$VERSION" ] && MS_ARGS+=( -m "$VERSION" )
-            ISSUE_OUT=$(gh issue create -R "$REPO" -t "$NEW_TITLE" -b "${BODY:-$TITLE}" ${LABEL_ARGS[@]} ${MS_ARGS[@]} 2>&1 || true)
-            ISSUE_URL=$(grep -Eo 'https://github.com/[^ ]+/issues/[0-9]+' <<<"$ISSUE_OUT" | head -n1)
-            if [ -z "${ISSUE_URL:-}" ]; then
-              echo "Skipped (failed to create issue): $NEW_TITLE"
-              continue
-            fi
-            NEW_ITEM_JSON=$(gh project item-add "$PROJECT_NUMBER" --owner "$OWNER" --url "$ISSUE_URL" --format=json)
-            NEW_ID=$(jq -r .id <<<"$NEW_ITEM_JSON")
-            [ -n "$CID" ] && gh project item-edit --id "$NEW_ID" --project-id "$PROJECT_ID" --field-id "$CARD_ID_FIELD" --text "$CID" >/dev/null || true
-            for kv in Version:$VERSION Area:$AREA Priority:$PRIORITY Size:$SIZE; do
-              fname="${kv%%:*}"; val="${kv#*:}"; [ -z "$val" ] && continue; fid=$(jq -r --arg n "$fname" '.fields[] | select(.name==$n) | .id' <<<"$FIELDS_JSON"); oid=$(get_opt "$fname" "$val"); [ -n "$oid" ] && [ "$oid" != "null" ] && gh project item-edit --id "$NEW_ID" --project-id "$PROJECT_ID" --field-id "$fid" --single-select-option-id "$oid" >/dev/null || true
-            done
-            [ -n "$OWNERS" ] && gh project item-edit --id "$NEW_ID" --project-id "$PROJECT_ID" --field-id "$OWNERS_FIELD" --text "$OWNERS" >/dev/null || true
-            [ -n "$DEPS" ] && gh project item-edit --id "$NEW_ID" --project-id "$PROJECT_ID" --field-id "$DEPS_FIELD" --text "$DEPS" >/dev/null || true
+            # Create issue via REST
+            LABELS=(); [ -n "$AREA" ] && LABELS+=("area:$AREA"); [ -n "$PRIORITY" ] && LABELS+=("priority:$PRIORITY"); [ -n "$SIZE" ] && LABELS+=("size:$SIZE"); LABELS+=("type:feature")
+            LABEL_ARGS=(); for l in "${LABELS[@]}"; do LABEL_ARGS+=( -f labels[]="$l" ); done
+            MS_ARGS=(); [ -n "$VERSION" ] && MS_ARGS+=( -f milestone="$VERSION" )
+            ISSUE=$(gh api -X POST repos/$REPO/issues -f title="$NEW_TITLE" -f body="$BODY" "${LABEL_ARGS[@]}" "${MS_ARGS[@]}")
+            NUM=$(jq -r '.number' <<<"$ISSUE")
+            # Get issue node id
+            q_issue_id='query($owner:String!,$name:String!,$num:Int!){ repository(owner:$owner,name:$name){ issue(number:$num){ id url } } }'
+            INODE=$(gh api graphql -F owner="${REPO%%/*}" -F name="${REPO##*/}" -F num="$NUM" -f query="$q_issue_id" --jq '.data.repository.issue.id')
+            # Add issue to project
+            m_add='mutation($pid:ID!,$cid:ID!){ addProjectV2ItemById(input:{projectId:$pid,contentId:$cid}){ item{ id } } }'
+            NEW_ITEM_ID=$(gh api graphql -F pid="$PROJECT_ID" -F cid="$INODE" -f query="$m_add" --jq '.data.addProjectV2ItemById.item.id')
+            # Set fields via mutation
+            set_text(){ fid=$1; val=$2; [ -z "$val" ] && return 0; m='mutation($pid:ID!,$iid:ID!,$fid:ID!,$txt:String!){ updateProjectV2ItemFieldValue(input:{projectId:$pid,itemId:$iid,fieldId:$fid,value:{text:$txt}}){ projectV2Item{ id } } }'; gh api graphql -F pid="$PROJECT_ID" -F iid="$NEW_ITEM_ID" -F fid="$fid" -F txt="$val" -f query="$m" >/dev/null; }
+            set_select(){ fid=$1; optName=$2; [ -z "$optName" ] && return 0; oid=$(get_option_id "$(jq -rn --argjson f "$FIELDS" --arg fid "$fid" '$f[] | select(.id==env.fid) | .name')" "$optName"); [ -z "$oid" ] && return 0; m='mutation($pid:ID!,$iid:ID!,$fid:ID!,$oid: String!){ updateProjectV2ItemFieldValue(input:{projectId:$pid,itemId:$iid,fieldId:$fid,value:{singleSelectOptionId:$oid}}){ projectV2Item{ id } } }'; gh api graphql -F pid="$PROJECT_ID" -F iid="$NEW_ITEM_ID" -F fid="$fid" -F oid="$oid" -f query="$m" >/dev/null; }
+            [ -n "$CID" ] && set_text "$CARD_ID_FIELD" "$CID"
+            set_select "$VERSION_FIELD" "$VERSION"
+            set_select "$AREA_FIELD" "$AREA"
+            set_select "$PRIORITY_FIELD" "$PRIORITY"
+            set_select "$SIZE_FIELD" "$SIZE"
+            [ -n "$OWNERS" ] && set_text "$OWNERS_FIELD" "$OWNERS"
+            [ -n "$DEPS" ] && set_text "$DEPS_FIELD" "$DEPS"
             case "$ORIG_STATUS" in "In Progress") SO="$STATUS_IP";; "Done") SO="$STATUS_DONE";; *) SO="$STATUS_TODO";; esac
-            gh project item-edit --id "$NEW_ID" --project-id "$PROJECT_ID" --field-id "$STATUS_FIELD" --single-select-option-id "$SO" >/dev/null || true
-            gh project item-delete "$PROJECT_NUMBER" --owner "$OWNER" --id "$OLD_ID" >/dev/null || true
-            echo "Created issue and replaced draft: $NEW_TITLE"
+            m_status='mutation($pid:ID!,$iid:ID!,$fid:ID!,$oid:String!){ updateProjectV2ItemFieldValue(input:{projectId:$pid,itemId:$iid,fieldId:$fid,value:{singleSelectOptionId:$oid}}){ projectV2Item{ id } } }'
+            gh api graphql -F pid="$PROJECT_ID" -F iid="$NEW_ITEM_ID" -F fid="$STATUS_FIELD" -F oid="$SO" -f query="$m_status" >/dev/null
+            # Delete old draft
+            m_del='mutation($iid:ID!){ deleteProjectV2Item(input:{itemId:$iid}){ deletedItemId } }'
+            gh api graphql -F iid="$OLD_ITEM_ID" -f query="$m_del" >/dev/null
+            echo "Created issue and replaced draft: $NEW_TITLE (#$NUM)"
           done
-          echo "$ITEMS" | jq -c '.items[] | select(.content.type=="Issue")' | while read -r node; do
-            ISSUE_URL=$(jq -r '.content.url' <<<"$node")
-            STATUS_NAME=$(jq -r '.status // empty' <<<"$node")
-            NUM=$(sed -E 's#.*/issues/([0-9]+).*#\1#' <<<"$ISSUE_URL")
+          # Mirror status -> open/close issues
+          echo "$PJSON" | jq -c '.data.user.projectV2.items.nodes[] | select(.content.__typename=="Issue")' | while read -r node; do
+            NUM=$(jq -r '.content.number' <<<"$node")
+            STATUS_NAME=$(jq -r '.fieldValues.nodes[]? | select(.field.name=="Status") | .name // ""' <<<"$node")
             [ -z "$NUM" ] && continue
             STATE=$(gh api repos/$REPO/issues/$NUM --jq .state)
-            case "$STATUS_NAME" in
-              Done) [ "$STATE" != "closed" ] && gh api -X PATCH repos/$REPO/issues/$NUM -f state=closed >/dev/null ;;
-              Todo|In\ Progress|"") [ "$STATE" != "open" ] && gh api -X PATCH repos/$REPO/issues/$NUM -f state=open >/dev/null ;;
-            esac
+            if [ "$STATUS_NAME" = "Done" ] && [ "$STATE" != "closed" ]; then
+              gh api -X PATCH repos/$REPO/issues/$NUM -f state=closed >/dev/null
+            elif { [ "$STATUS_NAME" = "Todo" ] || [ "$STATUS_NAME" = "In Progress" ] || [ -z "$STATUS_NAME" ]; } && [ "$STATE" != "open" ]; then
+              gh api -X PATCH repos/$REPO/issues/$NUM -f state=open >/dev/null
+            fi
           done
