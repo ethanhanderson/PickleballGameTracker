@@ -12,7 +12,7 @@ permissions:
 
 env:
   GH_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
-  OWNER: ethanhanderson
+  OWNER: "@me"
   PROJECT_NUMBER: 2
   REPO: ethanhanderson/PickleballGameTracker
 
