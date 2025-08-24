@@ -5,7 +5,7 @@
 //  Created by Agent on 8/15/25.
 //
 
-import SharedGameCore
+import PickleballGameTrackerCorePackage
 import SwiftData
 import SwiftUI
 
@@ -54,7 +54,7 @@ struct PresetPickerView: View {
         Button("Close") { dismiss() }
       }
     }
-    .task { await manager.refreshAll() }
+    .task { manager.refreshAll() }
   }
 }
 

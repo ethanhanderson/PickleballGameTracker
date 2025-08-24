@@ -1,4 +1,4 @@
-import SharedGameCore
+import PickleballGameTrackerCorePackage
 import SwiftUI
 
 struct HapticSettingsSection: View {

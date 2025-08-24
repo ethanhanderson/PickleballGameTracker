@@ -7,7 +7,7 @@
 
 // Import the history types we need
 import Foundation
-import SharedGameCore
+import PickleballGameTrackerCorePackage
 import SwiftData
 import SwiftUI
 

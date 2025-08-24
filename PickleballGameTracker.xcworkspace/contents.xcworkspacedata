@@ -2,10 +2,13 @@
 <Workspace
    version = "1.0">
    <FileRef
-      location = "group:PickleballGameTrackerPackage">
+      location = "group:PickleballGameTracker.xcodeproj">
    </FileRef>
    <FileRef
-      location = "container:PickleballGameTracker.xcodeproj">
+      location = "group:PickleballGameTrackerCorePackage">
+   </FileRef>
+   <FileRef
+      location = "group:PickleballGameTrackerPackage">
    </FileRef>
    <FileRef
       location = "group:PickleballGameTrackerWatchPackage">

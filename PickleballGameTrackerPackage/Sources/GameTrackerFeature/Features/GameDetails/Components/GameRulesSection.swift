@@ -5,7 +5,7 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import SharedGameCore
+import PickleballGameTrackerCorePackage
 import SwiftUI
 
 public struct GameRulesSection: View {

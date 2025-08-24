@@ -10,8 +10,6 @@
 		8B41F6832DEDD23B001A66F9 /* GameTrackerFeature in Frameworks */ = {isa = PBXBuildFile; productRef = 8B41F6822DEDD23B001A66F9 /* GameTrackerFeature */; };
 		8B41F6852DEDD25C001A66F9 /* GameTrackerFeature in Frameworks */ = {isa = PBXBuildFile; productRef = 8B41F6842DEDD25C001A66F9 /* GameTrackerFeature */; };
 		F8110A7A2E5998A9005BCBDF /* PickleballGameTrackerWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = F8110A5A2E5998A8005BCBDF /* PickleballGameTrackerWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		F819D1512E599AE400D8426C /* SharedGameCore in Frameworks */ = {isa = PBXBuildFile; productRef = F819D1502E599AE400D8426C /* SharedGameCore */; };
-		F819D1532E599B1300D8426C /* SharedGameCore in Frameworks */ = {isa = PBXBuildFile; productRef = F819D1522E599B1300D8426C /* SharedGameCore */; };
 		F819D1552E599B1E00D8426C /* WatchFeature in Frameworks */ = {isa = PBXBuildFile; productRef = F819D1542E599B1E00D8426C /* WatchFeature */; };
 /* End PBXBuildFile section */
 
@@ -58,8 +56,6 @@
 		8B41F65C2DEDD0D6001A66F9 /* Pickleball Game Tracker.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Pickleball Game Tracker.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		F8110A5A2E5998A8005BCBDF /* PickleballGameTrackerWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PickleballGameTrackerWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F8110A702E5998A9005BCBDF /* PickleballGameTrackerWatchUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PickleballGameTrackerWatchUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		F8110A8D2E5999DF005BCBDF /* PickleballGameTrackerWatchPackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = PickleballGameTrackerWatchPackage; sourceTree = "<group>"; };
-		F819D1562E599B7D00D8426C /* PickleballGameTrackerPackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = PickleballGameTrackerPackage; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -111,7 +107,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F819D1532E599B1300D8426C /* SharedGameCore in Frameworks */,
 				8B41F6852DEDD25C001A66F9 /* GameTrackerFeature in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -128,7 +123,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F819D1512E599AE400D8426C /* SharedGameCore in Frameworks */,
 				F819D1552E599B1E00D8426C /* WatchFeature in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -146,9 +140,7 @@
 		8B41F63C2DEDD0D5001A66F9 = {
 			isa = PBXGroup;
 			children = (
-				F819D1562E599B7D00D8426C /* PickleballGameTrackerPackage */,
 				F8110AA32E5999E8005BCBDF /* PickleballGameTrackerWatch */,
-				F8110A8D2E5999DF005BCBDF /* PickleballGameTrackerWatchPackage */,
 				F8110AAF2E5999EB005BCBDF /* PickleballGameTrackerWatchUITests */,
 				8BD71C052DEE41D800CEDD92 /* Config */,
 				8B41F6472DEDD0D5001A66F9 /* PickleballGameTracker */,
@@ -192,7 +184,6 @@
 			name = PickleballGameTracker;
 			packageProductDependencies = (
 				8B41F6842DEDD25C001A66F9 /* GameTrackerFeature */,
-				F819D1522E599B1300D8426C /* SharedGameCore */,
 			);
 			productName = TestApp;
 			productReference = 8B41F6452DEDD0D5001A66F9 /* Pickleball Game Tracker.app */;
@@ -236,11 +227,9 @@
 			);
 			fileSystemSynchronizedGroups = (
 				F8110AA32E5999E8005BCBDF /* PickleballGameTrackerWatch */,
-				F8110AAF2E5999EB005BCBDF /* PickleballGameTrackerWatchUITests */,
 			);
 			name = PickleballGameTrackerWatch;
 			packageProductDependencies = (
-				F819D1502E599AE400D8426C /* SharedGameCore */,
 				F819D1542E599B1E00D8426C /* WatchFeature */,
 			);
 			productName = "PickleballGameTrackerWatchApp Watch App";
@@ -307,7 +296,6 @@
 			mainGroup = 8B41F63C2DEDD0D5001A66F9;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				F819D14F2E599AE400D8426C /* XCLocalSwiftPackageReference "../Pickleball Score Tracking/SharedGameCore" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8B41F6462DEDD0D5001A66F9 /* Products */;
@@ -533,7 +521,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Config/PickleballGameTracker.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = SMWC5A39X7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Pickleball Game Tracker";
@@ -543,7 +533,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -560,7 +550,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Config/PickleballGameTracker.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = SMWC5A39X7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Pickleball Game Tracker";
@@ -570,7 +562,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -615,6 +607,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = SMWC5A39X7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = PickleballGameTrackerWatchApp;
@@ -648,6 +641,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = SMWC5A39X7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = PickleballGameTrackerWatchApp;
@@ -768,13 +762,6 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		F819D14F2E599AE400D8426C /* XCLocalSwiftPackageReference "../Pickleball Score Tracking/SharedGameCore" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = "../Pickleball Score Tracking/SharedGameCore";
-		};
-/* End XCLocalSwiftPackageReference section */
-
 /* Begin XCSwiftPackageProductDependency section */
 		8B41F6822DEDD23B001A66F9 /* GameTrackerFeature */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -783,15 +770,6 @@
 		8B41F6842DEDD25C001A66F9 /* GameTrackerFeature */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = GameTrackerFeature;
-		};
-		F819D1502E599AE400D8426C /* SharedGameCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = SharedGameCore;
-		};
-		F819D1522E599B1300D8426C /* SharedGameCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = F819D14F2E599AE400D8426C /* XCLocalSwiftPackageReference "../Pickleball Score Tracking/SharedGameCore" */;
-			productName = SharedGameCore;
 		};
 		F819D1542E599B1E00D8426C /* WatchFeature */ = {
 			isa = XCSwiftPackageProductDependency;

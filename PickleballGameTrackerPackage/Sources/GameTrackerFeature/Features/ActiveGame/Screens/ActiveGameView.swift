@@ -5,7 +5,7 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import SharedGameCore
+import PickleballGameTrackerCorePackage
 import SwiftData
 import SwiftUI
 
@@ -207,7 +207,6 @@ struct ActiveGameView: View {
     ActiveGameView(
       game: PreviewGameData.earlyGame,
       gameManager: SwiftDataGameManager(),
-      activeGameStateManager: ActiveGameStateManager.shared,
       onDismiss: nil
     )
   }
@@ -218,7 +217,6 @@ struct ActiveGameView: View {
     ActiveGameView(
       game: PreviewGameData.closeGame,
       gameManager: SwiftDataGameManager(),
-      activeGameStateManager: ActiveGameStateManager.shared,
       onDismiss: nil
     )
   }
@@ -229,7 +227,6 @@ struct ActiveGameView: View {
     ActiveGameView(
       game: PreviewGameData.midGame,
       gameManager: SwiftDataGameManager(),
-      activeGameStateManager: ActiveGameStateManager.shared,
       onDismiss: nil
     )
   }
@@ -240,7 +237,6 @@ struct ActiveGameView: View {
     ActiveGameView(
       game: PreviewGameData.completedGame,
       gameManager: SwiftDataGameManager(),
-      activeGameStateManager: ActiveGameStateManager.shared,
       onDismiss: nil
     )
   }
