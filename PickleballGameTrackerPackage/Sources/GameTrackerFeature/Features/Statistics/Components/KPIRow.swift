@@ -1,4 +1,4 @@
-import SharedGameCore
+import PickleballGameTrackerCorePackage
 import SwiftUI
 
 /// Simple KPI row with title on the left and value on the right.

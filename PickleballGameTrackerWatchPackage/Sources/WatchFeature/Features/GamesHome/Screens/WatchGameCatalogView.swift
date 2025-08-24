@@ -4,11 +4,11 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import SharedGameCore
+import PickleballGameTrackerCorePackage
 import SwiftData
 import SwiftUI
 
-struct WatchGameCatalogView: View {
+public struct WatchGameCatalogView: View {
   @Environment(\.modelContext) private var modelContext
 
   private let gameTypes = GameType.allCases
@@ -21,7 +21,9 @@ struct WatchGameCatalogView: View {
     gameTypes[currentGameTypeIndex]
   }
 
-  var body: some View {
+  public init() {}
+
+  public var body: some View {
     if let activeGame = activeGameStateManager.currentGame {
       WatchActiveGameView(
         game: activeGame,
