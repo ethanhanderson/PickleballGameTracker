@@ -4,35 +4,36 @@
 import PackageDescription
 
 let package = Package(
-  name: "PickleballGameTrackerWatchPackage",
-  platforms: [
-    .watchOS(.v11)
-  ],
-  products: [
-    .library(
-      name: "WatchFeature",
-      targets: ["WatchFeature"]
-    )
-  ],
-  dependencies: [
-    .package(path: "../SharedGameCore")
-  ],
-  targets: [
-    .target(
-      name: "WatchFeature",
-      dependencies: [
-        .product(name: "SharedGameCore", package: "SharedGameCore")
-      ],
-      resources: [
-        .process("Resources")
-      ],
-      swiftSettings: [
-        .enableUpcomingFeature("StrictConcurrency")
-      ]
-    ),
-    .testTarget(
-      name: "WatchFeatureTests",
-      dependencies: ["WatchFeature"]
-    ),
-  ]
+    name: "GameTrackerWatchFeature",
+    platforms: [
+        .watchOS(.v26)
+    ],
+    products: [
+        .library(
+            name: "GameTrackerWatchFeature",
+            targets: ["GameTrackerWatchFeature"]
+        )
+    ],
+    dependencies: [
+        .package(path: "../PickleballGameTrackerCorePackage")
+    ],
+    targets: [
+        .target(
+            name: "GameTrackerWatchFeature",
+            dependencies: [
+                .product(
+                    name: "CorePackage",
+                    package: "CorePackage"
+                )
+            ],
+            path: "Sources/WatchFeature",
+            swiftSettings: [
+                .enableUpcomingFeature("StrictConcurrency")
+            ]
+        ),
+        .testTarget(
+            name: "GameTrackerWatchFeatureTests",
+            dependencies: ["GameTrackerWatchFeature"]
+        ),
+    ]
 )

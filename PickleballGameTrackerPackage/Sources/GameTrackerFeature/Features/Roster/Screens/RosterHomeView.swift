@@ -5,7 +5,7 @@
 //  Created by Agent on 8/15/25.
 //
 
-import SharedGameCore
+import PickleballGameTrackerCorePackage
 import SwiftData
 import SwiftUI
 
@@ -108,7 +108,7 @@ struct RosterHomeView: View {
         }
       }
     }
-    .task { @MainActor in await manager.refreshAll() }
+    .task { @MainActor in manager.refreshAll() }
   }
 
   // Compute the number of teams a player belongs to for richer card context

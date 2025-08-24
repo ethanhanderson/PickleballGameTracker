@@ -5,7 +5,7 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import SharedGameCore
+import PickleballGameTrackerCorePackage
 import SwiftData
 import SwiftUI
 
@@ -15,7 +15,7 @@ struct NavigationDestinationFactory {
 
   // MARK: - GameSectionDestination Routing
 
-  @ViewBuilder
+  @MainActor @ViewBuilder
   static func createDestination(
     for destination: GameSectionDestination,
     modelContext: ModelContext,
@@ -29,7 +29,7 @@ struct NavigationDestinationFactory {
         modelContext: modelContext,
         navigationState: navigationState
       )
-      .task {
+      .task { @MainActor in
         Log.event(
           .viewAppear, level: .debug, message: "Open section detail",
           metadata: ["title": destination.title])
@@ -48,7 +48,7 @@ struct NavigationDestinationFactory {
         modelContext: modelContext,
         navigationState: navigationState
       )
-      .task {
+      .task { @MainActor in
         Log.event(
           .viewAppear, level: .debug, message: "Open custom section detail",
           metadata: ["title": title])

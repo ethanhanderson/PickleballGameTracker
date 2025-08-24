@@ -6,11 +6,11 @@
 //
 
 import Foundation
-import SharedGameCore
+import PickleballGameTrackerCorePackage
 
 // MARK: - Game Section Destination
 
-public indirect enum GameSectionDestination: Hashable {
+public indirect enum GameSectionDestination: Hashable, Sendable {
   case quickStart
   case allGames
   case recommended

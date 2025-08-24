@@ -1,4 +1,4 @@
-import SharedGameCore
+import PickleballGameTrackerCorePackage
 import SwiftData
 import SwiftUI
 

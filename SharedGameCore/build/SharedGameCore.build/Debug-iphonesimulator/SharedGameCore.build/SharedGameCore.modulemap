@@ -1,4 +1,0 @@
-module SharedGameCore {
-header "SharedGameCore-Swift.h"
-export *
-}

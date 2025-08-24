@@ -9,11 +9,11 @@ import SwiftData
 import SwiftUI
 
 @MainActor
-struct AppNavigationView: View {
+public struct AppNavigationView: View {
   @Environment(\.modelContext) private var modelContext
   @State private var rosterManager: PlayerTeamManager
 
-  init(rosterManager: PlayerTeamManager = PlayerTeamManager()) {
+  public init(rosterManager: PlayerTeamManager = PlayerTeamManager()) {
     _rosterManager = State(initialValue: rosterManager)
   }
   @State private var selectedTab: AppTab = .games
@@ -25,10 +25,11 @@ struct AppNavigationView: View {
   @State private var deepLinkDestination: DeepLinkDestination?
   @State private var showDeepLink: Bool = false
   @State private var statisticsFilter: (gameId: String?, gameTypeId: String?)? = nil
+  @State private var deepLinkObserver: (any NSObjectProtocol)? = nil
 
   // MARK: - Body
 
-  var body: some View {
+  public var body: some View {
     TabView(selection: $selectedTab) {
       Tab("Games", systemImage: "gamecontroller", value: AppTab.games) {
         GameHomeView()
@@ -95,20 +96,11 @@ struct AppNavigationView: View {
       // Ensure device sync is enabled so watch sees phone-created games
       activeGameStateManager.setSyncEnabled(true)
 
-      // Observe in-app deep link requests
-      NotificationCenter.default.addObserver(
-        forName: .deepLinkRequested,
-        object: nil,
-        queue: .main
-      ) { note in
-        guard
-          let dest = note.userInfo?[DeepLinkPayloadKey.destination]
-            as? DeepLinkDestination
-        else { return }
+      // Observe in-app deep link requests via DeepLinkBus
+      deepLinkObserver = DeepLinkBus.observe { dest in
         Task { @MainActor in
           switch dest {
           case .statistics(let gameId, let gameTypeId):
-            // Open Statistics tab with pre-applied filters; no sheet
             statisticsFilter = (gameId, gameTypeId)
             selectedTab = .statistics
             showDeepLink = false
@@ -119,6 +111,10 @@ struct AppNavigationView: View {
           }
         }
       }
+    }
+    .onDisappear {
+      if let deepLinkObserver { NotificationCenter.default.removeObserver(deepLinkObserver) }
+      deepLinkObserver = nil
     }
     .onOpenURL { url in
       do {
@@ -192,6 +188,7 @@ extension AppNavigationView {
 
     return AppNavigationView(rosterManager: rosterManager)
       .modelContainer(container)
+      .environment(ActiveGameStateManager.shared)
       .task {
         let stateManager = ActiveGameStateManager.shared
         stateManager.configure(with: context)
@@ -223,11 +220,12 @@ extension AppNavigationView {
 
     return AppNavigationView(rosterManager: rosterManager)
       .modelContainer(container)
+      .environment(ActiveGameStateManager.shared)
       .task {
         let stateManager = ActiveGameStateManager.shared
         stateManager.configure(with: context)
         stateManager.setCurrentGame(PreviewGameData.midGame)
-        await rosterManager.refreshAll()
+        rosterManager.refreshAll()
       }
   }
 }

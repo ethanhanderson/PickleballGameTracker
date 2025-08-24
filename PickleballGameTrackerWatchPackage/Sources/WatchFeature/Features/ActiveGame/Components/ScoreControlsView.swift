@@ -1,5 +1,7 @@
-import SharedGameCore
+import PickleballGameTrackerCorePackage
+import SwiftData
 import SwiftUI
+import WatchKit
 
 struct ScoreControlsView: View {
   @Bindable var game: Game

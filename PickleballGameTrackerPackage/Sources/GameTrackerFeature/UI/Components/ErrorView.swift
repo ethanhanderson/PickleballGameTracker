@@ -6,7 +6,7 @@
 //
 
 import SwiftUI
-import SharedGameCore
+import PickleballGameTrackerCorePackage
 
 public struct ErrorView: View {
   let error: Error

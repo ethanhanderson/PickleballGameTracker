@@ -5,7 +5,7 @@
 //  Created by Agent on 8/17/25.
 //
 
-import SharedGameCore
+import PickleballGameTrackerCorePackage
 import SwiftData
 import SwiftUI
 
@@ -220,7 +220,6 @@ struct TeamEditorView: View {
 }
 
 #Preview("Edit") {
-  let container = try! PreviewGameData.createPreviewContainer(with: [])
   let manager = PlayerTeamManager()
   let alice = try! manager.createPlayer(name: "Alice")
   let bob = try! manager.createPlayer(name: "Bob")

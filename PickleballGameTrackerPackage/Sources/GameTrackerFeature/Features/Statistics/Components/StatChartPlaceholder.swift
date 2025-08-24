@@ -1,4 +1,4 @@
-import SharedGameCore
+import PickleballGameTrackerCorePackage
 import SwiftUI
 
 /// Lightweight line chart placeholder used across statistics detail views.
@@ -13,7 +13,7 @@ struct StatChartPlaceholder: View {
         .font(DesignSystem.Typography.body)
       ZStack(alignment: .bottomLeading) {
         RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.cardRounded)
-          .fill(DesignSystem.Colors.containerFillTertiary)
+          .fill(DesignSystem.Colors.containerFillSecondary)
           .frame(height: 160)
         if !points.isEmpty {
           GeometryReader { proxy in
@@ -41,5 +41,3 @@ struct StatChartPlaceholder: View {
     }
   }
 }
-
-
