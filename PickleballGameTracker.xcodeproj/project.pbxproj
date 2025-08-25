@@ -8,9 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		8B41F6832DEDD23B001A66F9 /* GameTrackerFeature in Frameworks */ = {isa = PBXBuildFile; productRef = 8B41F6822DEDD23B001A66F9 /* GameTrackerFeature */; };
-		8B41F6852DEDD25C001A66F9 /* GameTrackerFeature in Frameworks */ = {isa = PBXBuildFile; productRef = 8B41F6842DEDD25C001A66F9 /* GameTrackerFeature */; };
 		F8110A7A2E5998A9005BCBDF /* PickleballGameTrackerWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = F8110A5A2E5998A8005BCBDF /* PickleballGameTrackerWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		F819D1552E599B1E00D8426C /* WatchFeature in Frameworks */ = {isa = PBXBuildFile; productRef = F819D1542E599B1E00D8426C /* WatchFeature */; };
+		F84055FE2E5BC90C00C975C5 /* GameTrackerFeature in Frameworks */ = {isa = PBXBuildFile; productRef = F84055FD2E5BC90C00C975C5 /* GameTrackerFeature */; };
+		F84056002E5BC94C00C975C5 /* GameTrackerWatchFeature in Frameworks */ = {isa = PBXBuildFile; productRef = F84055FF2E5BC94C00C975C5 /* GameTrackerWatchFeature */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -107,7 +107,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8B41F6852DEDD25C001A66F9 /* GameTrackerFeature in Frameworks */,
+				F84055FE2E5BC90C00C975C5 /* GameTrackerFeature in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -123,7 +123,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F819D1552E599B1E00D8426C /* WatchFeature in Frameworks */,
+				F84056002E5BC94C00C975C5 /* GameTrackerWatchFeature in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -183,7 +183,7 @@
 			);
 			name = PickleballGameTracker;
 			packageProductDependencies = (
-				8B41F6842DEDD25C001A66F9 /* GameTrackerFeature */,
+				F84055FD2E5BC90C00C975C5 /* GameTrackerFeature */,
 			);
 			productName = TestApp;
 			productReference = 8B41F6452DEDD0D5001A66F9 /* Pickleball Game Tracker.app */;
@@ -230,7 +230,7 @@
 			);
 			name = PickleballGameTrackerWatch;
 			packageProductDependencies = (
-				F819D1542E599B1E00D8426C /* WatchFeature */,
+				F84055FF2E5BC94C00C975C5 /* GameTrackerWatchFeature */,
 			);
 			productName = "PickleballGameTrackerWatchApp Watch App";
 			productReference = F8110A5A2E5998A8005BCBDF /* PickleballGameTrackerWatch.app */;
@@ -296,6 +296,8 @@
 			mainGroup = 8B41F63C2DEDD0D5001A66F9;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				F84055FA2E5BC7B600C975C5 /* XCLocalSwiftPackageReference "PickleballGameTrackerWatchPackage" */,
+				F84055FC2E5BC7D800C975C5 /* XCLocalSwiftPackageReference "PickleballGameTrackerPackage" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8B41F6462DEDD0D5001A66F9 /* Products */;
@@ -762,18 +764,29 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		F84055FA2E5BC7B600C975C5 /* XCLocalSwiftPackageReference "PickleballGameTrackerWatchPackage" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = PickleballGameTrackerWatchPackage;
+		};
+		F84055FC2E5BC7D800C975C5 /* XCLocalSwiftPackageReference "PickleballGameTrackerPackage" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = PickleballGameTrackerPackage;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		8B41F6822DEDD23B001A66F9 /* GameTrackerFeature */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = GameTrackerFeature;
 		};
-		8B41F6842DEDD25C001A66F9 /* GameTrackerFeature */ = {
+		F84055FD2E5BC90C00C975C5 /* GameTrackerFeature */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = GameTrackerFeature;
 		};
-		F819D1542E599B1E00D8426C /* WatchFeature */ = {
+		F84055FF2E5BC94C00C975C5 /* GameTrackerWatchFeature */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = WatchFeature;
+			productName = GameTrackerWatchFeature;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
