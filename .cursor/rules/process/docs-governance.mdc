@@ -1,0 +1,34 @@
+---
+alwaysApply: true
+---
+
+# Documentation governance
+
+- Always reference the project wiki when implementing or changing code.
+- Keep docs updated to reflect the current codebase.
+- Keep doc scope to what the code should be and how to organize it, not how to write it.
+
+## Where to start
+
+- Architecture index: [Architecture.md](mdc:PickleballGameTracker.wiki/Architecture.md)
+- Architecture overview: [overview.md](mdc:PickleballGameTracker.wiki/architecture/overview.md)
+- Features index: [Features.md](mdc:PickleballGameTracker.wiki/Features.md)
+- Systems index: [Systems.md](mdc:PickleballGameTracker.wiki/Systems.md)
+
+## Required practice
+
+- When starting a change:
+
+  - Identify the relevant feature/system/architecture page(s) and read them first.
+  - If gaps exist, add TODOs in the code but update the docs in the same PR.
+
+- When finishing a change:
+  - Update the corresponding wiki page(s) to match the implementation.
+  - Keep docs concise: define intent, responsibilities, boundaries, data flow, acceptance criteria.
+  - Avoid step-by-step coding instructions.
+
+## Validation checklist
+
+- Every PR description links to the relevant wiki page(s).
+- New features or systems include an index entry in Features or Systems.
+- Architecture changes update the overview map if affected.

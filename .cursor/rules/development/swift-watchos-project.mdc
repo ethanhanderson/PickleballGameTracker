@@ -1,0 +1,224 @@
+---
+description: Swift 6.1+ watchOS project overview, architecture patterns, navigation, runtime rules,
+  and performance guidance for SwiftUI + SPM. Apply when working on watch targets, views,
+  navigation, or app structure.
+alwaysApply: false
+---
+# Project-wide AI coding guidelines for Cursor (Swift watchOS app)
+
+## Project Overview
+
+This is a native watchOS application built with Swift 6.1+ and SwiftUI. The codebase targets modern
+watchOS (Series-compatible, current SDK) and uses strict Swift Concurrency for all async work.
+The iPhone companion app exists but the watch app is a first-class, glanceable experience.
+
+- **Frameworks & Tech:** SwiftUI, Swift Concurrency (async/await, actors, @MainActor), SPM modules
+- **Architecture:** Model-View (MV) using SwiftUI’s native state model (@State, @Observable, @Environment, @Binding)
+- **Navigation:** Compact flows optimized for short interactions; stack-based navigation with minimal depth
+- **Phone Sync:** Use WatchConnectivity for timely, efficient data transfer to/from iOS when needed
+- **Accessibility:** VoiceOver, large type, and high-contrast friendly; haptics communicate state changes
+
+Reference the project wiki for context and constraints:
+- Architecture overview: [overview.md](mdc:PickleballGameTracker.wiki/architecture/overview.md)
+- watchOS architecture: [watchOS.md](mdc:PickleballGameTracker.wiki/architecture/watchOS.md)
+- Runtime rules: [watchos-runtime-rules.md](mdc:PickleballGameTracker.wiki/systems/runtime/watchos-runtime-rules.md)
+- Navigation: [navigation.md](mdc:PickleballGameTracker.wiki/systems/ux/navigation.md)
+- Haptics: [haptics.md](mdc:PickleballGameTracker.wiki/systems/ux/haptics.md)
+- View architecture: [view-architecture.md](mdc:PickleballGameTracker.wiki/systems/ux/view-architecture.md)
+
+## Project Structure
+
+The workspace uses an app shell + SPM packages. All watch code lives in the watch target and
+`PickleballGameTrackerWatchPackage`.
+
+```
+Pickleball Game Tracker/
+├── PickleballGameTrackerWatch/            # watchOS app entry (minimal wrapper)
+│   ├── Assets.xcassets/
+│   └── PickleballGameTrackerWatchApp.swift
+├── PickleballGameTrackerWatchPackage/     # All watch features and logic
+│   ├── Package.swift
+│   ├── Sources/
+│   │   └── WatchFeature/                  # Feature modules
+│   └── Tests/
+│       └── PickleballGameTrackerWatchPackageTests/
+└── ... (iOS app and shared packages)
+```
+
+Important: Implement watch features in `PickleballGameTrackerWatchPackage` (Sources/WatchFeature).
+Keep the `PickleballGameTrackerWatch` app target minimal and declarative.
+
+# Code Quality & Style Guidelines
+
+## Swift Style & Conventions
+
+- **Naming:** `UpperCamelCase` types, `lowerCamelCase` members; clear, descriptive names
+- **Value Types:** Prefer `struct`; use `class` only for reference semantics or actor isolation
+- **Enums:** Model view states and compact interactions via enums with associated values
+- **Early Returns:** Flatten control flow; avoid deep nesting (>2–3 levels)
+
+## Optionals & Error Handling
+
+- Use `guard let`/`if let` for optionals; avoid force unwraps
+- Propagate errors with `throws` or handle with user-appropriate feedback (brief, haptic-backed)
+- Never swallow errors; log appropriately (see observability wiki)
+
+## Modern SwiftUI Architecture Guidelines (watchOS)
+
+watchOS interactions should be quick (ideally <10s) and glanceable. Favor single-purpose screens
+and progressive disclosure.
+
+1. **Views as State**
+   - Represent loading/ready/error succinctly; show progress minimally to avoid blocking
+   - Avoid heavy layouts; prefer concise stacks, lists, and summaries
+
+2. **Environment Usage**
+   - App-wide services (routing, theme, sync) via `@Environment(Service.self)`
+   - Feature-scoped services as `@Observable` instances owned by the view hierarchy
+
+3. **Local State**
+   - `@State` for local view variables, `@Binding` to pass to children
+   - Use `.task(id:)` to tie async side-effects to lifecycle and cancel on disappearance
+
+4. **No ViewModels**
+   - Keep logic in services and observable models; test those directly
+   - Views remain thin and disposable
+
+5. **Interaction Constraints**
+   - Minimize navigation depth; avoid deep stacks
+   - Prefer actions that complete within a single screen when possible
+   - Use haptics and concise text to confirm actions
+
+## SwiftUI State Management (MV Pattern)
+
+- **@State:** Local, ephemeral UI state
+- **@Observable:** Domain/state models backing views
+- **@Environment:** Cross-feature dependencies (router, sync, theme)
+- **@Binding/@Bindable:** For two-way bindings
+- Structure views for small screen; extract tiny reusable components
+
+Example pattern:
+
+```swift
+@Observable
+final class WatchGameState {
+    var isLoading = false
+    var summary: String = ""
+
+    func load() async {
+        isLoading = true
+        defer { isLoading = false }
+        // fetch from connectivity or local store
+    }
+}
+
+@MainActor
+struct GameSummaryView: View {
+    @State private var model = WatchGameState()
+
+    var body: some View {
+        VStack(spacing: 8) {
+            if model.isLoading {
+                ProgressView()
+            } else {
+                Text(model.summary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .task { await model.load() }
+    }
+}
+```
+
+## Concurrency (Swift 6 Strict Mode)
+
+- **@MainActor:** All UI code isolated to main actor
+- **Actors:** Protect shared mutable state and IO-bound services
+- **async/await:** Prefer over callbacks; use `.task` for lifecycle-managed work
+- **Cancellation:** Check `Task.isCancelled` in long operations; design for fast exits
+- **No GCD:** Avoid raw dispatch; use structured concurrency (`async let`, task groups)
+
+See: [swift-concurrency.mdc](mdc:.cursor/rules/swift-concurrency.mdc) if present, and
+[watchos-runtime-rules.md](mdc:PickleballGameTracker.wiki/systems/runtime/watchos-runtime-rules.md).
+
+## Navigation (watchOS-specific)
+
+- Keep stacks shallow; avoid complex branching from a single screen
+- Use concise titles and single, clear primary action
+- Prefer summary → detail flows; avoid nested modals
+- For lists, use short rows; avoid heavy images; prefer SF Symbols when possible
+
+## Haptics & Feedback
+
+- Use haptics to confirm state: success, warning, error; avoid overuse
+- Prefer SwiftUI sensory feedback APIs when available; otherwise use platform-appropriate haptics
+- Pair haptics with short text and/or icon; avoid long-running spinners
+
+Refer to: [haptics.md](mdc:PickleballGameTracker.wiki/systems/ux/haptics.md).
+
+## WatchConnectivity & Sync
+
+- Use `WatchConnectivity` for timely, lightweight messages; batch when possible
+- Avoid blocking UI on phone connectivity; show cached data and update opportunistically
+- Design for intermittent connectivity; reconcile conflicts deterministically
+
+Refer to: [sync.md](mdc:PickleballGameTracker.wiki/systems/runtime/sync.md).
+
+## Performance & Power
+
+- Minimize work per frame; small view hierarchies; prefer `let` and value semantics
+- Avoid unnecessary timers; coalesce updates; throttle where appropriate
+- Use `.task(id:)` and `.refreshable` judiciously; cancel promptly on disappear
+- Keep assets small; favor vector/SF Symbols
+- Profile on device; watch has tighter CPU, memory, and battery constraints
+
+Refer to: [testing-and-performance.md](mdc:PickleballGameTracker.wiki/systems/observability/testing-and-performance.md).
+
+## Accessibility
+
+- Clear, succinct labels; prioritize readability and contrast
+- Ensure controls are large enough and discoverable with VoiceOver
+- Use `accessibilityHint` for non-obvious gestures; support Digital Crown where sensible
+
+## Digital Crown & Input
+
+- Use Digital Crown for fine-grained adjustments via `.focusable()` and `.digitalCrownRotation`
+- Avoid multi-gesture complexity; one primary action per screen is ideal
+
+## Security & Privacy
+
+- No sensitive logging; respect user privacy
+- Use secure transport for sync; avoid storing secrets; leverage Keychain when needed
+
+## Data & Persistence
+
+- Prefer in-memory state with on-demand sync from phone
+- For local storage, keep models lean and tailored for quick reads/writes
+- Only persist what improves glanceability or resilience; avoid heavy schemas on watch
+
+## Development Workflow
+
+1. Implement features in `PickleballGameTrackerWatchPackage/Sources/WatchFeature`
+2. Write tests in `PickleballGameTrackerWatchPackage/Tests`
+3. Build and run on watch simulator/device using XcodeBuildMCP tools
+4. Validate short, glanceable interactions and haptics on device
+5. Update wiki pages referenced above to reflect behavior
+
+Tooling reference: [xcodebuildmcp-tools.mdc](mdc:.cursor/rules/xcodebuildmcp-tools.mdc) if present.
+
+## Best Practices Recap (watchOS)
+
+- **Glanceable first:** short text, single action, minimal navigation
+- **Cancel-friendly:** tie async work to view lifecycle; handle cancellation
+- **Sync-light:** never block on phone; opportunistic updates via WatchConnectivity
+- **Haptic-backed:** confirm important events succinctly
+- **Small & fast:** tight view trees, low allocations, coalesced updates
+
+---
+
+Documentation governance: keep the wiki in sync. When implementing or changing code, update the
+relevant pages:
+- [watchOS.md](mdc:PickleballGameTracker.wiki/architecture/watchOS.md)
+- [view-architecture.md](mdc:PickleballGameTracker.wiki/systems/ux/view-architecture.md)
+- [navigation.md](mdc:PickleballGameTracker.wiki/systems/ux/navigation.md)
+- [watchos-runtime-rules.md](mdc:PickleballGameTracker.wiki/systems/runtime/watchos-runtime-rules.md)

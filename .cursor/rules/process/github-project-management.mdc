@@ -1,0 +1,120 @@
+---
+alwaysApply: false
+description: GitHub project management process for roadmap, issues, versioning, and branch strategy
+---
+
+### GitHub Project Management: Roadmap, Issues, Versioning, Branching
+
+Use this rule when organizing work, creating issues/PRs, planning roadmap, or cutting releases.
+
+- **Wiki references**: Link relevant wiki pages in issues/PRs per Documentation Governance.
+  - Architecture index: [Architecture.md](mdc:PickleballGameTracker.wiki/Architecture.md)
+  - Features index: [Features.md](mdc:PickleballGameTracker.wiki/Features.md)
+  - Systems index: [Systems.md](mdc:PickleballGameTracker.wiki/Systems.md)
+  - Architecture overview: [overview.md](mdc:PickleballGameTracker.wiki/architecture/overview.md)
+
+### Roadmap with GitHub Projects
+
+- **Project board**: "Pickleball Game Tracker Roadmap"
+- **Columns**: Backlog → Next → In Progress → In Review → Done
+- **Item types**: Feature, Bug, Chore, Docs
+- **Required custom fields** on items:
+  - Priority: P0, P1, P2, P3
+  - Size: S, M, L
+  - Target Release: vX.Y (optional for chores/docs)
+- **Backlog grooming**:
+  - Keep Backlog prioritized by Priority; only top ~10 in Next.
+  - Break epics/features into small issues deliverable in ≤1 week.
+- **WIP policy**: Only move to In Progress when a branch exists and an assignee is set.
+- **Review policy**: Items in In Review must have a linked PR.
+
+### Issue Management
+
+- **Naming**
+  - Feature: [Feature] Concise outcome
+  - Bug: [Bug] Symptom or failing case
+  - Chore/Docs: [Chore] ... / [Docs] ...
+- **Labels**
+  - Type: `type:feature`, `type:bug`, `type:chore`, `type:docs`
+  - Area: use existing taxonomy, e.g., `area:iOS`, `area:watch`, `area:cross-cutting`, `area:SharedGameCore`, `area:ux`, `area:data`
+  - Priority: `priority:P0`, `priority:P1`, `priority:P2`, `priority:P3`
+  - Size: `size:S`, `size:M`, `size:L`, `size:XL`
+- **Body template** (minimum sections)
+  - Context: links to wiki pages (Features/Systems/Architecture)
+  - Acceptance Criteria: bullet list of verifiable outcomes
+  - Non-goals: explicit out-of-scope
+  - Risks/Dependencies
+  - QA Notes: manual test steps if applicable
+- **Project linking**
+  - Add every issue to the roadmap project and set fields (Priority, Size, Target Release).
+- **Closing automation**
+  - PRs must include "Closes #<issue>" to auto-close on merge.
+
+### Branching Strategy
+
+- **Default branch**: `main`
+- **Working branches** (short-lived; one issue per branch):
+  - Feature: `feature/<issue-number>-<short-kebab-summary>`
+  - Bugfix: `bugfix/<issue-number>-<short-kebab-summary>`
+  - Hotfix (post-release): `hotfix/<issue-number>-<short-kebab-summary>`
+  - Release: `release/vX.Y` or `release/vX.Y.Z`
+- **Branch rules**
+  - Branch from `main` (or from `release/*` during release hardening).
+  - Keep changes scoped to a single issue; open additional issues for out-of-scope work.
+  - Rebase frequently; avoid long-lived divergence.
+
+### Pull Requests
+
+- **PR title**: Conventional style preferred
+  - feat: Short description (Closes #123)
+  - fix: Short description (Closes #123)
+  - chore/docs/refactor/test: Short description
+- **PR body** must include:
+  - Linked issue(s) and project item
+  - Wiki links for intent/scope (e.g., [Features.md](mdc:PickleballGameTracker.wiki/Features.md))
+  - Acceptance Criteria checklist
+  - Screenshots/screencasts for UI changes (iOS/watchOS)
+- **Review**
+  - At least one reviewer; address comments or create follow-up issues
+  - CI must be green before merge
+- **Merge method**: Squash and merge to keep a clean history
+
+### Versioning and Releases
+
+- **Versioning**: Semantic Versioning (SemVer) for app releases and tags: `vMAJOR.MINOR.PATCH`
+  - MAJOR: breaking changes to user experience or data contracts
+  - MINOR: new features, non-breaking
+  - PATCH: bug fixes, docs-only, or internal changes
+- **Release branches**: `release/vX.Y.Z`
+  - Cut from `main` when feature set for X.Y[.Z] is code complete
+  - Only bug fixes and release tasks allowed
+- **Tags**
+  - Tag merge commit on `main` with `vX.Y` or `vX.Y.Z` after release approval
+- **Release notes**
+  - Group by Features, Fixes, Chores/Infra
+  - Reference closed issues and PRs; include notable wiki updates
+- **Checklists**
+  - Pre-release: tests pass, app builds for all targets, docs updated (wiki + README), version bump committed
+  - Post-release: tag pushed, Project items moved to Done, create follow-up issues for known gaps
+
+### Daily Flow (Quick Guide)
+
+1. Create/validate an issue with Acceptance Criteria and wiki links → add to Project with fields
+2. Create branch `feature/…` and start work → move item to In Progress
+3. Open PR early (draft) linking the issue and project → move to In Review when ready
+4. Ensure tests/CI pass, get review, squash-merge to `main` with "Closes #…"
+5. Update relevant wiki pages and link them in PR description
+6. During release: cut `release/vX.Y.Z`, stabilize, tag `vX.Y.Z`, publish notes, move items to Done
+
+### Governance and Documentation
+
+- Every PR description links to the relevant wiki page(s).
+- New features or systems include an index entry in [Features.md](mdc:PickleballGameTracker.wiki/Features.md) or [Systems.md](mdc:PickleballGameTracker.wiki/Systems.md).
+- Architecture changes update [overview.md](mdc:PickleballGameTracker.wiki/architecture/overview.md) if affected.
+
+### Acceptance Criteria for This Process
+
+- Issues consistently labeled and linked to the roadmap project
+- Branches follow naming and scope conventions
+- PRs link issues and wiki, use squash merge, and close issues on merge
+- Releases are tagged with SemVer and have notes referencing closed work
