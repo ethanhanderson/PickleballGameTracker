@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import PickleballGameTrackerCorePackage
+import CorePackage
 
 // MARK: - Game Section Destination
 

@@ -5,11 +5,13 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
+import CorePackage
 import SwiftData
 import SwiftUI
 
 @MainActor
 public struct AppNavigationView: View {
+  @Namespace var animation
   @Environment(\.modelContext) private var modelContext
   @State private var rosterManager: PlayerTeamManager
 
@@ -82,7 +84,8 @@ public struct AppNavigationView: View {
         GamePreviewControls(
           onTap: {
             showingActiveGameSheet = true
-          }
+          },
+          animation: animation
         )
       }
     }
@@ -143,7 +146,7 @@ public struct AppNavigationView: View {
         )
       }
     }
-    .fullScreenCover(isPresented: $showingActiveGameSheet) {
+    .sheet(isPresented: $showingActiveGameSheet) {
       if let currentGame = activeGameStateManager.currentGame {
         NavigationStack {
           ActiveGameView(
@@ -154,7 +157,8 @@ public struct AppNavigationView: View {
             }
           )
         }
-        .interactiveDismissDisabled(true)
+        .navigationTint()
+        .navigationTransition(.zoom(sourceID: "sheet", in: animation))
       }
     }
     // Deep link presentation as a top-level sheet for non-Statistics destinations in v0.3
@@ -166,6 +170,7 @@ public struct AppNavigationView: View {
           activeGameStateManager: activeGameStateManager
         )
       }
+      .navigationTint()
     }
 
   }
@@ -179,7 +184,7 @@ extension AppNavigationView {
   }
 
   fileprivate static var blankPreview: some View {
-    let container = try! PreviewGameData.createPreviewContainer(with: [])
+    let container = try! CorePackage.PreviewGameData.createPreviewContainer(with: [])
     let context = container.mainContext
 
     UserDefaults.standard.removeObject(forKey: "GameSearchHistory")
@@ -203,20 +208,78 @@ extension AppNavigationView {
   }
 
   fileprivate static var populatedPreview: some View {
-    let container = try! PreviewGameData.createFullPreviewContainer()
+    let container = try! CorePackage.PreviewGameData.createFullPreviewContainer()
     let context = container.mainContext
 
     UserDefaults.standard.set(
       [GameType.training.rawValue, GameType.recreational.rawValue, GameType.tournament.rawValue],
       forKey: "GameSearchHistory")
 
-    let rosterManager = PlayerTeamManager(storage: SwiftDataStorage(modelContainer: container))
-    let alice = try? rosterManager.createPlayer(name: "Alice")
-    let bob = try? rosterManager.createPlayer(name: "Bob")
-    _ = try? rosterManager.createPlayer(name: "Charlie")
-    if let a = alice, let b = bob {
-      _ = try? rosterManager.createTeam(name: "Aces", players: [a, b])
+    // Use core package preview roster data, but CLONE into fresh @Model instances
+    // to avoid stale SwiftData references across previews/containers.
+    var oldIdToNewPlayer: [UUID: PlayerProfile] = [:]
+    for src in CorePackage.PreviewGameData.samplePlayers {
+      let clone = PlayerProfile(
+        id: src.id,
+        name: src.name,
+        notes: src.notes,
+        isArchived: src.isArchived,
+        avatarImageData: src.avatarImageData,
+        iconSymbolName: src.iconSymbolName,
+        iconTintColor: src.iconTintColor,
+        skillLevel: src.skillLevel,
+        preferredHand: src.preferredHand,
+        createdDate: src.createdDate,
+        lastModified: Date()
+      )
+      context.insert(clone)
+      oldIdToNewPlayer[src.id] = clone
     }
+    for src in CorePackage.PreviewGameData.sampleTeams {
+      let remappedPlayers: [PlayerProfile] = src.players.compactMap { oldIdToNewPlayer[$0.id] }
+      let clone = TeamProfile(
+        id: src.id,
+        name: src.name,
+        notes: src.notes,
+        isArchived: src.isArchived,
+        avatarImageData: src.avatarImageData,
+        iconSymbolName: src.iconSymbolName,
+        iconTintColor: src.iconTintColor,
+        players: remappedPlayers,
+        suggestedGameType: src.suggestedGameType,
+        createdDate: src.createdDate,
+        lastModified: Date()
+      )
+      context.insert(clone)
+    }
+    // Ensure every active player has an active team with their name
+    do {
+      let activeTeams = try context.fetch(
+        FetchDescriptor<TeamProfile>(predicate: #Predicate { $0.isArchived == false })
+      )
+      for (_, player) in oldIdToNewPlayer {
+        guard player.isArchived == false else { continue }
+        let hasNamedTeam = activeTeams.contains { team in
+          team.players.contains(where: { $0.id == player.id })
+            && team.name.localizedCaseInsensitiveContains(player.name)
+        }
+        if hasNamedTeam == false {
+          let solo = TeamProfile(
+            name: player.name,
+            avatarImageData: nil,
+            iconSymbolName: "person.fill",
+            iconTintColor: player.iconTintColor,
+            players: [player]
+          )
+          context.insert(solo)
+        }
+      }
+    } catch {
+      // preview-only safeguard
+    }
+    try? context.save()
+
+    let rosterManager = PlayerTeamManager(storage: SwiftDataStorage(modelContainer: container))
 
     return AppNavigationView(rosterManager: rosterManager)
       .modelContainer(container)
@@ -224,7 +287,7 @@ extension AppNavigationView {
       .task {
         let stateManager = ActiveGameStateManager.shared
         stateManager.configure(with: context)
-        stateManager.setCurrentGame(PreviewGameData.midGame)
+        stateManager.setCurrentGame(CorePackage.PreviewGameData.midGame)
         rosterManager.refreshAll()
       }
   }

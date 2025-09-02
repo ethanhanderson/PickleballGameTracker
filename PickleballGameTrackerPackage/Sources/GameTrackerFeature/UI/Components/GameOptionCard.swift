@@ -1,4 +1,4 @@
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftUI
 
 struct GameOptionCard: View {
@@ -108,7 +108,6 @@ struct GameOptionCard: View {
         Image(systemName: "chevron.right")
           .font(.system(size: iconSmallSize, weight: .semibold))
           .foregroundColor(.white.opacity(isInteractive ? 0.6 : 0.3))
-          .shadow(color: .black.opacity(0.08), radius: 2, x: 0, y: 1)
       }
       .padding(.bottom, headerBottomPadding)
 
@@ -150,7 +149,7 @@ struct GameOptionCard: View {
     .padding(.bottom, bottomPadding)
     .glassEffect(
       .regular.tint(DesignSystem.Colors.gameType(gameType)),
-      in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.cardRounded, style: .continuous)
+      in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xxl)
     )
   }
 }

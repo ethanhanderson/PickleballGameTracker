@@ -1,1 +1,1 @@
-@_exported import PickleballGameTrackerCorePackage
+@_exported import CorePackage

@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftUI
 
 // MARK: - Games Home Navigation State
