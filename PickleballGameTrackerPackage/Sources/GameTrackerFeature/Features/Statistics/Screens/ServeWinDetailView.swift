@@ -18,13 +18,15 @@ struct ServeWinDetailView: View {
         HStack {
           Text("Overall")
             .font(DesignSystem.Typography.body)
+            .foregroundStyle(DesignSystem.Colors.textSecondary)
           Spacer()
           Text(overallText)
             .font(DesignSystem.Typography.title2)
+            .foregroundStyle(DesignSystem.Colors.textPrimary)
         }
-        .padding(12)
+        .padding(DesignSystem.Spacing.cardPadding)
         .background(
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
+          RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.cardRounded, style: .continuous)
             .fill(DesignSystem.Colors.containerFillSecondary)
         )
         StatChartPlaceholder(title: "Serve win % over time")

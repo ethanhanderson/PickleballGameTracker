@@ -9,11 +9,13 @@ struct KPIRow: View {
     HStack {
       Text(title)
         .font(DesignSystem.Typography.body)
+        .foregroundStyle(DesignSystem.Colors.textSecondary)
       Spacer()
       Text(value)
         .font(DesignSystem.Typography.title2)
+        .foregroundStyle(DesignSystem.Colors.textPrimary)
     }
-    .padding(12)
+    .padding(DesignSystem.Spacing.cardPadding)
     .background(
       RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.cardRounded, style: .continuous)
         .fill(DesignSystem.Colors.containerFillSecondary)
