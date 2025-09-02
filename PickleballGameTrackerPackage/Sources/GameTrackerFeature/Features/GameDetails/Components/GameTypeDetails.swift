@@ -5,7 +5,7 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftUI
 
 public struct GameTypeDetails: View {
@@ -32,7 +32,7 @@ public struct GameTypeDetails: View {
       .frame(maxWidth: .infinity)
       .padding(DesignSystem.Spacing.md)
       .glassEffect(
-        .regular.tint(DesignSystem.Colors.gameType(gameType).opacity(0.4)),
+        .regular.tint(DesignSystem.Colors.containerFillSecondary.opacity(0.2)),
         in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl)
       )
 
@@ -55,7 +55,7 @@ public struct GameTypeDetails: View {
       .frame(maxWidth: .infinity)
       .padding(DesignSystem.Spacing.md)
       .glassEffect(
-        .regular.tint(DesignSystem.Colors.gameType(gameType).opacity(0.4)),
+        .regular.tint(DesignSystem.Colors.containerFillSecondary.opacity(0.2)),
         in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl)
       )
 
@@ -81,7 +81,7 @@ public struct GameTypeDetails: View {
       .frame(maxWidth: .infinity)
       .padding(DesignSystem.Spacing.md)
       .glassEffect(
-        .regular.tint(DesignSystem.Colors.gameType(gameType).opacity(0.4)),
+        .regular.tint(DesignSystem.Colors.containerFillSecondary.opacity(0.2)),
         in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl)
       )
     }

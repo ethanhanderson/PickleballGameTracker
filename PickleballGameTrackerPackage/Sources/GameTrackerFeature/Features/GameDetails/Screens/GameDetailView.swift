@@ -5,7 +5,7 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftData
 import SwiftUI
 
@@ -87,6 +87,7 @@ struct GameDetailView: View {
           GameTypeDetails(gameType: gameType)
 
           GameRulesSection(
+            gameType: gameType,
             winningScore: $winningScore,
             winByTwo: $winByTwo,
             kitchenRule: $kitchenRule,
@@ -120,6 +121,10 @@ struct GameDetailView: View {
     }
     .coordinateSpace(name: "scroll")
     .navigationBarTitleDisplayMode(.inline)
+    .containerBackground(
+      DesignSystem.Colors.navigationGradient(color: DesignSystem.Colors.gameType(gameType)),
+      for: .navigation
+    )
     .sheet(isPresented: $showingPresetPicker) {
       NavigationStack {
         PresetPickerView(gameType: gameType) { preset in
@@ -368,7 +373,13 @@ struct GameDetailView: View {
 }
 
 #Preview("Recreational Game Setup") {
-  NavigationStack {
+  let container = try! PreviewGameData.createFullPreviewContainer()
+  let context = container.mainContext
+  let manager = ActiveGameStateManager()
+  manager.configure(with: context, gameManager: SwiftDataGameManager(), enableSync: false)
+  manager.clearCurrentGame()
+
+  return NavigationStack {
     GameDetailView(
       gameType: .recreational,
       onStartGame: { variation in
@@ -381,5 +392,6 @@ struct GameDetailView: View {
       }
     )
   }
-  .modelContainer(try! PreviewGameData.createFullPreviewContainer())
+  .modelContainer(container)
+  .environment(manager)
 }

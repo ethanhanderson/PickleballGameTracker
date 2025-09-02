@@ -5,7 +5,7 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftUI
 
 public struct GameDetailActions: View {
@@ -110,8 +110,8 @@ public struct GameDetailActions: View {
             .font(.system(size: 20, weight: .medium))
             .frame(width: 52, height: 52)
         }
-        .buttonStyle(.glassProminent)
         .buttonBorderShape(.circle)
+        .buttonStyle(.glassProminent)
         .tint(DesignSystem.Colors.textSecondary)
         .disabled(isCreatingGame)
       }

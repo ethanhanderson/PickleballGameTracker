@@ -5,10 +5,11 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftUI
 
 public struct GameRulesSection: View {
+  let gameType: GameType
   @Binding var winningScore: Int
   @Binding var winByTwo: Bool
   @Binding var kitchenRule: Bool
@@ -19,6 +20,7 @@ public struct GameRulesSection: View {
   @Binding var hasTimeLimit: Bool
 
   public init(
+    gameType: GameType,
     winningScore: Binding<Int>,
     winByTwo: Binding<Bool>,
     kitchenRule: Binding<Bool>,
@@ -28,6 +30,7 @@ public struct GameRulesSection: View {
     sideSwitchingRule: Binding<SideSwitchingRule>,
     hasTimeLimit: Binding<Bool>
   ) {
+    self.gameType = gameType
     self._winningScore = winningScore
     self._winByTwo = winByTwo
     self._kitchenRule = kitchenRule
@@ -51,7 +54,7 @@ public struct GameRulesSection: View {
           VStack(spacing: DesignSystem.Spacing.xs) {
             Image(systemName: "target")
               .font(.system(size: 20, weight: .medium))
-              .foregroundStyle(DesignSystem.Colors.ruleInfo.gradient)
+              .foregroundStyle(DesignSystem.Colors.gameType(gameType).gradient)
               .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 2)
 
             Text("Winning Score")
@@ -67,17 +70,14 @@ public struct GameRulesSection: View {
           .frame(maxWidth: .infinity)
           .padding(DesignSystem.Spacing.md)
           .glassEffect(
-            .regular.tint(DesignSystem.Colors.ruleInfo.opacity(0.4)),
+            .regular.tint(DesignSystem.Colors.containerFillSecondary.opacity(0.5)),
             in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl))
 
           // Win by Two Rule
           VStack(spacing: DesignSystem.Spacing.xs) {
             Image(systemName: winByTwo ? "plus.circle.fill" : "minus.circle.fill")
               .font(.system(size: 20, weight: .medium))
-              .foregroundStyle(
-                (winByTwo ? DesignSystem.Colors.rulePositive : DesignSystem.Colors.ruleCaution)
-                  .gradient
-              )
+              .foregroundStyle(DesignSystem.Colors.gameType(gameType).gradient)
               .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 2)
 
             Text("Win by Two")
@@ -93,9 +93,7 @@ public struct GameRulesSection: View {
           .frame(maxWidth: .infinity)
           .padding(DesignSystem.Spacing.md)
           .glassEffect(
-            .regular.tint(
-              (winByTwo ? DesignSystem.Colors.rulePositive : DesignSystem.Colors.ruleCaution)
-                .opacity(0.4)),
+            .regular.tint(DesignSystem.Colors.containerFillSecondary.opacity(0.5)),
             in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl))
         }
 
@@ -104,10 +102,7 @@ public struct GameRulesSection: View {
           VStack(spacing: DesignSystem.Spacing.xs) {
             Image(systemName: kitchenRule ? "checkmark.circle.fill" : "xmark.circle.fill")
               .font(.system(size: 20, weight: .medium))
-              .foregroundStyle(
-                (kitchenRule ? DesignSystem.Colors.ruleCaution : DesignSystem.Colors.ruleNegative)
-                  .gradient
-              )
+              .foregroundStyle(DesignSystem.Colors.gameType(gameType).gradient)
               .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 2)
 
             Text("Kitchen Rule")
@@ -123,9 +118,7 @@ public struct GameRulesSection: View {
           .frame(maxWidth: .infinity)
           .padding(DesignSystem.Spacing.md)
           .glassEffect(
-            .regular.tint(
-              (kitchenRule ? DesignSystem.Colors.ruleCaution : DesignSystem.Colors.ruleNegative)
-                .opacity(0.4)),
+            .regular.tint(DesignSystem.Colors.containerFillSecondary.opacity(0.5)),
             in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl))
 
           // Double Bounce Rule
@@ -134,10 +127,7 @@ public struct GameRulesSection: View {
               systemName: doubleBounceRule ? "arrow.clockwise.circle.fill" : "xmark.circle.fill"
             )
             .font(.system(size: 20, weight: .medium))
-            .foregroundStyle(
-              (doubleBounceRule ? DesignSystem.Colors.tertiary : DesignSystem.Colors.ruleNegative)
-                .gradient
-            )
+            .foregroundStyle(DesignSystem.Colors.gameType(gameType).gradient)
             .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 2)
 
             Text("Double Bounce")
@@ -153,9 +143,7 @@ public struct GameRulesSection: View {
           .frame(maxWidth: .infinity)
           .padding(DesignSystem.Spacing.md)
           .glassEffect(
-            .regular.tint(
-              (doubleBounceRule ? DesignSystem.Colors.tertiary : DesignSystem.Colors.ruleNegative)
-                .opacity(0.4)),
+            .regular.tint(DesignSystem.Colors.containerFillSecondary.opacity(0.5)),
             in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl))
         }
 
@@ -164,7 +152,7 @@ public struct GameRulesSection: View {
           VStack(spacing: DesignSystem.Spacing.xs) {
             Image(systemName: "arrow.triangle.2.circlepath")
               .font(.system(size: 20, weight: .medium))
-              .foregroundStyle(DesignSystem.Colors.info.gradient)
+              .foregroundStyle(DesignSystem.Colors.gameType(gameType).gradient)
               .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 2)
 
             Text("Serving")
@@ -180,14 +168,14 @@ public struct GameRulesSection: View {
           .frame(maxWidth: .infinity)
           .padding(DesignSystem.Spacing.md)
           .glassEffect(
-            .regular.tint(DesignSystem.Colors.info.opacity(0.4)),
+            .regular.tint(DesignSystem.Colors.containerFillSecondary.opacity(0.5)),
             in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl))
 
           // Side Switching Rule
           VStack(spacing: DesignSystem.Spacing.xs) {
             Image(systemName: "arrow.left.arrow.right")
               .font(.system(size: 20, weight: .medium))
-              .foregroundStyle(DesignSystem.Colors.tertiary.gradient)
+              .foregroundStyle(DesignSystem.Colors.gameType(gameType).gradient)
               .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 2)
 
             Text("Side Switch")
@@ -203,7 +191,7 @@ public struct GameRulesSection: View {
           .frame(maxWidth: .infinity)
           .padding(DesignSystem.Spacing.md)
           .glassEffect(
-            .regular.tint(DesignSystem.Colors.tertiary.opacity(0.4)),
+            .regular.tint(DesignSystem.Colors.containerFillSecondary.opacity(0.5)),
             in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl))
         }
       }
@@ -213,6 +201,7 @@ public struct GameRulesSection: View {
 
 #Preview("Default Rules") {
   GameRulesSection(
+    gameType: .recreational,
     winningScore: .constant(11),
     winByTwo: .constant(true),
     kitchenRule: .constant(true),
