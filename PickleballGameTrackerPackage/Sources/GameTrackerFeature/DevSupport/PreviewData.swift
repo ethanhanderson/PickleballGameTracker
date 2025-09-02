@@ -213,17 +213,57 @@ public struct PreviewGameData {
 
   /// Sample players for roster previews
   public static let samplePlayers: [PlayerProfile] = {
-    let ethan = PlayerProfile(name: "Ethan", skillLevel: .advanced, preferredHand: .right)
-    let reed = PlayerProfile(name: "Reed", skillLevel: .intermediate, preferredHand: .right)
-    let ricky = PlayerProfile(name: "Ricky", skillLevel: .beginner, preferredHand: .left)
-    let dave = PlayerProfile(name: "Dave", skillLevel: .expert, preferredHand: .right)
+    let ethan = PlayerProfile(
+      name: "Ethan",
+      avatarImageData: nil,
+      iconSymbolName: "tennis.racket",
+      iconTintColor: .blue,
+      skillLevel: .advanced,
+      preferredHand: .right
+    )
+    let reed = PlayerProfile(
+      name: "Reed",
+      avatarImageData: nil,
+      iconSymbolName: "figure.tennis",
+      iconTintColor: .green,
+      skillLevel: .intermediate,
+      preferredHand: .right
+    )
+    let ricky = PlayerProfile(
+      name: "Ricky",
+      avatarImageData: nil,
+      iconSymbolName: "figure.walk",
+      iconTintColor: .orange,
+      skillLevel: .beginner,
+      preferredHand: .left
+    )
+    let dave = PlayerProfile(
+      name: "Dave",
+      avatarImageData: nil,
+      iconSymbolName: "medal.fill",
+      iconTintColor: .purple,
+      skillLevel: .expert,
+      preferredHand: .right
+    )
     return [ethan, reed, ricky, dave]
   }()
 
   /// Sample teams for roster previews
   public static let sampleTeams: [TeamProfile] = {
-    let t1 = TeamProfile(name: "Ethan & Reed", players: [samplePlayers[0], samplePlayers[1]])
-    let t2 = TeamProfile(name: "Spin Doctors", players: [samplePlayers[2], samplePlayers[3]])
+    let t1 = TeamProfile(
+      name: "Ethan & Reed",
+      avatarImageData: nil,
+      iconSymbolName: "person.2.fill",
+      iconTintColor: .teal,
+      players: [samplePlayers[0], samplePlayers[1]]
+    )
+    let t2 = TeamProfile(
+      name: "Ricky & Dave",
+      avatarImageData: nil,
+      iconSymbolName: "figure.mind.and.body",
+      iconTintColor: .pink,
+      players: [samplePlayers[2], samplePlayers[3]]
+    )
     return [t1, t2]
   }()
 
