@@ -8,25 +8,25 @@ struct StatNavCard: View {
   let systemImage: String
 
   var body: some View {
-    HStack(spacing: 12) {
+    HStack(spacing: DesignSystem.Spacing.md) {
       Image(systemName: systemImage)
-        .font(.system(size: 20, weight: .semibold))
-        .foregroundStyle(.secondary)
+        .font(DesignSystem.Typography.headline)
+        .foregroundStyle(DesignSystem.Colors.textSecondary)
         .frame(width: 28)
-      VStack(alignment: .leading, spacing: 4) {
+      VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
         Text(title)
           .font(DesignSystem.Typography.body)
-          .foregroundStyle(.primary)
+          .foregroundStyle(DesignSystem.Colors.textPrimary)
         Text(subtitle)
           .font(DesignSystem.Typography.caption)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(DesignSystem.Colors.textSecondary)
       }
       Spacer(minLength: 0)
       Image(systemName: "chevron.right")
-        .font(.system(size: 14, weight: .semibold))
-        .foregroundStyle(.tertiary)
+        .font(DesignSystem.Typography.subheadline)
+        .foregroundStyle(DesignSystem.Colors.textTertiary)
     }
-    .padding(12)
+    .padding(DesignSystem.Spacing.cardPadding)
     .background(
       RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.cardRounded, style: .continuous)
         .fill(DesignSystem.Colors.containerFillSecondary)
