@@ -5,7 +5,7 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftUI
 
 // MARK: - Models
@@ -204,9 +204,8 @@ public struct GameHistorySummary: View {
         }
         .padding(.vertical, DesignSystem.Spacing.lg)
         .glassEffect(
-            .regular.tint(DesignSystem.Colors.primary.opacity(0.2)),
+            .regular.tint(DesignSystem.Colors.containerFillSecondary.opacity(0.2)),
             in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl)
-
         )
     }
 

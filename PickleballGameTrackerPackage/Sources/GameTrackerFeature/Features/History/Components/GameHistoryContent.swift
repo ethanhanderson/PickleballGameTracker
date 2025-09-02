@@ -5,7 +5,7 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftData
 import SwiftUI
 
@@ -17,11 +17,11 @@ struct GameHistoryContent: View {
   let onGameTapped: (Game) -> Void
 
   var body: some View {
-    VStack(spacing: DesignSystem.Spacing.md) {
+    VStack(spacing: DesignSystem.Spacing.lg) {
       summarySection
       gamesListSection
     }
-    .padding(.top, 30)
+    .padding(.top, DesignSystem.Spacing.sm)
   }
 
   // MARK: - View Components
@@ -41,7 +41,6 @@ struct GameHistoryContent: View {
         groupedGamesList
       }
     }
-    .padding(.top, DesignSystem.Spacing.lg)
   }
 
   private var ungroupedGamesList: some View {

@@ -1,4 +1,4 @@
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftUI
 
 @MainActor
@@ -14,7 +14,7 @@ struct HistoryGroupingMenu: View {
       Image(
         systemName: selectedGrouping == .none ? "square.grid.2x2" : "square.grid.2x2.fill"
       )
-      .foregroundColor(.accentColor)
+      .foregroundColor(DesignSystem.Colors.primary)
     }
   }
 

@@ -5,7 +5,7 @@
 //  Created by Assistant on 8/10/25.
 //
 
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftData
 import SwiftUI
 

@@ -5,9 +5,9 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
+import CorePackage
 // Import the history types we need
 import Foundation
-import PickleballGameTrackerCorePackage
 import SwiftData
 import SwiftUI
 
@@ -152,7 +152,7 @@ struct GameHistoryView: View {
                 description: "Start playing games to see your history here"
               )
             }
-            .padding(.top, 30)
+            .padding(.top, DesignSystem.Spacing.sm)
           } else if filteredGames.isEmpty && selectedFilter != .all {
             VStack {
               CustomContentUnavailableView(
@@ -161,7 +161,7 @@ struct GameHistoryView: View {
                 description: "Try adjusting your filter to see more games"
               )
             }
-            .padding(.top, 30)
+            .padding(.top, DesignSystem.Spacing.sm)
           } else {
             GameHistoryContent(
               completedGames: completedGames,
@@ -183,18 +183,26 @@ struct GameHistoryView: View {
       .navigationTitle("History")
       .containerBackground(DesignSystem.Colors.navigationBrandGradient, for: .navigation)
       .toolbar {
-        ToolbarItem(placement: .navigationBarTrailing) {
-          HStack(spacing: DesignSystem.Spacing.sm) {
-            HistoryFilterMenu(selectedFilter: $selectedFilter)
-            HistoryGroupingMenu(selectedGrouping: $selectedGrouping)
-            NavigationLink(value: GameHistoryDestination.archiveList) {
-              Label("View Archive", systemImage: "archivebox")
-            }
-            .accessibilityIdentifier("NavLink.History.archiveList")
+        ToolbarItem {
+          HistoryFilterMenu(selectedFilter: $selectedFilter)
+        }
+
+        ToolbarItem {
+          HistoryGroupingMenu(selectedGrouping: $selectedGrouping)
+        }
+
+        ToolbarSpacer(.fixed)
+
+        ToolbarItem {
+          NavigationLink(value: GameHistoryDestination.archiveList) {
+            Label("View Archive", systemImage: "archivebox")
           }
+          .tint(DesignSystem.Colors.primary)
+          .accessibilityIdentifier("NavLink.History.archiveList")
         }
       }
     }
+    .navigationTint()
     .navigationDestination(for: GameHistoryDestination.self) { destination in
       switch destination {
       case .gameDetail(let game):
