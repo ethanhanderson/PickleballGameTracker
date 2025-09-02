@@ -1,4 +1,4 @@
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftUI
 
 struct HapticSettingsSection: View {

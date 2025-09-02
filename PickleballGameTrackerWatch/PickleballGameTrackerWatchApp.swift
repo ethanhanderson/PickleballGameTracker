@@ -8,9 +8,10 @@
 import SwiftData
 import SwiftUI
 import GameTrackerWatchFeature
+import CorePackage
 
 @main
-struct Pickleball_Game_Tracking_Watch_AppApp: App {
+struct PickleballGameTrackingWatchApp: App {
   init() {
     Task { await LoggingService.shared.configure(sinks: [OSLogSink(), ConsoleSink()]) }
     Log.event(.appLaunch, level: .info, message: "Watch app launch")

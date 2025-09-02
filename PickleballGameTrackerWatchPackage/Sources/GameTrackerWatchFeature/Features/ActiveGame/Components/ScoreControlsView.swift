@@ -1,7 +1,6 @@
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftData
 import SwiftUI
-import WatchKit
 
 struct ScoreControlsView: View {
   @Bindable var game: Game
@@ -10,6 +9,7 @@ struct ScoreControlsView: View {
   let onDecrementScore: (Int) -> Void
   let onToggleTimer: () -> Void
   let onResetTimer: () -> Void
+  let onHapticFeedback: () -> Void
 
   // Timer animation state passed from parent
   let isResetting: Bool
@@ -255,13 +255,13 @@ struct ScoreControlsView: View {
       .onTapGesture {
         guard !game.isCompleted && activeGameStateManager.isGameActive else { return }
         onScorePoint(teamNumber)
-        WKInterfaceDevice.current().play(.click)
+        onHapticFeedback()
       }
       .onTapGesture(count: 2) {
         guard !game.isCompleted && activeGameStateManager.isGameActive else { return }
         guard score > 0 else { return }
         onDecrementScore(teamNumber)
-        WKInterfaceDevice.current().play(.click)
+        onHapticFeedback()
       }
       .gesture(
         DragGesture()
@@ -269,10 +269,10 @@ struct ScoreControlsView: View {
             guard !game.isCompleted && activeGameStateManager.isGameActive else { return }
             if value.translation.height < -30 {
               onScorePoint(teamNumber)
-              WKInterfaceDevice.current().play(.click)
+              onHapticFeedback()
             } else if value.translation.height > 30 && score > 0 {
               onDecrementScore(teamNumber)
-              WKInterfaceDevice.current().play(.click)
+              onHapticFeedback()
             }
           }
       )
@@ -284,5 +284,3 @@ struct ScoreControlsView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }
-
-

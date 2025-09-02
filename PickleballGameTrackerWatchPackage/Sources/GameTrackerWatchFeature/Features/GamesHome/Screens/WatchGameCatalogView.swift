@@ -4,7 +4,7 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftData
 import SwiftUI
 
@@ -111,6 +111,7 @@ public struct WatchGameCatalogView: View {
           }
         }
       }
+      .navigationTint()
       .task {
         // Configure shared active game manager with SwiftData context and manager
         if activeGameStateManager.gameManager == nil {

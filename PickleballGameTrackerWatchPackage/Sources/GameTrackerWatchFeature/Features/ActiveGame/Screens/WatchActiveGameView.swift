@@ -5,7 +5,7 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftData
 import SwiftUI
 
@@ -23,6 +23,18 @@ struct WatchActiveGameView: View {
   @State private var playPauseTrigger = false
   @State private var pulseAnimation = false
   @State private var showingSettings = false
+
+  // Haptic feedback triggers
+  @State private var scoreClickTrigger = false
+  @State private var scoreSuccessTrigger = false
+  @State private var scoreFailureTrigger = false
+  @State private var decrementClickTrigger = false
+  @State private var toggleClickTrigger = false
+  @State private var directionUpTrigger = false
+  @State private var completeSuccessTrigger = false
+  @State private var completeFailureTrigger = false
+  @State private var completionSuccessTrigger = false
+  @State private var scoreControlsTrigger = false
 
   // Use the same ActiveGameStateManager as iOS
   private let activeGameStateManager = ActiveGameStateManager.shared
@@ -60,6 +72,7 @@ struct WatchActiveGameView: View {
             onDecrementScore: decrementScore,
             onToggleTimer: toggleTimer,
             onResetTimer: resetTimer,
+            onHapticFeedback: triggerScoreControlsHaptic,
             isResetting: isResetting,
             isToggling: isToggling,
             pulseAnimation: pulseAnimation,
@@ -113,6 +126,16 @@ struct WatchActiveGameView: View {
         message: "Watch game loaded initial state"
       )
     }
+    .sensoryFeedback(.impact(weight: .light), trigger: scoreClickTrigger)
+    .sensoryFeedback(.success, trigger: scoreSuccessTrigger)
+    .sensoryFeedback(.error, trigger: scoreFailureTrigger)
+    .sensoryFeedback(.impact(weight: .light), trigger: decrementClickTrigger)
+    .sensoryFeedback(.impact(weight: .light), trigger: toggleClickTrigger)
+    .sensoryFeedback(.impact(weight: .light), trigger: directionUpTrigger)
+    .sensoryFeedback(.success, trigger: completeSuccessTrigger)
+    .sensoryFeedback(.error, trigger: completeFailureTrigger)
+    .sensoryFeedback(.success, trigger: completionSuccessTrigger)
+    .sensoryFeedback(.impact(weight: .light), trigger: scoreControlsTrigger)
   }
 
   // MARK: - Timer Actions
@@ -134,6 +157,10 @@ struct WatchActiveGameView: View {
 
       isToggling = false
     }
+  }
+
+  private func triggerScoreControlsHaptic() {
+    scoreControlsTrigger.toggle()
   }
 
   private func resetTimer() {
@@ -179,16 +206,17 @@ struct WatchActiveGameView: View {
       return
     }
 
-    WKInterfaceDevice.current().play(.click)
+    // Trigger initial click feedback
+    scoreClickTrigger.toggle()
 
     Task {
       do {
         // Use activeGameStateManager to score points
         try await activeGameStateManager.scorePoint(for: team)
 
-        // Add subtle haptic feedback
+        // Add subtle haptic feedback for success
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-          WKInterfaceDevice.current().play(.success)
+          scoreSuccessTrigger.toggle()
         }
 
         // Handle game completion
@@ -202,7 +230,7 @@ struct WatchActiveGameView: View {
           context: .current(gameId: game.id),
           metadata: ["platform": "watchOS"]
         )
-        WKInterfaceDevice.current().play(.failure)
+        scoreFailureTrigger.toggle()
       }
     }
   }
@@ -216,14 +244,15 @@ struct WatchActiveGameView: View {
     let currentScore = team == 1 ? game.score1 : game.score2
     guard currentScore > 0 else { return }
 
-    WKInterfaceDevice.current().play(.click)
+    // Trigger initial click feedback
+    decrementClickTrigger.toggle()
 
     Task {
       do {
         try await gameManager.decrementScore(for: team, in: game)
         // Provide haptic feedback
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-          WKInterfaceDevice.current().play(.click)
+          // Additional click feedback handled by trigger
         }
       } catch {
         Log.error(
@@ -232,7 +261,7 @@ struct WatchActiveGameView: View {
           context: .current(gameId: game.id),
           metadata: ["platform": "watchOS"]
         )
-        WKInterfaceDevice.current().play(.failure)
+        scoreFailureTrigger.toggle()
       }
     }
   }
@@ -250,7 +279,7 @@ struct WatchActiveGameView: View {
 
     Task { @MainActor in
       isToggling = true
-      WKInterfaceDevice.current().play(.click)
+      toggleClickTrigger.toggle()
 
       // Single, atomic operation using state manager
       try? await activeGameStateManager.toggleGameState()
@@ -267,7 +296,7 @@ struct WatchActiveGameView: View {
 
         // Additional subtle haptic feedback for the tab switch
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-          WKInterfaceDevice.current().play(.directionUp)
+          directionUpTrigger.toggle()
         }
       }
 
@@ -279,7 +308,7 @@ struct WatchActiveGameView: View {
   private func completeGame() async {
     do {
       try await activeGameStateManager.completeCurrentGame()
-      WKInterfaceDevice.current().play(.success)
+      completeSuccessTrigger.toggle()
 
       // Handle game completion UX (central state persists/syncs)
       await handleGameCompletion()
@@ -290,7 +319,7 @@ struct WatchActiveGameView: View {
         context: .current(gameId: game.id),
         metadata: ["platform": "watchOS"]
       )
-      WKInterfaceDevice.current().play(.failure)
+      completeFailureTrigger.toggle()
     }
   }
 
@@ -301,7 +330,7 @@ struct WatchActiveGameView: View {
     guard game.isCompleted else { return }
 
     // Brief completion haptic
-    WKInterfaceDevice.current().play(.success)
+    completionSuccessTrigger.toggle()
 
     // Shorter delay for snappy UX
     try? await Task.sleep(for: .milliseconds(800))

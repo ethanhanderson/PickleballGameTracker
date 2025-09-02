@@ -5,7 +5,7 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftData
 import SwiftUI
 
@@ -23,12 +23,21 @@ struct WatchActiveGameSettingsView: View {
   @AppStorage("watchServingIndicatorVisible") private var servingIndicatorVisible = true
   @AppStorage("watchHapticIntensity") private var hapticIntensity = 1.0
 
+  // Haptic feedback triggers
+  @State private var switchClickTrigger = false
+  @State private var switchSuccessTrigger = false
+  @State private var switchFailureTrigger = false
+  @State private var setServerClickTrigger = false
+  @State private var setServerSuccessTrigger = false
+  @State private var setServerFailureTrigger = false
+
   var body: some View {
     NavigationStack {
       List {
         AudioSettingsSection(soundEnabled: $soundEnabled)
         HapticSettingsSection(hapticEnabled: $hapticEnabled, hapticIntensity: $hapticIntensity)
-        DisplaySettingsSection(timerVisible: $timerVisible, servingIndicatorVisible: $servingIndicatorVisible)
+        DisplaySettingsSection(
+          timerVisible: $timerVisible, servingIndicatorVisible: $servingIndicatorVisible)
         ServingSettingsSection(
           game: game,
           disabled: game.isCompleted,
@@ -39,11 +48,14 @@ struct WatchActiveGameSettingsView: View {
       }
       .navigationTitle("Settings")
       .navigationBarTitleDisplayMode(.inline)
+      .sensoryFeedback(.success, trigger: switchSuccessTrigger)
+      .sensoryFeedback(.error, trigger: switchFailureTrigger)
+      .sensoryFeedback(.success, trigger: setServerSuccessTrigger)
+      .sensoryFeedback(.error, trigger: setServerFailureTrigger)
     }
   }
 
   // MARK: - Audio Section
-
 
   // MARK: - Actions
 
@@ -56,10 +68,10 @@ struct WatchActiveGameSettingsView: View {
 
         // Provide feedback
         if soundEnabled {
-          WKInterfaceDevice.current().play(.click)
+          // Sound feedback would be handled separately if needed
         }
         if hapticEnabled {
-          WKInterfaceDevice.current().play(.success)
+          switchSuccessTrigger.toggle()
         }
       } catch {
         Log.error(
@@ -69,7 +81,10 @@ struct WatchActiveGameSettingsView: View {
           metadata: ["action": "switchServer", "platform": "watchOS"]
         )
         if soundEnabled {
-          WKInterfaceDevice.current().play(.failure)
+          // Sound feedback would be handled separately if needed
+        }
+        if hapticEnabled {
+          switchFailureTrigger.toggle()
         }
       }
     }
@@ -84,10 +99,10 @@ struct WatchActiveGameSettingsView: View {
 
         // Provide feedback
         if soundEnabled {
-          WKInterfaceDevice.current().play(.click)
+          // Sound feedback would be handled separately if needed
         }
         if hapticEnabled {
-          WKInterfaceDevice.current().play(.success)
+          setServerSuccessTrigger.toggle()
         }
       } catch {
         Log.error(
@@ -97,7 +112,10 @@ struct WatchActiveGameSettingsView: View {
           metadata: ["action": "setServer", "team": String(team), "platform": "watchOS"]
         )
         if soundEnabled {
-          WKInterfaceDevice.current().play(.failure)
+          // Sound feedback would be handled separately if needed
+        }
+        if hapticEnabled {
+          setServerFailureTrigger.toggle()
         }
       }
     }
