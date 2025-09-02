@@ -1,4 +1,4 @@
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftData
 import SwiftUI
 
@@ -38,28 +38,32 @@ struct RosterSectionView<Item: Identifiable, Row: View>: View {
 }
 
 #Preview("Players & Teams") {
-  let container = try! PreviewGameData.createRosterPreviewContainer(
-    players: PreviewGameData.samplePlayers,
-    teams: PreviewGameData.sampleTeams
-  )
+  // Build fresh local models to avoid stale SwiftData references
+  let p1 = PlayerProfile(name: "Ethan", skillLevel: .advanced, preferredHand: .right)
+  let p2 = PlayerProfile(name: "Reed", skillLevel: .intermediate, preferredHand: .right)
+  let p3 = PlayerProfile(name: "Ricky", skillLevel: .beginner, preferredHand: .left)
+  let p4 = PlayerProfile(name: "Dave", skillLevel: .expert, preferredHand: .right)
+  let players = [p1, p2, p3, p4]
+  let t1 = TeamProfile(name: "Ethan & Reed", players: [p1, p2])
+  let t2 = TeamProfile(name: "Spin Doctors", players: [p3, p4])
+  let teams = [t1, t2]
 
   return ScrollView {
     VStack(spacing: DesignSystem.Spacing.lg) {
       RosterSectionView(
         title: "Players",
-        items: PreviewGameData.samplePlayers
+        items: players
       ) { player in
         RosterIdentityCard(identity: .player(player, teamCount: 2))
       }
 
       RosterSectionView(
         title: "Teams",
-        items: PreviewGameData.sampleTeams
+        items: teams
       ) { team in
         RosterIdentityCard(identity: .team(team))
       }
     }
     .padding()
   }
-  .modelContainer(container)
 }

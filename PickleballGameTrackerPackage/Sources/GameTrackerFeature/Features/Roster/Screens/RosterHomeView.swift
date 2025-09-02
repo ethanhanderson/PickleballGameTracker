@@ -5,11 +5,12 @@
 //  Created by Agent on 8/15/25.
 //
 
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftData
 import SwiftUI
 
 struct RosterHomeView: View {
+  @Namespace var animation
   @Environment(\.modelContext) private var modelContext
   @State private var manager = PlayerTeamManager()
 
@@ -38,16 +39,26 @@ struct RosterHomeView: View {
           ScrollView {
             VStack(spacing: DesignSystem.Spacing.lg) {
               if !manager.players.isEmpty {
-                PlayersSectionView(
-                  players: Array(manager.players),
-                  teamCountFor: { player in teamCount(for: player) }
-                )
+                RosterSectionView(
+                  title: "Players",
+                  items: Array(manager.players)
+                ) { player in
+                  let identity: RosterIdentityCard.Identity = .player(
+                    player,
+                    teamCount: teamCount(for: player)
+                  )
+                  IdentityNavigationRow(identity: identity)
+                }
               }
 
               if !manager.teams.isEmpty {
-                TeamsSectionView(
-                  teams: Array(manager.teams)
-                )
+                RosterSectionView(
+                  title: "Teams",
+                  items: Array(manager.teams)
+                ) { team in
+                  let identity: RosterIdentityCard.Identity = .team(team)
+                  IdentityNavigationRow(identity: identity)
+                }
               }
             }
             .padding(.horizontal, DesignSystem.Spacing.md)
@@ -61,54 +72,71 @@ struct RosterHomeView: View {
         for: .navigation
       )
       .toolbar {
-        ToolbarItem(placement: .navigationBarTrailing) {
+        ToolbarItem {
           Menu {
             Button(
               "New Player",
               systemImage: "person.fill.badge.plus",
               action: onNewPlayer
             )
+            .tint(DesignSystem.Colors.primary)
+
             Button(
               "New Team",
               systemImage: "person.2.badge.plus.fill",
               action: onNewTeam
             )
+            .tint(DesignSystem.Colors.primary)
           } label: {
-            Label("Add", systemImage: "plus")
+            Label("Create new", systemImage: "plus")
           }
         }
+        .matchedTransitionSource(
+          id: "sheet",
+          in: animation
+        )
+
+        ToolbarSpacer()
+
+        ToolbarItem {
+          NavigationLink {
+            RosterArchiveView(manager: manager)
+          } label: {
+            Label("View Archive", systemImage: "archivebox")
+          }
+          .tint(DesignSystem.Colors.primary)
+        }
       }
-    }
-    .navigationDestination(for: Route.self) { route in
-      switch route {
-      case .player(let player):
-        PlayerDetailView(player: player)
-      case .team(let team):
-        TeamDetailView(team: team)
+      .navigationDestination(for: RosterDestination.self) { destination in
+        switch destination {
+        case .identity(let identity):
+          RosterIdentityDetailView(
+            identity: identity,
+            manager: manager
+          )
+        }
       }
     }
     .sheet(isPresented: $showPlayerSheet) {
-      NavigationStack {
-        if let editingPlayer {
-          PlayerEditorView(
-            mode: .edit(editingPlayer),
-            manager: manager
-          )
-        } else {
-          PlayerEditorView(mode: .create, manager: manager)
-        }
-      }
+      RosterIdentityEditorView(
+        identity: editingPlayer.map { .player($0) }
+          ?? .player(nil),
+        manager: manager
+      )
+      .navigationTransition(.zoom(sourceID: "sheet", in: animation))
     }
     .sheet(isPresented: $showTeamSheet) {
-      NavigationStack {
-        if let editingTeam {
-          TeamEditorView(mode: .edit(editingTeam), manager: manager)
-        } else {
-          TeamEditorView(mode: .create, manager: manager)
-        }
-      }
+      RosterIdentityEditorView(
+        identity: editingTeam.map { .team($0) }
+          ?? .team(nil),
+        manager: manager
+      )
+      .navigationTransition(.zoom(sourceID: "sheet", in: animation))
     }
-    .task { @MainActor in manager.refreshAll() }
+    .navigationTint()
+    .task { @MainActor in
+      manager.refreshAll()
+    }
   }
 
   // Compute the number of teams a player belongs to for richer card context
@@ -130,6 +158,7 @@ struct RosterHomeView: View {
     presentCreateTeamSheet()
   }
 
+  // Route no longer used with value-based navigation; keep for compatibility if needed
   fileprivate enum Route: Hashable {
     case player(PlayerProfile)
     case team(TeamProfile)
@@ -159,6 +188,7 @@ struct RosterHomeView: View {
     editingTeam = team
     showTeamSheet = true
   }
+
 }
 
 private struct PlayersSectionView: View {
@@ -173,56 +203,22 @@ private struct PlayersSectionView: View {
 
       VStack(spacing: DesignSystem.Spacing.lg) {
         ForEach(players, id: \.id) { player in
-          NavigationLink(value: RosterHomeView.Route.player(player)) {
-            HStack(spacing: DesignSystem.Spacing.md) {
-              Group {
-                if let data = player.avatarImageData, let ui = UIImage(data: data) {
-                  Image(uiImage: ui)
-                    .resizable()
-                    .scaledToFill()
-                } else {
-                  Image(systemName: player.iconSymbolName ?? "person.fill")
-                    .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(DesignSystem.Colors.secondary)
-                }
-              }
-              .frame(width: 58, height: 58)
-              .background(DesignSystem.Colors.secondaryLight, in: .circle)
-              .accessibilityHidden(true)
-
-              VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
-                Text(player.name)
-                  .font(DesignSystem.Typography.title3)
-                  .foregroundColor(DesignSystem.Colors.textPrimary)
-
-                let skillLevel: String = {
-                  switch player.skillLevel {
-                  case .beginner: return "Beginner"
-                  case .intermediate: return "Intermediate"
-                  case .advanced: return "Advanced"
-                  case .expert: return "Expert"
-                  case .unknown: return "Skill Unspecified"
-                  }
-                }()
-                let count = teamCountFor(player)
-                let secondary =
-                  count != nil
-                  ? "\(skillLevel) • \(count!) team\(count! == 1 ? "" : "s")" : skillLevel
-
-                Text(secondary)
-                  .font(DesignSystem.Typography.subheadline)
-                  .foregroundColor(DesignSystem.Colors.textSecondary)
-              }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-          }
+          let identity: RosterIdentityCard.Identity = .player(
+            player,
+            teamCount: teamCountFor(player)
+          )
+          IdentityNavigationRow(identity: identity)
         }
       }
     }
     .padding()
     .glassEffect(
-      .regular.tint(DesignSystem.Colors.containerFillSecondary.opacity(0.2)),
-      in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.cardRounded)
+      .regular.tint(
+        DesignSystem.Colors.containerFillSecondary.opacity(0.2)
+      ),
+      in: RoundedRectangle(
+        cornerRadius: DesignSystem.CornerRadius.cardRounded
+      )
     )
   }
 }
@@ -238,44 +234,40 @@ private struct TeamsSectionView: View {
 
       VStack(spacing: DesignSystem.Spacing.lg) {
         ForEach(teams, id: \.id) { team in
-          NavigationLink(value: RosterHomeView.Route.team(team)) {
-            HStack(spacing: DesignSystem.Spacing.md) {
-              Group {
-                if let data = team.avatarImageData, let ui = UIImage(data: data) {
-                  Image(uiImage: ui)
-                    .resizable()
-                    .scaledToFill()
-                } else {
-                  Image(systemName: team.iconSymbolName ?? "person.2.fill")
-                    .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(DesignSystem.Colors.secondary)
-                }
-              }
-              .frame(width: 58, height: 58)
-              .background(DesignSystem.Colors.secondaryLight, in: .circle)
-              .accessibilityHidden(true)
-
-              VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
-                Text(team.name)
-                  .font(DesignSystem.Typography.title3)
-                  .foregroundColor(DesignSystem.Colors.textPrimary)
-
-                let playerCount = team.players.count
-                Text("\(playerCount) player\(playerCount == 1 ? "" : "s")")
-                  .font(DesignSystem.Typography.subheadline)
-                  .foregroundColor(DesignSystem.Colors.textSecondary)
-              }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-          }
+          let identity: RosterIdentityCard.Identity = .team(team)
+          IdentityNavigationRow(identity: identity)
         }
       }
     }
     .padding()
     .glassEffect(
-      .regular.tint(DesignSystem.Colors.containerFillSecondary.opacity(0.2)),
-      in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.cardRounded)
+      .regular.tint(
+        DesignSystem.Colors.containerFillSecondary.opacity(0.2)
+      ),
+      in: RoundedRectangle(
+        cornerRadius: DesignSystem.CornerRadius.cardRounded
+      )
     )
+  }
+}
+
+// MARK: - Roster Destinations
+enum RosterDestination: Hashable {
+  case identity(RosterIdentityCard.Identity)
+}
+
+// MARK: - Navigation Row Wrapper
+@MainActor
+private struct IdentityNavigationRow: View {
+  let identity: RosterIdentityCard.Identity
+
+  var body: some View {
+    NavigationLink(value: RosterDestination.identity(identity)) {
+      RosterIdentityCard(identity: identity)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityIdentifier("roster.row.\(identity.id.uuidString)")
   }
 }
 
@@ -287,14 +279,18 @@ private struct PlayerDetailView: View {
       VStack(spacing: DesignSystem.Spacing.lg) {
         // Player avatar
         Group {
-          if let data = player.avatarImageData, let uiImage = UIImage(data: data) {
+          if let data = player.avatarImageData,
+            let uiImage = UIImage(data: data)
+          {
             Image(uiImage: uiImage)
               .resizable()
               .scaledToFill()
           } else {
-            Image(systemName: player.iconSymbolName ?? "person.fill")
-              .font(.system(size: 80))
-              .foregroundStyle(DesignSystem.Colors.primary)
+            Image(
+              systemName: player.iconSymbolName ?? "person.fill"
+            )
+            .font(.system(size: 80))
+            .foregroundStyle(DesignSystem.Colors.primary)
           }
         }
         .frame(width: 120, height: 120)
@@ -358,14 +354,18 @@ private struct TeamDetailView: View {
       VStack(spacing: DesignSystem.Spacing.lg) {
         // Team avatar
         Group {
-          if let data = team.avatarImageData, let uiImage = UIImage(data: data) {
+          if let data = team.avatarImageData,
+            let uiImage = UIImage(data: data)
+          {
             Image(uiImage: uiImage)
               .resizable()
               .scaledToFill()
           } else {
-            Image(systemName: team.iconSymbolName ?? "person.2.fill")
-              .font(.system(size: 80))
-              .foregroundStyle(DesignSystem.Colors.primary)
+            Image(
+              systemName: team.iconSymbolName ?? "person.2.fill"
+            )
+            .font(.system(size: 80))
+            .foregroundStyle(DesignSystem.Colors.primary)
           }
         }
         .frame(width: 120, height: 120)
@@ -385,7 +385,10 @@ private struct TeamDetailView: View {
 
         // Team members
         if !team.players.isEmpty {
-          VStack(alignment: .leading, spacing: DesignSystem.Spacing.md) {
+          VStack(
+            alignment: .leading,
+            spacing: DesignSystem.Spacing.md
+          ) {
             Text("Team Members")
               .font(DesignSystem.Typography.title3)
               .foregroundStyle(DesignSystem.Colors.textPrimary)
@@ -394,28 +397,45 @@ private struct TeamDetailView: View {
               ForEach(team.players) { player in
                 HStack(spacing: DesignSystem.Spacing.md) {
                   Group {
-                    if let data = player.avatarImageData, let uiImage = UIImage(data: data) {
+                    if let data = player.avatarImageData,
+                      let uiImage = UIImage(data: data)
+                    {
                       Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFill()
                     } else {
-                      Image(systemName: player.iconSymbolName ?? "person.fill")
-                        .foregroundStyle(DesignSystem.Colors.secondary)
+                      Image(
+                        systemName: player
+                          .iconSymbolName
+                          ?? "person.fill"
+                      )
+                      .foregroundStyle(
+                        DesignSystem.Colors.secondary
+                      )
                     }
                   }
                   .frame(width: 40, height: 40)
-                  .background(DesignSystem.Colors.secondaryLight)
+                  .background(
+                    DesignSystem.Colors.secondaryLight
+                  )
                   .clipShape(Circle())
 
                   Text(player.name)
                     .font(DesignSystem.Typography.body)
-                    .foregroundStyle(DesignSystem.Colors.textPrimary)
+                    .foregroundStyle(
+                      DesignSystem.Colors.textPrimary
+                    )
 
                   Spacer()
                 }
                 .padding(DesignSystem.Spacing.md)
                 .background(DesignSystem.Colors.neutralSurface)
-                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+                .clipShape(
+                  RoundedRectangle(
+                    cornerRadius: DesignSystem.CornerRadius
+                      .md
+                  )
+                )
               }
             }
           }
@@ -469,25 +489,23 @@ private struct StatCard: View {
 }
 
 #Preview("Empty") {
-  let container = try! PreviewGameData.createRosterPreviewContainer(
+  let container = try! CorePackage.PreviewGameData.createRosterPreviewContainer(
     players: [],
     teams: []
   )
-  let storage = SwiftDataStorage(modelContainer: container)
-  let manager = PlayerTeamManager(storage: storage)
+  let manager = PlayerTeamManager(
+    storage: SwiftDataStorage(modelContainer: container),
+    autoRefresh: false
+  )
   return RosterHomeView(manager: manager)
     .modelContainer(container)
 }
 
 #Preview("With Players and Teams") {
-  let container = try! PreviewGameData.createRosterPreviewContainer(
-    players: PreviewGameData.samplePlayers,
-    teams: PreviewGameData.sampleTeams
-  )
+  let container = try! CorePackage.PreviewGameData.createRosterPreviewContainer()
   let storage = SwiftDataStorage(modelContainer: container)
-  let manager = PlayerTeamManager(storage: storage)
-  manager.players = PreviewGameData.samplePlayers
-  manager.teams = PreviewGameData.sampleTeams
+  let manager = PlayerTeamManager(storage: storage, autoRefresh: false)
+
   return RosterHomeView(manager: manager)
     .modelContainer(container)
 }
