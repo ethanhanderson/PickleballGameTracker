@@ -1,4 +1,4 @@
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftUI
 
 /// Lightweight line chart placeholder used across statistics detail views.

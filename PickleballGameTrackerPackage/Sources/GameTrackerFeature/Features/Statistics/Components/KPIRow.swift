@@ -1,4 +1,4 @@
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftUI
 
 /// Simple KPI row with title on the left and value on the right.

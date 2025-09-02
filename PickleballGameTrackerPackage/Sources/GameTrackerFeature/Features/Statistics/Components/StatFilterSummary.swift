@@ -1,4 +1,4 @@
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftUI
 
 /// Displays the active statistics filters in a compact list.

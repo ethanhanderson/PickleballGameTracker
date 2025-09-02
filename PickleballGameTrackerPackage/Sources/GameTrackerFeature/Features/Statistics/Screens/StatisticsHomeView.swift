@@ -1,4 +1,4 @@
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftData
 import SwiftUI
 
@@ -95,6 +95,7 @@ struct StatisticsHomeView: View {
         .opacity(0)
       )
     }
+    .navigationTint()
   }
 
   private var filters: StatisticsFilters {
