@@ -1,4 +1,5 @@
 import GameTrackerFeature
+import CorePackage
 import SwiftUI
 
 @main

@@ -5,30 +5,32 @@
 	<!-- Base entitlements - add your app's entitlements here -->
 	<!-- AI agents can safely modify this file to add capabilities -->
 	
-	<!-- Example entitlements (commented out by default):
-	
-	<key>com.apple.developer.healthkit</key>
-	<true/>
-	
-	<key>com.apple.developer.networking.wifi-info</key>
-	<true/>
-	
-	<key>com.apple.developer.contacts.notes</key>
-	<true/>
-	
-	<key>com.apple.developer.usernotifications.time-sensitive</key>
-	<true/>
-	
+	<!-- Basic entitlements for development and testing -->
+
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.mycompany.PickleballGameTracker</string>
+		<string>group.com.ehadev.PickleballGameTracker</string>
 	</array>
-	
+
 	<key>keychain-access-groups</key>
 	<array>
-		<string>$(AppIdentifierPrefix)com.mycompany.PickleballGameTracker</string>
+		<string>$(AppIdentifierPrefix)com.ehadev.PickleballGameTracker</string>
 	</array>
-    
+
+	<!--
+	Additional entitlements can be uncommented as needed:
+
+	<key>com.apple.developer.healthkit</key>
+	<true/>
+
+	<key>com.apple.developer.networking.wifi-info</key>
+	<true/>
+
+	<key>com.apple.developer.contacts.notes</key>
+	<true/>
+
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
 	-->
 </dict>
 </plist>

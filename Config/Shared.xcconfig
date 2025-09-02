@@ -32,3 +32,9 @@ INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationLand
 // ==========================================
 // AI agents can modify Config/PickleballGameTracker.entitlements to add capabilities
 CODE_SIGN_ENTITLEMENTS = Config/PickleballGameTracker.entitlements
+
+// ==========================================
+// Code Signing
+// ==========================================
+DEVELOPMENT_TEAM = SMWC5A39X7
+CODE_SIGN_STYLE = Automatic
