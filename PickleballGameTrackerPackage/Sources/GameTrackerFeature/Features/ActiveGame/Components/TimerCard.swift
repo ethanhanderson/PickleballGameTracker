@@ -107,10 +107,7 @@ struct TimerCard: View {
 
 #Preview {
   TimerCard(
-    game: {
-      let game = Game(gameType: .recreational)
-      return game
-    }(),
+    game: PreviewGameData.earlyGame,
     formattedElapsedTime: "02:05.67",
     isTimerPaused: false,
     isGameActive: true,
@@ -123,14 +120,12 @@ struct TimerCard: View {
     onToggleTimer: {}
   )
   .padding()
+  .modelContainer(try! PreviewGameData.createPreviewContainer(with: [PreviewGameData.earlyGame]))
 }
 
 #Preview("Timer Paused") {
   TimerCard(
-    game: {
-      let game = Game(gameType: .training)
-      return game
-    }(),
+    game: PreviewGameData.trainingGame,
     formattedElapsedTime: "01:07.23",
     isTimerPaused: true,
     isGameActive: true,
@@ -143,14 +138,12 @@ struct TimerCard: View {
     onToggleTimer: {}
   )
   .padding()
+  .modelContainer(try! PreviewGameData.createPreviewContainer(with: [PreviewGameData.trainingGame]))
 }
 
 #Preview("Game Paused") {
   TimerCard(
-    game: {
-      let game = Game(gameType: .training)
-      return game
-    }(),
+    game: PreviewGameData.pausedGame,
     formattedElapsedTime: "01:07.23",
     isTimerPaused: true,
     isGameActive: false,
@@ -163,17 +156,12 @@ struct TimerCard: View {
     onToggleTimer: {}
   )
   .padding()
+  .modelContainer(try! PreviewGameData.createPreviewContainer(with: [PreviewGameData.pausedGame]))
 }
 
 #Preview("Game Completed") {
   TimerCard(
-    game: {
-      let game = Game(gameType: .recreational)
-      game.score1 = 11
-      game.score2 = 7
-      game.completeGame()
-      return game
-    }(),
+    game: PreviewGameData.completedGame,
     formattedElapsedTime: "03:45.78",
     isTimerPaused: true,
     isGameActive: false,
@@ -186,4 +174,5 @@ struct TimerCard: View {
     onToggleTimer: {}
   )
   .padding()
+  .modelContainer(try! PreviewGameData.createPreviewContainer(with: [PreviewGameData.completedGame]))
 }
