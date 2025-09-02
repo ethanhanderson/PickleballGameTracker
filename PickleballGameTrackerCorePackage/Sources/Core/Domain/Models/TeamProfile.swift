@@ -18,7 +18,22 @@ public final class TeamProfile: Hashable {
   // Identity visuals
   public var avatarImageData: Data?
   public var iconSymbolName: String?
-  public var iconTintHex: String?
+  public var iconTintColor: DesignSystem.AppleSystemColor?
+
+  // MARK: - Migration Support
+  @Transient
+  public var iconTintHex: String? {
+    get {
+      iconTintColor?.legacyHex
+    }
+    set {
+      if let hex = newValue {
+        iconTintColor = DesignSystem.AppleSystemColor(fromHex: hex)
+      } else {
+        iconTintColor = nil
+      }
+    }
+  }
 
   // Relationship to players
   @Relationship public var players: [PlayerProfile]
@@ -36,7 +51,7 @@ public final class TeamProfile: Hashable {
     isArchived: Bool = false,
     avatarImageData: Data? = nil,
     iconSymbolName: String? = nil,
-    iconTintHex: String? = nil,
+    iconTintColor: DesignSystem.AppleSystemColor? = nil,
     players: [PlayerProfile] = [],
     suggestedGameType: GameType? = nil,
     createdDate: Date = Date(),
@@ -48,7 +63,34 @@ public final class TeamProfile: Hashable {
     self.isArchived = isArchived
     self.avatarImageData = avatarImageData
     self.iconSymbolName = iconSymbolName
-    self.iconTintHex = iconTintHex
+    self.iconTintColor = iconTintColor
+    self.players = players
+    self.suggestedGameTypeRaw = suggestedGameType?.rawValue
+    self.createdDate = createdDate
+    self.lastModified = lastModified
+  }
+
+  // MARK: - Legacy Constructor for Migration
+  public init(
+    id: UUID = UUID(),
+    name: String,
+    notes: String? = nil,
+    isArchived: Bool = false,
+    avatarImageData: Data? = nil,
+    iconSymbolName: String? = nil,
+    legacyIconTintHex iconTintHex: String?,
+    players: [PlayerProfile] = [],
+    suggestedGameType: GameType? = nil,
+    createdDate: Date = Date(),
+    lastModified: Date = Date()
+  ) {
+    self.id = id
+    self.name = name
+    self.notes = notes
+    self.isArchived = isArchived
+    self.avatarImageData = avatarImageData
+    self.iconSymbolName = iconSymbolName
+    self.iconTintColor = iconTintHex.flatMap { DesignSystem.AppleSystemColor(fromHex: $0) }
     self.players = players
     self.suggestedGameTypeRaw = suggestedGameType?.rawValue
     self.createdDate = createdDate

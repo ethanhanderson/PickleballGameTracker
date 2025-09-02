@@ -7,7 +7,7 @@ let package = Package(
   name: "CorePackage",
   platforms: [
     .iOS(.v26),
-    .watchOS(.v26),
+    .watchOS(.v26)
   ],
   products: [
     .library(
@@ -24,7 +24,7 @@ let package = Package(
       ],
       swiftSettings: [
         .enableUpcomingFeature("ExistentialAny"),
-        .enableUpcomingFeature("StrictConcurrency"),
+        .enableUpcomingFeature("StrictConcurrency")
       ]
     ),
     .testTarget(

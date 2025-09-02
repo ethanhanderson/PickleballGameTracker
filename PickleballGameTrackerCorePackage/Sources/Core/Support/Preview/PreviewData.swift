@@ -211,20 +211,102 @@ public struct PreviewGameData {
 
   // MARK: - Roster (Players/Teams)
 
-  /// Sample players for roster previews
+  /// Sample players for roster previews (includes both active and archived)
   public static let samplePlayers: [PlayerProfile] = {
-    let ethan = PlayerProfile(name: "Ethan", skillLevel: .advanced, preferredHand: .right)
-    let reed = PlayerProfile(name: "Reed", skillLevel: .intermediate, preferredHand: .right)
-    let ricky = PlayerProfile(name: "Ricky", skillLevel: .beginner, preferredHand: .left)
-    let dave = PlayerProfile(name: "Dave", skillLevel: .expert, preferredHand: .right)
-    return [ethan, reed, ricky, dave]
+    let ethan = PlayerProfile(
+      name: "Ethan",
+      avatarImageData: nil,
+      iconSymbolName: "tennis.racket",
+      iconTintColor: .blue,
+      skillLevel: .advanced,
+      preferredHand: .right
+    )
+    let reed = PlayerProfile(
+      name: "Reed",
+      avatarImageData: nil,
+      iconSymbolName: "figure.tennis",
+      iconTintColor: .green,
+      skillLevel: .intermediate,
+      preferredHand: .right
+    )
+    let ricky = PlayerProfile(
+      name: "Ricky",
+      avatarImageData: nil,
+      iconSymbolName: "figure.walk",
+      iconTintColor: .orange,
+      skillLevel: .beginner,
+      preferredHand: .left
+    )
+    let dave = PlayerProfile(
+      name: "Dave",
+      avatarImageData: nil,
+      iconSymbolName: "medal.fill",
+      iconTintColor: .purple,
+      skillLevel: .expert,
+      preferredHand: .right
+    )
+
+    // Archived players
+    let archivedAlex = PlayerProfile(
+      name: "Alex",
+      avatarImageData: nil,
+      iconSymbolName: "person.fill",
+      iconTintColor: .brown,
+      skillLevel: .intermediate,
+      preferredHand: .right
+    )
+    archivedAlex.isArchived = true
+
+    let archivedJordan = PlayerProfile(
+      name: "Jordan",
+      avatarImageData: nil,
+      iconSymbolName: "person.fill",
+      iconTintColor: .indigo,
+      skillLevel: .advanced,
+      preferredHand: .left
+    )
+    archivedJordan.isArchived = true
+
+    return [ethan, reed, ricky, dave, archivedAlex, archivedJordan]
   }()
 
-  /// Sample teams for roster previews
+  /// Sample teams for roster previews (includes both active and archived)
   public static let sampleTeams: [TeamProfile] = {
-    let t1 = TeamProfile(name: "Ethan & Reed", players: [samplePlayers[0], samplePlayers[1]])
-    let t2 = TeamProfile(name: "Spin Doctors", players: [samplePlayers[2], samplePlayers[3]])
-    return [t1, t2]
+    let t1 = TeamProfile(
+      name: "Ethan & Reed",
+      avatarImageData: nil,
+      iconSymbolName: "person.2.fill",
+      iconTintColor: .teal,
+      players: [samplePlayers[0], samplePlayers[1]]
+    )
+    let t2 = TeamProfile(
+      name: "Ricky & Dave",
+      avatarImageData: nil,
+      iconSymbolName: "figure.mind.and.body",
+      iconTintColor: .pink,
+      players: [samplePlayers[2], samplePlayers[3]]
+    )
+
+    // Archived teams
+    let archivedTeam1 = TeamProfile(
+      name: "Alex & Jordan",
+      avatarImageData: nil,
+      iconSymbolName: "person.2.fill",
+      iconTintColor: .brown,
+      players: [samplePlayers[4], samplePlayers[5]]  // archived players
+    )
+    archivedTeam1.isArchived = true
+
+    let archivedTeam2 = TeamProfile(
+      name: "Old Veterans",
+      avatarImageData: nil,
+      iconSymbolName: "trophy.fill",
+      iconTintColor: .indigo,
+      players: [samplePlayers[0], samplePlayers[3]]  // mix of active and archived players
+    )
+    archivedTeam2.isArchived = true
+
+    return [t1, t2, archivedTeam1, archivedTeam2]
   }()
 
   /// Creates a model container populated with roster data for previews
@@ -242,8 +324,67 @@ public struct PreviewGameData {
       configurations: [config]
     )
     let context = container.mainContext
-    for player in players { context.insert(player) }
-    for team in teams { context.insert(team) }
+    // Deep-clone players and teams into this container to avoid cross-container @Model reuse
+    var oldIdToNewPlayer: [UUID: PlayerProfile] = [:]
+    for src in players {
+      let clone = PlayerProfile(
+        id: src.id,
+        name: src.name,
+        notes: src.notes,
+        isArchived: src.isArchived,
+        avatarImageData: src.avatarImageData,
+        iconSymbolName: src.iconSymbolName,
+        iconTintColor: src.iconTintColor,
+        skillLevel: src.skillLevel,
+        preferredHand: src.preferredHand,
+        createdDate: src.createdDate,
+        lastModified: Date()
+      )
+      context.insert(clone)
+      oldIdToNewPlayer[src.id] = clone
+    }
+    for src in teams {
+      let remappedPlayers: [PlayerProfile] = src.players.compactMap { oldIdToNewPlayer[$0.id] }
+      let clone = TeamProfile(
+        id: src.id,
+        name: src.name,
+        notes: src.notes,
+        isArchived: src.isArchived,
+        avatarImageData: src.avatarImageData,
+        iconSymbolName: src.iconSymbolName,
+        iconTintColor: src.iconTintColor,
+        players: remappedPlayers,
+        suggestedGameType: src.suggestedGameType,
+        createdDate: src.createdDate,
+        lastModified: Date()
+      )
+      context.insert(clone)
+    }
+    // Ensure every active player belongs to at least one active team that includes their name
+    do {
+      let activeTeams = try context.fetch(
+        FetchDescriptor<TeamProfile>(predicate: #Predicate { $0.isArchived == false })
+      )
+      for (_, player) in oldIdToNewPlayer {
+        guard player.isArchived == false else { continue }
+        let hasNamedTeam = activeTeams.contains { team in
+          team.players.contains(where: { $0.id == player.id })
+            && team.name.localizedCaseInsensitiveContains(player.name)
+        }
+        if hasNamedTeam == false {
+          let solo = TeamProfile(
+            name: player.name,
+            avatarImageData: nil,
+            iconSymbolName: "person.fill",
+            iconTintColor: player.iconTintColor,
+            players: [player]
+          )
+          context.insert(solo)
+        }
+      }
+    } catch {
+      // Non-fatal for previews; continue
+    }
     try context.save()
     return container
   }

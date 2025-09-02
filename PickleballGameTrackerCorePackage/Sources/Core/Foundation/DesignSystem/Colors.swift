@@ -1,6 +1,80 @@
 import SwiftUI
 
 extension DesignSystem {
+  /// Apple system colors available for user customization
+  public enum AppleSystemColor: String, Codable, CaseIterable, Sendable {
+    case green = "green"
+    case blue = "blue"
+    case orange = "orange"
+    case red = "red"
+    case purple = "purple"
+    case pink = "pink"
+    case teal = "teal"
+    case indigo = "indigo"
+    case brown = "brown"
+    case gray = "gray"
+
+    /// Human-readable name for the color
+    public var displayName: String {
+      switch self {
+      case .blue: "Blue"
+      case .green: "Green"
+      case .orange: "Orange"
+      case .red: "Red"
+      case .purple: "Purple"
+      case .pink: "Pink"
+      case .teal: "Teal"
+      case .indigo: "Indigo"
+      case .brown: "Brown"
+      case .gray: "Gray"
+      }
+    }
+
+    /// SwiftUI Color representation
+    public var color: Color {
+      switch self {
+      case .blue: return .blue
+      case .green: return .green
+      case .orange: return .orange
+      case .red: return .red
+      case .purple: return .purple
+      case .pink: return .pink
+      case .teal: return .teal
+      case .indigo: return .indigo
+      case .brown: return .brown
+      case .gray: return .gray
+      }
+    }
+
+    /// Legacy hex representation for migration purposes
+    public var legacyHex: String {
+      switch self {
+      case .blue: "#007AFF"
+      case .green: "#34C759"
+      case .orange: "#FF9500"
+      case .red: "#FF3B30"
+      case .purple: "#AF52DE"
+      case .pink: "#FF2D55"
+      case .teal: "#5AC8FA"
+      case .indigo: "#5856D6"
+      case .brown: "#A2845E"
+      case .gray: "#8E8E93"
+      }
+    }
+
+    /// Create from legacy hex string (for migration)
+    public init?(fromHex hex: String) {
+      let normalizedHex = hex.uppercased()
+      for color in Self.allCases {
+        if color.legacyHex.uppercased() == normalizedHex {
+          self = color
+          return
+        }
+      }
+      return nil
+    }
+  }
+
   public enum Colors {
     // Primary Brand Colors
     #if os(iOS)
@@ -101,6 +175,9 @@ extension DesignSystem {
       public static let buttonPrimary = Color.blue
     #endif
 
+    // Navigation Colors
+    public static let navigationTintColor = primary
+
     // Utility Colors
     public static let clear = Color.clear
 
@@ -191,16 +268,24 @@ extension DesignSystem {
       )
     }
 
-    /// Navigation background gradient with brand color in the top third fading to transparent
-    public static var navigationBrandGradient: LinearGradient {
-      LinearGradient(
+    /// Generic navigation background gradient with a color in the top third fading to transparent
+    public static func navigationGradient(
+      color: Color? = nil, topOpacity: Double = 0.4, cutoff: CGFloat = 0.33
+    ) -> LinearGradient {
+      let base = color ?? primary
+      return LinearGradient(
         gradient: Gradient(stops: [
-          .init(color: primary.opacity(0.4), location: 0.0),
-          .init(color: .clear, location: 0.33),
+          .init(color: base.opacity(topOpacity), location: 0.0),
+          .init(color: .clear, location: cutoff),
         ]),
         startPoint: .top,
         endPoint: .bottom
       )
+    }
+
+    /// Navigation background gradient using the brand accent color
+    public static var navigationBrandGradient: LinearGradient {
+      navigationGradient(color: primary)
     }
 
     /// Game card background with material, gradient, and stroke

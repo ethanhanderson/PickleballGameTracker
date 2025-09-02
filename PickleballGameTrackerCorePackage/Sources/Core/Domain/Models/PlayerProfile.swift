@@ -18,7 +18,22 @@ public final class PlayerProfile: Hashable {
   // Optional identity visuals
   public var avatarImageData: Data?
   public var iconSymbolName: String?
-  public var iconTintHex: String?
+  public var iconTintColor: DesignSystem.AppleSystemColor?
+
+  // MARK: - Migration Support
+  @Transient
+  public var iconTintHex: String? {
+    get {
+      iconTintColor?.legacyHex
+    }
+    set {
+      if let hex = newValue {
+        iconTintColor = DesignSystem.AppleSystemColor(fromHex: hex)
+      } else {
+        iconTintColor = nil
+      }
+    }
+  }
 
   // Preferences/attributes
   public var skillLevel: PlayerSkillLevel
@@ -34,7 +49,7 @@ public final class PlayerProfile: Hashable {
     isArchived: Bool = false,
     avatarImageData: Data? = nil,
     iconSymbolName: String? = nil,
-    iconTintHex: String? = nil,
+    iconTintColor: DesignSystem.AppleSystemColor? = nil,
     skillLevel: PlayerSkillLevel = .unknown,
     preferredHand: PlayerHandedness = .unknown,
     createdDate: Date = Date(),
@@ -46,7 +61,34 @@ public final class PlayerProfile: Hashable {
     self.isArchived = isArchived
     self.avatarImageData = avatarImageData
     self.iconSymbolName = iconSymbolName
-    self.iconTintHex = iconTintHex
+    self.iconTintColor = iconTintColor
+    self.skillLevel = skillLevel
+    self.preferredHand = preferredHand
+    self.createdDate = createdDate
+    self.lastModified = lastModified
+  }
+
+  // MARK: - Legacy Constructor for Migration
+  public init(
+    id: UUID = UUID(),
+    name: String,
+    notes: String? = nil,
+    isArchived: Bool = false,
+    avatarImageData: Data? = nil,
+    iconSymbolName: String? = nil,
+    legacyIconTintHex iconTintHex: String?,
+    skillLevel: PlayerSkillLevel = .unknown,
+    preferredHand: PlayerHandedness = .unknown,
+    createdDate: Date = Date(),
+    lastModified: Date = Date()
+  ) {
+    self.id = id
+    self.name = name
+    self.notes = notes
+    self.isArchived = isArchived
+    self.avatarImageData = avatarImageData
+    self.iconSymbolName = iconSymbolName
+    self.iconTintColor = iconTintHex.flatMap { DesignSystem.AppleSystemColor(fromHex: $0) }
     self.skillLevel = skillLevel
     self.preferredHand = preferredHand
     self.createdDate = createdDate
@@ -85,7 +127,6 @@ public enum PlayerSkillLevel: Int, Codable, Sendable {
 public enum PlayerHandedness: Int, Codable, Sendable {
   case right = 0
   case left = 1
-  case ambidextrous = 2
   case unknown = 999
 }
 

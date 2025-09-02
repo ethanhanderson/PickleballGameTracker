@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 import Testing
 
-@testable import PickleballGameTrackerCorePackage
+@testable import CorePackage
 
 @Suite("Statistics Aggregator (v0.3)")
 struct StatisticsAggregatorTests {

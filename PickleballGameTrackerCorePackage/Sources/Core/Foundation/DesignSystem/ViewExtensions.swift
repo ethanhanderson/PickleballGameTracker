@@ -124,6 +124,11 @@ public extension View {
     func majorSectionSpacing() -> some View {
         self.padding(.vertical, DesignSystem.Spacing.lg)
     }
+
+    /// Apply global navigation tint color for back buttons and navigation elements
+    func navigationTint() -> some View {
+        self.tint(DesignSystem.Colors.navigationTintColor)
+    }
 }
 
 
