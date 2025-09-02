@@ -206,38 +206,44 @@ struct ActiveGameView: View {
   NavigationStack {
     ActiveGameView(
       game: PreviewGameData.earlyGame,
-      gameManager: SwiftDataGameManager(),
+      gameManager: PreviewGameData.gameManager,
       onDismiss: nil
     )
   }
+  .modelContainer(try! PreviewGameData.createPreviewContainer(with: [PreviewGameData.earlyGame]))
 }
 
 #Preview("Close Game") {
   NavigationStack {
     ActiveGameView(
       game: PreviewGameData.closeGame,
-      gameManager: SwiftDataGameManager(),
+      gameManager: PreviewGameData.gameManager,
       onDismiss: nil
     )
   }
+  .modelContainer(try! PreviewGameData.createPreviewContainer(with: [PreviewGameData.closeGame]))
 }
 
 #Preview("Initial Game") {
   NavigationStack {
     ActiveGameView(
       game: PreviewGameData.midGame,
-      gameManager: SwiftDataGameManager(),
+      gameManager: PreviewGameData.gameManager,
       onDismiss: nil
     )
   }
+  .modelContainer(try! PreviewGameData.createPreviewContainer(with: [PreviewGameData.midGame]))
 }
 
 #Preview("Completed Game") {
   NavigationStack {
     ActiveGameView(
       game: PreviewGameData.completedGame,
-      gameManager: SwiftDataGameManager(),
+      gameManager: PreviewGameData.gameManager,
       onDismiss: nil
     )
   }
+  .modelContainer(
+    try! PreviewGameData.createPreviewContainer(with: [PreviewGameData.completedGame])
+  )
 }
