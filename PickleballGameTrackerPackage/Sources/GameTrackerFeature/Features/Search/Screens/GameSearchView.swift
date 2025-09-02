@@ -1,4 +1,4 @@
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftData
 import SwiftUI
 
@@ -103,6 +103,7 @@ struct GameSearchView: View {
         )
       }
     }
+    .navigationTint()
   }
 
   // MARK: - Search History Management

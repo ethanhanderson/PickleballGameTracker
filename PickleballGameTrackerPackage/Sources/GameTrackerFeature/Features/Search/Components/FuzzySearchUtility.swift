@@ -1,5 +1,5 @@
 import Foundation
-import PickleballGameTrackerCorePackage
+import CorePackage
 
 // MARK: - Fuzzy Search Utility
 
