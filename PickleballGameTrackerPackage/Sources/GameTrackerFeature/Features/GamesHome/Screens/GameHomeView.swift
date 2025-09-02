@@ -5,7 +5,7 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import PickleballGameTrackerCorePackage
+import CorePackage
 import SwiftData
 import SwiftUI
 
@@ -70,6 +70,7 @@ struct GameHomeView: View {
         )
       }
     }
+    .navigationTint()
   }
 }
 
