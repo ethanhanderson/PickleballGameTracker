@@ -5,10 +5,9 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import PickleballGameTrackerCorePackage
 import SwiftData
 import SwiftUI
-import WatchFeature
+import GameTrackerWatchFeature
 
 @main
 struct Pickleball_Game_Tracking_Watch_AppApp: App {

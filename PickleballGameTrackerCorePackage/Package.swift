@@ -7,7 +7,7 @@ let package = Package(
   name: "CorePackage",
   platforms: [
     .iOS(.v26),
-    .watchOS(.v26)
+    .watchOS(.v26),
   ],
   products: [
     .library(
@@ -29,7 +29,7 @@ let package = Package(
     ),
     .testTarget(
       name: "CorePackageTests",
-      dependencies: ["orePackage"]
+      dependencies: ["CorePackage"]
     ),
   ]
 )
