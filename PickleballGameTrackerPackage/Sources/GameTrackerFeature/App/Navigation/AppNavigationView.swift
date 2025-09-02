@@ -99,6 +99,31 @@ public struct AppNavigationView: View {
       // Ensure device sync is enabled so watch sees phone-created games
       activeGameStateManager.setSyncEnabled(true)
 
+      // Non-blocking background initialization: validate store and log diagnostics
+      Task.detached(priority: .background) {
+        do {
+          let isHealthy = try await SwiftDataContainer.shared.validateAndRecoverStore()
+          let stats = await SwiftDataContainer.shared.getContainerStatistics()
+          await LoggingService.shared.log(
+            level: isHealthy ? .info : .warn,
+            event: .loadSucceeded,
+            message: "Store validation completed",
+            metadata: [
+              "isHealthy": String(isHealthy),
+              "gameCount": String(stats.gameCount),
+              "lastUpdated": String(describing: stats.lastUpdated),
+            ]
+          )
+        } catch {
+          await LoggingService.shared.log(
+            level: .error,
+            event: .loadFailed,
+            message: "Store validation error",
+            metadata: ["error": String(describing: error)]
+          )
+        }
+      }
+
       // Observe in-app deep link requests via DeepLinkBus
       deepLinkObserver = DeepLinkBus.observe { dest in
         Task { @MainActor in
