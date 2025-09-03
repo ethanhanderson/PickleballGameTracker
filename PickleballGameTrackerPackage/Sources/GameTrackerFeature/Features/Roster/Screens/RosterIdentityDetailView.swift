@@ -8,8 +8,6 @@ struct RosterIdentityDetailView: View {
   let manager: PlayerTeamManager
   @Query private var allTeams: [TeamProfile]
   @Environment(\.dismiss) private var dismiss
-  @Environment(SwiftDataGameManager.self) private var gameManager
-  @Environment(ActiveGameStateManager.self) private var activeGameStateManager
 
   init(identity: RosterIdentityCard.Identity, manager: PlayerTeamManager) {
     self.identity = identity
@@ -25,8 +23,6 @@ struct RosterIdentityDetailView: View {
   @State private var showShareSheet = false
   @State private var showDeleteConfirmation = false
   @State private var showRestoreConfirmation = false
-  @State private var showStartGameSheet = false
-  @State private var showMergeSheet = false
 
   // MARK: - Theme Colors
 
@@ -65,7 +61,6 @@ struct RosterIdentityDetailView: View {
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: DesignSystem.Spacing.lg) {
-        // Header with scroll tracking (mirror GameDetailView)
         GeometryReader { geometry in
           header
             .onChange(of: geometry.frame(in: .named("scroll")).maxY) { _, newValue in
@@ -83,7 +78,6 @@ struct RosterIdentityDetailView: View {
             identityInfoCards()
             playerSections(player)
           case .team(let team):
-            // Hide info cards for teams
             teamSections(team)
           }
         }
@@ -101,16 +95,6 @@ struct RosterIdentityDetailView: View {
     )
     .toolbar {
       if isArchived == false {
-        ToolbarItem {
-          Button {
-            onStartGameTapped()
-          } label: {
-            Label("Start Game", systemImage: "play.circle.fill")
-          }
-          .tint(themeColor)
-          .accessibilityIdentifier("rosterIdentity.startGame")
-        }
-
         ToolbarItem {
           Button {
             onEdit()
@@ -142,15 +126,6 @@ struct RosterIdentityDetailView: View {
                 .fontWeight(.semibold)
             }
             .tint(.primary)
-
-            Button {
-              onMerge()
-            } label: {
-              Label("Merge With…", systemImage: "square.filled.on.square")
-                .fontWeight(.semibold)
-            }
-            .tint(.primary)
-            .accessibilityIdentifier("rosterIdentity.mergeButton")
 
             Button(role: .destructive) {
               onDelete()
@@ -207,43 +182,6 @@ struct RosterIdentityDetailView: View {
         identity: RosterIdentityEditorView.Identity(from: identity),
         manager: manager
       )
-    }
-    .sheet(isPresented: $showStartGameSheet) {
-      NavigationStack {
-        GameDetailView(
-          gameType: suggestedGameTypeForIdentity(),
-          onStartGame: { variation in
-            Task { @MainActor in
-              do {
-                let newGame = try await gameManager.createGame(variation: variation)
-                activeGameStateManager.setCurrentGame(newGame)
-                Log.event(
-                  .viewAppear,
-                  level: .info,
-                  message: "Roster → started game",
-                  context: .current(gameId: newGame.id),
-                  metadata: ["source": "RosterDetail", "identityId": identity.id.uuidString]
-                )
-                dismiss()
-              } catch {
-                Log.error(
-                  error,
-                  event: .saveFailed,
-                  metadata: ["phase": "rosterStartGame"]
-                )
-              }
-            }
-          }
-        )
-      }
-      .navigationTint()
-    }
-    .sheet(isPresented: $showMergeSheet) {
-      NavigationStack {
-        MergeTargetPicker(identity: identity, manager: manager) {
-          dismiss()
-        }
-      }
     }
     .sheet(isPresented: $showAddToTeamSheet) {
       if case .player(let player, _) = identity {
@@ -391,25 +329,7 @@ struct RosterIdentityDetailView: View {
     }
   }
 
-  private func onStartGameTapped() {
-    Log.event(
-      .actionTapped,
-      level: .info,
-      message: "identity.startGame.start",
-      metadata: ["identityId": identity.id.uuidString]
-    )
-    showStartGameSheet = true
-  }
-
-  private func onMerge() {
-    Log.event(
-      .actionTapped,
-      level: .info,
-      message: "identity.merge.start",
-      metadata: ["identityId": identity.id.uuidString]
-    )
-    showMergeSheet = true
-  }
+  // start game action removed
 
   // MARK: - Header
   private var header: some View {
@@ -464,8 +384,6 @@ struct RosterIdentityDetailView: View {
   // MARK: - Sections
   private func playerSections(_ player: PlayerProfile) -> some View {
     VStack(alignment: .leading, spacing: DesignSystem.Spacing.lg) {
-      // Details section moved to top - skill/hand cards are now in identityInfoCards()
-
       statsSection(
         title: "Statistics",
         items: [
@@ -479,7 +397,6 @@ struct RosterIdentityDetailView: View {
       )
       .accessibilityIdentifier("rosterIdentity.player.stats")
 
-      // Teams this player is in (after stats)
       let teams = teamsFor(player)
       if !teams.isEmpty {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.md) {
@@ -521,7 +438,6 @@ struct RosterIdentityDetailView: View {
 
   private func teamSections(_ team: TeamProfile) -> some View {
     VStack(alignment: .leading, spacing: DesignSystem.Spacing.lg) {
-      // Members (after info cards, before stats)
       if !team.players.isEmpty {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.md) {
           Text("Players")
@@ -579,7 +495,6 @@ struct RosterIdentityDetailView: View {
     HStack(spacing: DesignSystem.Spacing.md) {
       switch identity {
       case .player(let player, let teamCount):
-        // Skill card (was Level)
         IdentityInfoCard(title: "Skill", gradient: themeGradient) {
           Image(
             systemName: "chart.bar.fill",
@@ -589,12 +504,10 @@ struct RosterIdentityDetailView: View {
           .foregroundStyle(.primary)
         }
 
-        // Hand card
         IdentityInfoCard(title: "Hand", gradient: themeGradient) {
           handIconView(player.preferredHand)
         }
 
-        // Teams card (moved to end)
         IdentityInfoCard(title: "Teams", gradient: themeGradient) {
           Text("\(teamCount ?? 0)")
             .font(.system(size: 18, weight: .semibold))
@@ -602,21 +515,18 @@ struct RosterIdentityDetailView: View {
         }
 
       case .team(let team):
-        // Players card
         IdentityInfoCard(title: "Players", gradient: themeGradient) {
           Text("\(team.players.count)")
             .font(.system(size: 18, weight: .semibold))
             .foregroundStyle(.primary)
         }
 
-        // Game Type card
         IdentityInfoCard(title: "Game Type", gradient: themeGradient) {
           Text(team.suggestedGameType?.displayName ?? "—")
             .font(.system(size: 18, weight: .semibold))
             .foregroundStyle(.primary)
         }
 
-        // Level card (based on suggested game type if available)
         IdentityInfoCard(title: "Level", gradient: themeGradient) {
           Image(
             systemName: "chart.bar.fill",
@@ -714,110 +624,7 @@ struct RosterIdentityDetailView: View {
 }
 
 // MARK: - Helpers
-extension RosterIdentityDetailView {
-  fileprivate func suggestedGameTypeForIdentity() -> GameType {
-    switch identity {
-    case .player:
-      return .recreational
-    case .team(let team):
-      return team.suggestedGameType ?? .recreational
-    }
-  }
-}
-
-// MARK: - Merge Target Picker
-@MainActor
-private struct MergeTargetPicker: View {
-  let identity: RosterIdentityCard.Identity
-  let manager: PlayerTeamManager
-  let onComplete: () -> Void
-
-  @Environment(\.dismiss) private var dismiss
-
-  var body: some View {
-    List {
-      switch identity {
-      case .player(let player, _):
-        Section("Merge Player Into") {
-          let candidates = manager.players.filter { $0.id != player.id && $0.isArchived == false }
-          if candidates.isEmpty {
-            Text("No candidates available").foregroundStyle(.secondary)
-          } else {
-            ForEach(candidates, id: \.id) { target in
-              Button {
-                mergePlayer(source: player, into: target)
-              } label: {
-                HStack {
-                  Text(target.name)
-                  Spacer()
-                  Text(target.skillLevel == .unknown ? "" : label(for: target.skillLevel))
-                    .foregroundStyle(.secondary)
-                }
-              }
-              .accessibilityIdentifier("merge.player.\(player.id.uuidString).into.\(target.id.uuidString)")
-            }
-          }
-        }
-      case .team(let team):
-        Section("Merge Team Into") {
-          let candidates = manager.teams.filter { $0.id != team.id && $0.isArchived == false }
-          if candidates.isEmpty {
-            Text("No candidates available").foregroundStyle(.secondary)
-          } else {
-            ForEach(candidates, id: \.id) { target in
-              Button {
-                mergeTeam(source: team, into: target)
-              } label: {
-                HStack {
-                  Text(target.name)
-                  Spacer()
-                  Text("\(target.players.count) players").foregroundStyle(.secondary)
-                }
-              }
-              .accessibilityIdentifier("merge.team.\(team.id.uuidString).into.\(target.id.uuidString)")
-            }
-          }
-        }
-      }
-    }
-    .navigationTitle("Merge With…")
-    .toolbar {
-      ToolbarItem(placement: .cancellationAction) {
-        Button("Cancel") { dismiss() }
-      }
-    }
-  }
-
-  private func label(for level: PlayerSkillLevel) -> String {
-    switch level {
-    case .beginner: return "Beginner"
-    case .intermediate: return "Intermediate"
-    case .advanced: return "Advanced"
-    case .expert: return "Expert"
-    case .unknown: return ""
-    }
-  }
-
-  private func mergePlayer(source: PlayerProfile, into target: PlayerProfile) {
-    do {
-      try manager.mergePlayer(source: source, into: target)
-      dismiss()
-      onComplete()
-    } catch {
-      Log.error(error, event: .saveFailed, metadata: ["action": "mergePlayer"])
-    }
-  }
-
-  private func mergeTeam(source: TeamProfile, into target: TeamProfile) {
-    do {
-      try manager.mergeTeam(source: source, into: target)
-      dismiss()
-      onComplete()
-    } catch {
-      Log.error(error, event: .saveFailed, metadata: ["action": "mergeTeam"])
-    }
-  }
-}
+extension RosterIdentityDetailView {}
 
 // MARK: - Previews
 
@@ -910,89 +717,120 @@ extension RosterIdentityDetailView {
 // MARK: - Active Identity Previews
 
 #Preview("Active Players") {
-  let data = RosterIdentityDetailView.previewData
-  let manager = RosterIdentityDetailView.createPreviewManager(
-    players: data.players,
-    teams: data.teams
+  let container = try! CorePackage.PreviewGameData.createRosterPreviewContainer()
+  let storage = SwiftDataStorage(modelContainer: container)
+  let manager = PlayerTeamManager(storage: storage, autoRefresh: false)
+  let context = container.mainContext
+  let players = try! context.fetch(FetchDescriptor<PlayerProfile>())
+  let teams = try! context.fetch(FetchDescriptor<TeamProfile>())
+  let activePlayers = players.filter { $0.isArchived == false }
+  let activeTeams = teams.filter { $0.isArchived == false }
+  let selectedPlayer = activePlayers.first!
+  let teamCount = activeTeams.filter { $0.players.contains(where: { $0.id == selectedPlayer.id }) }
+    .count
+  let gameManager = SwiftDataGameManager(storage: storage)
+  ActiveGameStateManager.shared.configure(
+    with: container.mainContext,
+    gameManager: gameManager,
+    enableSync: false
   )
 
-  // Cycle through all active players
-  let playerIndex = Int.random(in: 0..<data.players.count)
-  let selectedPlayer = data.players[playerIndex]
-  let teamCount = data.teams.filter { team in
-    team.players.contains(where: { $0.id == selectedPlayer.id })
-  }.count
-
-  NavigationStack {
+  return NavigationStack {
     RosterIdentityDetailView(
       identity: .player(selectedPlayer, teamCount: teamCount),
       manager: manager
     )
   }
-  .modelContainer(try! PreviewGameData.createRosterPreviewContainer())
+  .modelContainer(container)
+  .environment(gameManager as SwiftDataGameManager)
+  .environment(ActiveGameStateManager.shared as ActiveGameStateManager)
 }
 
 #Preview("Active Teams") {
-  let data = RosterIdentityDetailView.previewData
-  let manager = RosterIdentityDetailView.createPreviewManager(
-    players: data.players,
-    teams: data.teams
+  let container = try! CorePackage.PreviewGameData.createRosterPreviewContainer()
+  let storage = SwiftDataStorage(modelContainer: container)
+  let manager = PlayerTeamManager(storage: storage, autoRefresh: false)
+  let context = container.mainContext
+  let teams = try! context.fetch(FetchDescriptor<TeamProfile>())
+  let activeTeams = teams.filter { $0.isArchived == false }
+  let selectedTeam = activeTeams.first!
+  let gameManager = SwiftDataGameManager(storage: storage)
+  ActiveGameStateManager.shared.configure(
+    with: container.mainContext,
+    gameManager: gameManager,
+    enableSync: false
   )
 
-  // Cycle through all active teams
-  let teamIndex = Int.random(in: 0..<data.teams.count)
-  let selectedTeam = data.teams[teamIndex]
-
-  NavigationStack {
+  return NavigationStack {
     RosterIdentityDetailView(
       identity: .team(selectedTeam),
       manager: manager
     )
   }
-  .modelContainer(try! PreviewGameData.createRosterPreviewContainer())
+  .modelContainer(container)
+  .environment(gameManager as SwiftDataGameManager)
+  .environment(ActiveGameStateManager.shared as ActiveGameStateManager)
 }
 
 // MARK: - Archived Identity Previews
 
 #Preview("Archived Players") {
-  let data = RosterIdentityDetailView.previewData
-  let manager = RosterIdentityDetailView.createPreviewManager(
-    players: data.archivedPlayers,
-    teams: data.archivedTeams
+  let container = try! CorePackage.PreviewGameData.createRosterPreviewContainer()
+  let storage = SwiftDataStorage(modelContainer: container)
+  let manager = PlayerTeamManager(storage: storage, autoRefresh: false)
+  let context = container.mainContext
+  let players = try! context.fetch(FetchDescriptor<PlayerProfile>())
+  let teams = try! context.fetch(FetchDescriptor<TeamProfile>())
+  for player in players { player.isArchived = true }
+  try! context.save()
+  let archivedPlayers = players.filter { $0.isArchived }
+  let archivedTeams = teams.filter { $0.isArchived }
+  let selectedPlayer = archivedPlayers.first!
+  let teamCount = archivedTeams.filter {
+    $0.players.contains(where: { $0.id == selectedPlayer.id })
+  }.count
+  let gameManager = SwiftDataGameManager(storage: storage)
+  ActiveGameStateManager.shared.configure(
+    with: container.mainContext,
+    gameManager: gameManager,
+    enableSync: false
   )
 
-  // Cycle through all archived players
-  let playerIndex = Int.random(in: 0..<data.archivedPlayers.count)
-  let selectedPlayer = data.archivedPlayers[playerIndex]
-  let teamCount = data.archivedTeams.filter { team in
-    team.players.contains(where: { $0.id == selectedPlayer.id })
-  }.count
-
-  NavigationStack {
+  return NavigationStack {
     RosterIdentityDetailView(
       identity: .player(selectedPlayer, teamCount: teamCount),
       manager: manager
     )
   }
-  .modelContainer(try! PreviewGameData.createRosterPreviewContainer())
+  .modelContainer(container)
+  .environment(gameManager as SwiftDataGameManager)
+  .environment(ActiveGameStateManager.shared as ActiveGameStateManager)
 }
 
 #Preview("Archived Teams") {
-  let data = RosterIdentityDetailView.previewData
-  let manager = RosterIdentityDetailView.createPreviewManager(
-    players: data.archivedPlayers,
-    teams: data.archivedTeams
+  let container = try! CorePackage.PreviewGameData.createRosterPreviewContainer()
+  let storage = SwiftDataStorage(modelContainer: container)
+  let manager = PlayerTeamManager(storage: storage, autoRefresh: false)
+  let context = container.mainContext
+  let teams = try! context.fetch(FetchDescriptor<TeamProfile>())
+  for team in teams { team.isArchived = true }
+  try! context.save()
+  let archivedTeams = teams.filter { $0.isArchived }
+  let selectedTeam = archivedTeams.first!
+  let gameManager = SwiftDataGameManager(storage: storage)
+  ActiveGameStateManager.shared.configure(
+    with: container.mainContext,
+    gameManager: gameManager,
+    enableSync: false
   )
 
-  // Cycle through all archived teams
-  let teamIndex = Int.random(in: 0..<data.archivedTeams.count)
-  let selectedTeam = data.archivedTeams[teamIndex]
-
-  NavigationStack {
+  return NavigationStack {
     RosterIdentityDetailView(
       identity: .team(selectedTeam),
       manager: manager
     )
   }
-  .modelContainer(try! PreviewGameData.createRosterPreviewContainer())
+  .modelContainer(container)
+  .environment(gameManager as SwiftDataGameManager)
+  .environment(ActiveGameStateManager.shared as ActiveGameStateManager)
 }

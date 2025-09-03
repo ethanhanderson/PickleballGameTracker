@@ -477,15 +477,21 @@ private struct TeamDetailView: View {
 
 #Preview("Empty") {
   let container = try! CorePackage.PreviewGameData.createRosterPreviewContainer(
-    players: [],
-    teams: []
+    players: [], teams: [])
+  let storage = SwiftDataStorage(modelContainer: container)
+  let manager = PlayerTeamManager(storage: storage, autoRefresh: false)
+
+  let gameManager = SwiftDataGameManager(storage: storage)
+  ActiveGameStateManager.shared.configure(
+    with: container.mainContext,
+    gameManager: gameManager,
+    enableSync: false
   )
-  let manager = PlayerTeamManager(
-    storage: SwiftDataStorage(modelContainer: container),
-    autoRefresh: false
-  )
+
   return RosterHomeView(manager: manager)
     .modelContainer(container)
+    .environment(gameManager)
+    .environment(ActiveGameStateManager.shared)
 }
 
 #Preview("With Players and Teams") {
@@ -493,6 +499,15 @@ private struct TeamDetailView: View {
   let storage = SwiftDataStorage(modelContainer: container)
   let manager = PlayerTeamManager(storage: storage, autoRefresh: false)
 
+  let gameManager = SwiftDataGameManager(storage: storage)
+  ActiveGameStateManager.shared.configure(
+    with: container.mainContext,
+    gameManager: gameManager,
+    enableSync: false
+  )
+
   return RosterHomeView(manager: manager)
     .modelContainer(container)
+    .environment(gameManager)
+    .environment(ActiveGameStateManager.shared)
 }

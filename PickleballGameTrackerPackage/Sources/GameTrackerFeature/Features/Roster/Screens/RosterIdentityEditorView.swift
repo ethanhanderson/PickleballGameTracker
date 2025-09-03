@@ -125,9 +125,6 @@ struct RosterIdentityEditorView: View {
   @State private var showingCamera: Bool = false
 
   @State private var showValidationError: Bool = false
-  @State private var showDuplicateAlert: Bool = false
-  @State private var duplicateNames: [String] = []
-  @State private var pendingSaveAfterDuplicateWarning: Bool = false
   @FocusState private var nameFocused: Bool
 
   init(identity: Identity, manager: PlayerTeamManager) {
@@ -154,13 +151,7 @@ struct RosterIdentityEditorView: View {
     if case .team = identity { return true } else { return false }
   }
 
-  private var duplicateAlertMessage: Text {
-    let namesSuffix =
-      duplicateNames.isEmpty
-      ? ""
-      : " (e.g., \(duplicateNames.joined(separator: ", ")))"
-    return Text("A team with the same members\(namesSuffix) already exists.")
-  }
+  // Duplicate detection removed
 
   // MARK: - View Sections
   @ViewBuilder
@@ -303,19 +294,6 @@ struct RosterIdentityEditorView: View {
       CameraPicker(selectedImageData: $selectedPhotoData)
         .ignoresSafeArea()
     }
-    .alert(
-      "Team already exists",
-      isPresented: $showDuplicateAlert,
-      actions: {
-        Button("Create Anyway", role: .destructive) {
-          proceedAfterDuplicateWarning()
-        }
-        Button("Cancel", role: .cancel) {
-          pendingSaveAfterDuplicateWarning = false
-        }
-      },
-      message: { duplicateAlertMessage }
-    )
   }
 
   func toggleSelection(for id: UUID) {
@@ -510,19 +488,7 @@ struct RosterIdentityEditorView: View {
       selectedPlayerIds.contains($0.id)
     }
 
-    // Check for duplicates only when creating a new team
-    if existingTeam == nil {
-      let dups = manager.findDuplicateTeams(
-        candidates: selectedPlayers,
-        name: name
-      )
-      if !dups.isEmpty && !pendingSaveAfterDuplicateWarning {
-        duplicateNames = dups.map { $0.name }
-        pendingSaveAfterDuplicateWarning = true
-        showDuplicateAlert = true
-        return
-      }
-    }
+    // Duplicate team detection removed
 
     if let team = existingTeam {
       // Edit existing team
@@ -616,10 +582,7 @@ struct RosterIdentityEditorView: View {
     }
   }
 
-  func proceedAfterDuplicateWarning() {
-    showDuplicateAlert = false
-    onSave()
-  }
+  // Duplicate alert flow removed
 }
 
 // Avatar subviews moved to Components/Avatar
