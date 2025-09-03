@@ -62,7 +62,7 @@ public struct WatchGameCatalogView: View {
                 metadata: ["platform": "watchOS"])
             } label: {
               Image(systemName: "chart.bar.fill")
-                .foregroundColor(.white)
+                .foregroundColor(DesignSystem.Colors.textOnColor)
             }
           }
 
@@ -74,7 +74,7 @@ public struct WatchGameCatalogView: View {
                 metadata: ["platform": "watchOS"])
             } label: {
               Image(systemName: "clock")
-                .foregroundColor(.white)
+                .foregroundColor(DesignSystem.Colors.textOnColor)
             }
           }
 
@@ -91,12 +91,12 @@ public struct WatchGameCatalogView: View {
               if isCreatingGame {
                 ProgressView()
                   .progressViewStyle(
-                    CircularProgressViewStyle(tint: .white)
+                    CircularProgressViewStyle(tint: DesignSystem.Colors.textOnColor)
                   )
                   .scaleEffect(0.8)
               } else {
                 Image(systemName: "play.fill")
-                  .foregroundColor(.white)
+                  .foregroundColor(DesignSystem.Colors.textOnColor)
               }
             }
             .controlSize(.large)
