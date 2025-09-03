@@ -147,6 +147,9 @@ struct RosterIdentityCard: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .contentShape(.rect)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("\(identity.displayName), \(identity.secondaryText)")
+    .accessibilityIdentifier("roster.card.\(identity.id.uuidString)")
   }
 
   private var avatar: some View {

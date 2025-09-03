@@ -240,7 +240,9 @@ public final class PlayerTeamManager {
 
   // Ensures lists reflect latest persisted state after a merge/archive
   private func awaitRefreshAfterMutation() throws {
-    Task { refreshAll() }
+    Task { @MainActor in
+      refreshAll()
+    }
   }
 
 }

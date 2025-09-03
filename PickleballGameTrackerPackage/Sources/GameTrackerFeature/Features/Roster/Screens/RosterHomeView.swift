@@ -9,6 +9,7 @@ import CorePackage
 import SwiftData
 import SwiftUI
 
+@MainActor
 struct RosterHomeView: View {
   @Namespace var animation
   @Environment(\.modelContext) private var modelContext
@@ -82,6 +83,7 @@ struct RosterHomeView: View {
               action: onNewPlayer
             )
             .tint(DesignSystem.Colors.primary)
+            .accessibilityIdentifier("roster.newPlayer")
 
             Button(
               "New Team",
@@ -89,6 +91,7 @@ struct RosterHomeView: View {
               action: onNewTeam
             )
             .tint(DesignSystem.Colors.primary)
+            .accessibilityIdentifier("roster.newTeam")
           } label: {
             Label("Create new", systemImage: "plus")
           }
@@ -107,6 +110,7 @@ struct RosterHomeView: View {
             Label("View Archive", systemImage: "archivebox")
           }
           .tint(DesignSystem.Colors.primary)
+          .accessibilityIdentifier("roster.viewArchive")
         }
       }
       .navigationDestination(for: RosterDestination.self) { destination in

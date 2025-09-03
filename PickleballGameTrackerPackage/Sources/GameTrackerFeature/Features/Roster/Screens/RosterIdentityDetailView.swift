@@ -8,6 +8,8 @@ struct RosterIdentityDetailView: View {
   let manager: PlayerTeamManager
   @Query private var allTeams: [TeamProfile]
   @Environment(\.dismiss) private var dismiss
+  @Environment(SwiftDataGameManager.self) private var gameManager
+  @Environment(ActiveGameStateManager.self) private var activeGameStateManager
 
   init(identity: RosterIdentityCard.Identity, manager: PlayerTeamManager) {
     self.identity = identity
@@ -23,6 +25,8 @@ struct RosterIdentityDetailView: View {
   @State private var showShareSheet = false
   @State private var showDeleteConfirmation = false
   @State private var showRestoreConfirmation = false
+  @State private var showStartGameSheet = false
+  @State private var showMergeSheet = false
 
   // MARK: - Theme Colors
 
@@ -99,6 +103,16 @@ struct RosterIdentityDetailView: View {
       if isArchived == false {
         ToolbarItem {
           Button {
+            onStartGameTapped()
+          } label: {
+            Label("Start Game", systemImage: "play.circle.fill")
+          }
+          .tint(themeColor)
+          .accessibilityIdentifier("rosterIdentity.startGame")
+        }
+
+        ToolbarItem {
+          Button {
             onEdit()
           } label: {
             Label("Edit", systemImage: "square.and.pencil")
@@ -128,6 +142,15 @@ struct RosterIdentityDetailView: View {
                 .fontWeight(.semibold)
             }
             .tint(.primary)
+
+            Button {
+              onMerge()
+            } label: {
+              Label("Merge With…", systemImage: "square.filled.on.square")
+                .fontWeight(.semibold)
+            }
+            .tint(.primary)
+            .accessibilityIdentifier("rosterIdentity.mergeButton")
 
             Button(role: .destructive) {
               onDelete()
@@ -184,6 +207,43 @@ struct RosterIdentityDetailView: View {
         identity: RosterIdentityEditorView.Identity(from: identity),
         manager: manager
       )
+    }
+    .sheet(isPresented: $showStartGameSheet) {
+      NavigationStack {
+        GameDetailView(
+          gameType: suggestedGameTypeForIdentity(),
+          onStartGame: { variation in
+            Task { @MainActor in
+              do {
+                let newGame = try await gameManager.createGame(variation: variation)
+                activeGameStateManager.setCurrentGame(newGame)
+                Log.event(
+                  .viewAppear,
+                  level: .info,
+                  message: "Roster → started game",
+                  context: .current(gameId: newGame.id),
+                  metadata: ["source": "RosterDetail", "identityId": identity.id.uuidString]
+                )
+                dismiss()
+              } catch {
+                Log.error(
+                  error,
+                  event: .saveFailed,
+                  metadata: ["phase": "rosterStartGame"]
+                )
+              }
+            }
+          }
+        )
+      }
+      .navigationTint()
+    }
+    .sheet(isPresented: $showMergeSheet) {
+      NavigationStack {
+        MergeTargetPicker(identity: identity, manager: manager) {
+          dismiss()
+        }
+      }
     }
     .sheet(isPresented: $showAddToTeamSheet) {
       if case .player(let player, _) = identity {
@@ -329,6 +389,26 @@ struct RosterIdentityDetailView: View {
         ]
       )
     }
+  }
+
+  private func onStartGameTapped() {
+    Log.event(
+      .actionTapped,
+      level: .info,
+      message: "identity.startGame.start",
+      metadata: ["identityId": identity.id.uuidString]
+    )
+    showStartGameSheet = true
+  }
+
+  private func onMerge() {
+    Log.event(
+      .actionTapped,
+      level: .info,
+      message: "identity.merge.start",
+      metadata: ["identityId": identity.id.uuidString]
+    )
+    showMergeSheet = true
   }
 
   // MARK: - Header
@@ -629,6 +709,112 @@ struct RosterIdentityDetailView: View {
     case .right: return "Right"
     case .left: return "Left"
     case .unknown: return "Unspecified"
+    }
+  }
+}
+
+// MARK: - Helpers
+extension RosterIdentityDetailView {
+  fileprivate func suggestedGameTypeForIdentity() -> GameType {
+    switch identity {
+    case .player:
+      return .recreational
+    case .team(let team):
+      return team.suggestedGameType ?? .recreational
+    }
+  }
+}
+
+// MARK: - Merge Target Picker
+@MainActor
+private struct MergeTargetPicker: View {
+  let identity: RosterIdentityCard.Identity
+  let manager: PlayerTeamManager
+  let onComplete: () -> Void
+
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    List {
+      switch identity {
+      case .player(let player, _):
+        Section("Merge Player Into") {
+          let candidates = manager.players.filter { $0.id != player.id && $0.isArchived == false }
+          if candidates.isEmpty {
+            Text("No candidates available").foregroundStyle(.secondary)
+          } else {
+            ForEach(candidates, id: \.id) { target in
+              Button {
+                mergePlayer(source: player, into: target)
+              } label: {
+                HStack {
+                  Text(target.name)
+                  Spacer()
+                  Text(target.skillLevel == .unknown ? "" : label(for: target.skillLevel))
+                    .foregroundStyle(.secondary)
+                }
+              }
+              .accessibilityIdentifier("merge.player.\(player.id.uuidString).into.\(target.id.uuidString)")
+            }
+          }
+        }
+      case .team(let team):
+        Section("Merge Team Into") {
+          let candidates = manager.teams.filter { $0.id != team.id && $0.isArchived == false }
+          if candidates.isEmpty {
+            Text("No candidates available").foregroundStyle(.secondary)
+          } else {
+            ForEach(candidates, id: \.id) { target in
+              Button {
+                mergeTeam(source: team, into: target)
+              } label: {
+                HStack {
+                  Text(target.name)
+                  Spacer()
+                  Text("\(target.players.count) players").foregroundStyle(.secondary)
+                }
+              }
+              .accessibilityIdentifier("merge.team.\(team.id.uuidString).into.\(target.id.uuidString)")
+            }
+          }
+        }
+      }
+    }
+    .navigationTitle("Merge With…")
+    .toolbar {
+      ToolbarItem(placement: .cancellationAction) {
+        Button("Cancel") { dismiss() }
+      }
+    }
+  }
+
+  private func label(for level: PlayerSkillLevel) -> String {
+    switch level {
+    case .beginner: return "Beginner"
+    case .intermediate: return "Intermediate"
+    case .advanced: return "Advanced"
+    case .expert: return "Expert"
+    case .unknown: return ""
+    }
+  }
+
+  private func mergePlayer(source: PlayerProfile, into target: PlayerProfile) {
+    do {
+      try manager.mergePlayer(source: source, into: target)
+      dismiss()
+      onComplete()
+    } catch {
+      Log.error(error, event: .saveFailed, metadata: ["action": "mergePlayer"])
+    }
+  }
+
+  private func mergeTeam(source: TeamProfile, into target: TeamProfile) {
+    do {
+      try manager.mergeTeam(source: source, into: target)
+      dismiss()
+      onComplete()
+    } catch {
+      Log.error(error, event: .saveFailed, metadata: ["action": "mergeTeam"])
     }
   }
 }
