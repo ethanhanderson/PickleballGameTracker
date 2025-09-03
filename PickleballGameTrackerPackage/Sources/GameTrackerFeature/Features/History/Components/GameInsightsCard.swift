@@ -192,33 +192,11 @@ public struct GameInsightsCard: View {
     public var body: some View {
         let insight = primaryInsight
 
-        HStack(spacing: DesignSystem.Spacing.lg) {
-            Image(systemName: insight.icon)
-                .font(.system(size: 32, weight: .medium))
-                .foregroundStyle(
-                    DesignSystem.Colors.primary.gradient
-                )
-                .shadow(
-                    color: DesignSystem.Colors.primary.opacity(0.3),
-                    radius: 3,
-                    x: 0,
-                    y: 2
-                )
-                .frame(width: 24, height: 24)
-
-            Text(insight.message)
-                .font(DesignSystem.Typography.body)
-                .foregroundColor(DesignSystem.Colors.textPrimary)
-                .multilineTextAlignment(.leading)
-
-            Spacer()
-        }
-        .padding(DesignSystem.Spacing.lg)
-        .glassEffect(
-            .regular.tint(
-                DesignSystem.Colors.containerFillSecondary.opacity(0.2)
-            ),
-            in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl)
+        InsightRow(
+            iconName: insight.icon,
+            message: insight.message,
+            iconGradient: DesignSystem.Colors.primary.gradient,
+            backgroundOpacity: 0.2
         )
     }
 

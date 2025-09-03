@@ -158,21 +158,11 @@ struct GameDetailView: View {
     }
     .toolbar {
       ToolbarItem(placement: .principal) {
-        HStack(spacing: DesignSystem.Spacing.sm) {
-          Image(systemName: gameType.iconName)
-            .font(.system(size: 24, weight: .medium))
-            .foregroundStyle(DesignSystem.Colors.gameType(gameType).gradient)
-
-          Text(gameType.displayName)
-            .font(DesignSystem.Typography.headline)
-            .fontWeight(.semibold)
-            .foregroundColor(DesignSystem.Colors.textPrimary)
-        }
-        .opacity(showNavigationTitle ? 1.0 : 0.0)
-        .offset(y: showNavigationTitle ? 0 : 4)
-        .animation(
-          .easeInOut(duration: 0.2),
-          value: showNavigationTitle
+        NavigationTitleWithIcon(
+          systemImageName: gameType.iconName,
+          title: gameType.displayName,
+          gradient: DesignSystem.Colors.gameType(gameType).gradient,
+          show: showNavigationTitle
         )
       }
     }

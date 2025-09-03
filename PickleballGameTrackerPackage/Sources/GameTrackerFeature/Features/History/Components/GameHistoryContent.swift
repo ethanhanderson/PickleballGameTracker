@@ -27,23 +27,27 @@ struct GameHistoryContent: View {
   // MARK: - View Components
 
   private var summarySection: some View {
-    VStack(spacing: DesignSystem.Spacing.md) {
-      GameHistorySummary(games: completedGames)
-      GameInsightsCard(games: completedGames)
+    SectionContainer(title: "Summary") {
+      VStack(spacing: DesignSystem.Spacing.md) {
+        GameHistorySummary(games: completedGames)
+        GameInsightsCard(games: completedGames)
+      }
     }
   }
 
   private var gamesListSection: some View {
     VStack(spacing: 0) {
       if selectedGrouping == .none {
-        ungroupedGamesList
+        SectionContainer(title: "Games") {
+          ungroupedGamesListInner
+        }
       } else {
         groupedGamesList
       }
     }
   }
 
-  private var ungroupedGamesList: some View {
+  private var ungroupedGamesListInner: some View {
     VStack(spacing: DesignSystem.Spacing.md) {
       ForEach(filteredGames.indices, id: \.self) { index in
         GameHistoryCard(

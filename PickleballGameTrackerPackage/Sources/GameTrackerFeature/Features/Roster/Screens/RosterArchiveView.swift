@@ -53,7 +53,7 @@ struct RosterArchiveView: View {
                   player,
                   teamCount: teamCount
                 )
-                ArchivedIdentityNavigationRow(
+                ArchivedIdentityRow(
                   identity: identity,
                   manager: manager
                 )
@@ -66,7 +66,7 @@ struct RosterArchiveView: View {
                 items: archivedTeams
               ) { team in
                 let identity: RosterIdentityCard.Identity = .team(team)
-                ArchivedIdentityNavigationRow(
+                ArchivedIdentityRow(
                   identity: identity,
                   manager: manager
                 )
@@ -97,25 +97,7 @@ struct RosterArchiveView: View {
 
 }
 
-@MainActor
-private struct ArchivedIdentityNavigationRow: View {
-  let identity: RosterIdentityCard.Identity
-  let manager: PlayerTeamManager
-
-  var body: some View {
-    NavigationLink {
-      RosterIdentityDetailView(
-        identity: identity,
-        manager: manager
-      )
-    } label: {
-      RosterIdentityCard(identity: identity)
-        .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .accessibilityIdentifier("archive.row.\(identity.id.uuidString)")
-  }
-}
+// ArchivedIdentityRow moved to Features/Roster/Components/ArchivedIdentityRow.swift
 
 #Preview("Empty Archive") {
   let container = try! CorePackage.PreviewGameData.createRosterPreviewContainer(

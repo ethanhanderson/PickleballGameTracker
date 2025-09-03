@@ -91,21 +91,13 @@ struct TeamScoreCard: View {
       }
 
       ZStack {
-        Text("\(score)")
-          .font(.system(size: 76, weight: .bold, design: .rounded))
-          .foregroundStyle(.primary)
-          .padding(.bottom, DesignSystem.Spacing.xl)
-          .minimumScaleFactor(0.6)
-          .lineLimit(1)
-          .contentTransition(.numericText())
-          .scaleEffect(
-            scoreAnimation
-              ? (isIncreasing ? 1.15 : 0.9)
-              : (isGameActive ? 1.0 : 0.85)
-          )
-          .opacity(isGameActive ? 1.0 : 0.6)
-          .animation(.easeInOut(duration: 0.2), value: scoreAnimation)
-          .animation(.easeInOut(duration: 0.3), value: isGameActive)
+        ScorePill(
+          score: score,
+          scale: scoreAnimation ? (isIncreasing ? 1.15 : 0.9) : (isGameActive ? 1.0 : 0.85),
+          opacity: isGameActive ? 1.0 : 0.6
+        )
+        .animation(.easeInOut(duration: 0.2), value: scoreAnimation)
+        .animation(.easeInOut(duration: 0.3), value: isGameActive)
 
         VStack {
           if isAtMatchPoint && isGameActive {
@@ -145,6 +137,8 @@ struct TeamScoreCard: View {
               gameManager: gameManager
             )
             .disabled(isGameActive)
+          } else if isServing && game.effectiveTeamSize == 1 {
+            ServeIndicator(isServing: true, teamColor: teamColor)
           }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

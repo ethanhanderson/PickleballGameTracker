@@ -1,0 +1,8 @@
+---
+alwaysApply: true
+---
+# Agent Development Rules
+
+When writing new code, only write comments that add crutial context to a complex block of code. Never write comments describing what a block of code does when the purpose of the code can be understood by reading the code. When editing a file, take time to clean up these kinds of comments from it.
+
+When you are given a large, complex task, rely on your todo list tools by listing what needs to be done to fully complete the given request. If the task requires looking through the files in the codebase, scan the for the applicable files and create a todo list of them so you remember what files need to be worked on. Complete as much of your task as you can without reporting to the user unless you run into a roadblock or need to notify the user of something they would want to confirm or add additional info to.

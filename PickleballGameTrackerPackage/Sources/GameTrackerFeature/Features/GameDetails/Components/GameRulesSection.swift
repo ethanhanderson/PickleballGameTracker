@@ -50,149 +50,69 @@ public struct GameRulesSection: View {
 
       VStack(spacing: DesignSystem.Spacing.md) {
         HStack(spacing: DesignSystem.Spacing.md) {
-          // Winning Score Rule
-          VStack(spacing: DesignSystem.Spacing.xs) {
-            Image(systemName: "target")
-              .font(.system(size: 20, weight: .medium))
-              .foregroundStyle(DesignSystem.Colors.gameType(gameType).gradient)
-              .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 2)
-
-            Text("Winning Score")
-              .font(DesignSystem.Typography.caption)
-              .fontWeight(.medium)
-              .foregroundStyle(.secondary)
-              .multilineTextAlignment(.center)
-
+          RuleInfoCard(
+            title: "Winning Score",
+            iconName: "target",
+            gradient: DesignSystem.Colors.gameType(gameType).gradient
+          ) {
             Text("\(winningScore)")
               .font(.system(size: 16, weight: .semibold))
               .foregroundStyle(.primary)
           }
-          .frame(maxWidth: .infinity)
-          .padding(DesignSystem.Spacing.md)
-          .glassEffect(
-            .regular.tint(DesignSystem.Colors.containerFillSecondary.opacity(0.5)),
-            in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl))
 
-          // Win by Two Rule
-          VStack(spacing: DesignSystem.Spacing.xs) {
-            Image(systemName: winByTwo ? "plus.circle.fill" : "minus.circle.fill")
-              .font(.system(size: 20, weight: .medium))
-              .foregroundStyle(DesignSystem.Colors.gameType(gameType).gradient)
-              .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 2)
-
-            Text("Win by Two")
-              .font(DesignSystem.Typography.caption)
-              .fontWeight(.medium)
-              .foregroundStyle(.secondary)
-              .multilineTextAlignment(.center)
-
+          RuleInfoCard(
+            title: "Win by Two",
+            iconName: winByTwo ? "plus.circle.fill" : "minus.circle.fill",
+            gradient: DesignSystem.Colors.gameType(gameType).gradient
+          ) {
             Text(winByTwo ? "Yes" : "No")
               .font(.system(size: 16, weight: .semibold))
               .foregroundStyle(.primary)
           }
-          .frame(maxWidth: .infinity)
-          .padding(DesignSystem.Spacing.md)
-          .glassEffect(
-            .regular.tint(DesignSystem.Colors.containerFillSecondary.opacity(0.5)),
-            in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl))
         }
 
         HStack(spacing: DesignSystem.Spacing.md) {
-          // Kitchen Rule
-          VStack(spacing: DesignSystem.Spacing.xs) {
-            Image(systemName: kitchenRule ? "checkmark.circle.fill" : "xmark.circle.fill")
-              .font(.system(size: 20, weight: .medium))
-              .foregroundStyle(DesignSystem.Colors.gameType(gameType).gradient)
-              .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 2)
-
-            Text("Kitchen Rule")
-              .font(DesignSystem.Typography.caption)
-              .fontWeight(.medium)
-              .foregroundStyle(.secondary)
-              .multilineTextAlignment(.center)
-
+          RuleInfoCard(
+            title: "Kitchen Rule",
+            iconName: kitchenRule ? "checkmark.circle.fill" : "xmark.circle.fill",
+            gradient: DesignSystem.Colors.gameType(gameType).gradient
+          ) {
             Text(kitchenRule ? "Yes" : "No")
               .font(.system(size: 16, weight: .semibold))
               .foregroundStyle(.primary)
           }
-          .frame(maxWidth: .infinity)
-          .padding(DesignSystem.Spacing.md)
-          .glassEffect(
-            .regular.tint(DesignSystem.Colors.containerFillSecondary.opacity(0.5)),
-            in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl))
 
-          // Double Bounce Rule
-          VStack(spacing: DesignSystem.Spacing.xs) {
-            Image(
-              systemName: doubleBounceRule ? "arrow.clockwise.circle.fill" : "xmark.circle.fill"
-            )
-            .font(.system(size: 20, weight: .medium))
-            .foregroundStyle(DesignSystem.Colors.gameType(gameType).gradient)
-            .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 2)
-
-            Text("Double Bounce")
-              .font(DesignSystem.Typography.caption)
-              .fontWeight(.medium)
-              .foregroundStyle(.secondary)
-              .multilineTextAlignment(.center)
-
+          RuleInfoCard(
+            title: "Double Bounce",
+            iconName: doubleBounceRule ? "arrow.clockwise.circle.fill" : "xmark.circle.fill",
+            gradient: DesignSystem.Colors.gameType(gameType).gradient
+          ) {
             Text(doubleBounceRule ? "Yes" : "No")
               .font(.system(size: 16, weight: .semibold))
               .foregroundStyle(.primary)
           }
-          .frame(maxWidth: .infinity)
-          .padding(DesignSystem.Spacing.md)
-          .glassEffect(
-            .regular.tint(DesignSystem.Colors.containerFillSecondary.opacity(0.5)),
-            in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl))
         }
 
         HStack(spacing: DesignSystem.Spacing.md) {
-          // Serving Rotation Rule
-          VStack(spacing: DesignSystem.Spacing.xs) {
-            Image(systemName: "arrow.triangle.2.circlepath")
-              .font(.system(size: 20, weight: .medium))
-              .foregroundStyle(DesignSystem.Colors.gameType(gameType).gradient)
-              .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 2)
-
-            Text("Serving")
-              .font(DesignSystem.Typography.caption)
-              .fontWeight(.medium)
-              .foregroundStyle(.secondary)
-              .multilineTextAlignment(.center)
-
+          RuleInfoCard(
+            title: "Serving",
+            iconName: "arrow.triangle.2.circlepath",
+            gradient: DesignSystem.Colors.gameType(gameType).gradient
+          ) {
             Text(servingRotation == .standard ? "Standard" : "Custom")
               .font(.system(size: 16, weight: .semibold))
               .foregroundStyle(.primary)
           }
-          .frame(maxWidth: .infinity)
-          .padding(DesignSystem.Spacing.md)
-          .glassEffect(
-            .regular.tint(DesignSystem.Colors.containerFillSecondary.opacity(0.5)),
-            in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl))
 
-          // Side Switching Rule
-          VStack(spacing: DesignSystem.Spacing.xs) {
-            Image(systemName: "arrow.left.arrow.right")
-              .font(.system(size: 20, weight: .medium))
-              .foregroundStyle(DesignSystem.Colors.gameType(gameType).gradient)
-              .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 2)
-
-            Text("Side Switch")
-              .font(DesignSystem.Typography.caption)
-              .fontWeight(.medium)
-              .foregroundStyle(.secondary)
-              .multilineTextAlignment(.center)
-
+          RuleInfoCard(
+            title: "Side Switch",
+            iconName: "arrow.left.arrow.right",
+            gradient: DesignSystem.Colors.gameType(gameType).gradient
+          ) {
             Text(sideSwitchingRule == .at6Points ? "At 6" : "Custom")
               .font(.system(size: 16, weight: .semibold))
               .foregroundStyle(.primary)
           }
-          .frame(maxWidth: .infinity)
-          .padding(DesignSystem.Spacing.md)
-          .glassEffect(
-            .regular.tint(DesignSystem.Colors.containerFillSecondary.opacity(0.5)),
-            in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl))
         }
       }
     }

@@ -23,10 +23,18 @@ struct CompletedGameDetailView: View {
     ScrollView {
       VStack(spacing: DesignSystem.Spacing.lg) {
         header
-        scoreSection
-        summaryMetrics
-        actions
-        notesSection
+        SectionContainer(title: "Score") {
+          scoreSection
+        }
+        SectionContainer(title: "Summary") {
+          summaryMetrics
+        }
+        SectionContainer(title: "Actions") {
+          actions
+        }
+        SectionContainer(title: "Notes") {
+          notesSection
+        }
       }
       .padding(.horizontal, DesignSystem.Spacing.md)
       .padding(.top, DesignSystem.Spacing.lg)

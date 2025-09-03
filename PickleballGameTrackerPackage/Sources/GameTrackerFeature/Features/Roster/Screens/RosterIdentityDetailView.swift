@@ -500,22 +500,7 @@ struct RosterIdentityDetailView: View {
       switch identity {
       case .player(let player, let teamCount):
         // Skill card (was Level)
-        VStack(spacing: DesignSystem.Spacing.xs) {
-          Image(systemName: "star.fill")
-            .font(.system(size: 20, weight: .medium))
-            .foregroundStyle(themeGradient)
-            .shadow(
-              color: .black.opacity(0.08),
-              radius: 3,
-              x: 0,
-              y: 2
-            )
-
-          Text("Skill")
-            .font(DesignSystem.Typography.caption)
-            .fontWeight(.medium)
-            .foregroundStyle(.secondary)
-
+        IdentityInfoCard(title: "Skill", gradient: themeGradient) {
           Image(
             systemName: "chart.bar.fill",
             variableValue: skillFillProgress(player.skillLevel)
@@ -523,161 +508,36 @@ struct RosterIdentityDetailView: View {
           .font(.system(size: 18, weight: .bold))
           .foregroundStyle(.primary)
         }
-        .frame(maxWidth: .infinity)
-        .padding(DesignSystem.Spacing.md)
-        .glassEffect(
-          .regular.tint(
-            DesignSystem.Colors.containerFillSecondary.opacity(0.2)
-          ),
-          in: RoundedRectangle(
-            cornerRadius: DesignSystem.CornerRadius.xl
-          )
-        )
 
         // Hand card
-        VStack(spacing: DesignSystem.Spacing.xs) {
-          Image(systemName: "hand.point.up.left.fill")
-            .font(.system(size: 20, weight: .medium))
-            .foregroundStyle(themeGradient)
-            .shadow(
-              color: .black.opacity(0.08),
-              radius: 3,
-              x: 0,
-              y: 2
-            )
-
-          Text("Hand")
-            .font(DesignSystem.Typography.caption)
-            .fontWeight(.medium)
-            .foregroundStyle(.secondary)
-
+        IdentityInfoCard(title: "Hand", gradient: themeGradient) {
           handIconView(player.preferredHand)
         }
-        .frame(maxWidth: .infinity)
-        .padding(DesignSystem.Spacing.md)
-        .glassEffect(
-          .regular.tint(
-            DesignSystem.Colors.containerFillSecondary.opacity(0.2)
-          ),
-          in: RoundedRectangle(
-            cornerRadius: DesignSystem.CornerRadius.xl
-          )
-        )
 
         // Teams card (moved to end)
-        VStack(spacing: DesignSystem.Spacing.xs) {
-          Image(systemName: "person.3.fill")
-            .font(.system(size: 20, weight: .medium))
-            .foregroundStyle(themeGradient)
-            .shadow(
-              color: .black.opacity(0.08),
-              radius: 3,
-              x: 0,
-              y: 2
-            )
-
-          Text("Teams")
-            .font(DesignSystem.Typography.caption)
-            .fontWeight(.medium)
-            .foregroundStyle(.secondary)
-
+        IdentityInfoCard(title: "Teams", gradient: themeGradient) {
           Text("\(teamCount ?? 0)")
             .font(.system(size: 18, weight: .semibold))
             .foregroundStyle(.primary)
         }
-        .frame(maxWidth: .infinity)
-        .padding(DesignSystem.Spacing.md)
-        .glassEffect(
-          .regular.tint(
-            DesignSystem.Colors.containerFillSecondary.opacity(0.2)
-          ),
-          in: RoundedRectangle(
-            cornerRadius: DesignSystem.CornerRadius.xl
-          )
-        )
 
       case .team(let team):
         // Players card
-        VStack(spacing: DesignSystem.Spacing.xs) {
-          Image(systemName: "person.2.fill")
-            .font(.system(size: 20, weight: .medium))
-            .foregroundStyle(themeGradient)
-            .shadow(
-              color: .black.opacity(0.08),
-              radius: 3,
-              x: 0,
-              y: 2
-            )
-
-          Text("Players")
-            .font(DesignSystem.Typography.caption)
-            .fontWeight(.medium)
-            .foregroundStyle(.secondary)
-
+        IdentityInfoCard(title: "Players", gradient: themeGradient) {
           Text("\(team.players.count)")
             .font(.system(size: 18, weight: .semibold))
             .foregroundStyle(.primary)
         }
-        .frame(maxWidth: .infinity)
-        .padding(DesignSystem.Spacing.md)
-        .glassEffect(
-          .regular.tint(
-            DesignSystem.Colors.containerFillSecondary.opacity(0.2)
-          ),
-          in: RoundedRectangle(
-            cornerRadius: DesignSystem.CornerRadius.xl
-          )
-        )
 
         // Game Type card
-        VStack(spacing: DesignSystem.Spacing.xs) {
-          Image(systemName: "flag.2.crossed.fill")
-            .font(.system(size: 20, weight: .medium))
-            .foregroundStyle(themeGradient)
-            .shadow(
-              color: .black.opacity(0.08),
-              radius: 3,
-              x: 0,
-              y: 2
-            )
-
-          Text("Game Type")
-            .font(DesignSystem.Typography.caption)
-            .fontWeight(.medium)
-            .foregroundStyle(.secondary)
-
+        IdentityInfoCard(title: "Game Type", gradient: themeGradient) {
           Text(team.suggestedGameType?.displayName ?? "—")
             .font(.system(size: 18, weight: .semibold))
             .foregroundStyle(.primary)
         }
-        .frame(maxWidth: .infinity)
-        .padding(DesignSystem.Spacing.md)
-        .glassEffect(
-          .regular.tint(
-            DesignSystem.Colors.containerFillSecondary.opacity(0.2)
-          ),
-          in: RoundedRectangle(
-            cornerRadius: DesignSystem.CornerRadius.xl
-          )
-        )
 
         // Level card (based on suggested game type if available)
-        VStack(spacing: DesignSystem.Spacing.xs) {
-          Image(systemName: "star.fill")
-            .font(.system(size: 20, weight: .medium))
-            .foregroundStyle(themeGradient)
-            .shadow(
-              color: .black.opacity(0.08),
-              radius: 3,
-              x: 0,
-              y: 2
-            )
-
-          Text("Level")
-            .font(DesignSystem.Typography.caption)
-            .fontWeight(.medium)
-            .foregroundStyle(.secondary)
-
+        IdentityInfoCard(title: "Level", gradient: themeGradient) {
           Image(
             systemName: "chart.bar.fill",
             variableValue: team.suggestedGameType?
@@ -686,16 +546,6 @@ struct RosterIdentityDetailView: View {
           .font(.system(size: 18, weight: .bold))
           .foregroundStyle(.primary)
         }
-        .frame(maxWidth: .infinity)
-        .padding(DesignSystem.Spacing.md)
-        .glassEffect(
-          .regular.tint(
-            DesignSystem.Colors.containerFillSecondary.opacity(0.2)
-          ),
-          in: RoundedRectangle(
-            cornerRadius: DesignSystem.CornerRadius.xl
-          )
-        )
       }
     }
   }
@@ -712,20 +562,7 @@ struct RosterIdentityDetailView: View {
 
   @ViewBuilder
   private func handIconView(_ hand: PlayerHandedness) -> some View {
-    switch hand {
-    case .left:
-      Image(systemName: "l.square.fill")
-        .font(.system(size: 18, weight: .bold))
-        .foregroundStyle(.primary)
-    case .right:
-      Image(systemName: "r.square.fill")
-        .font(.system(size: 18, weight: .bold))
-        .foregroundStyle(.primary)
-    case .unknown:
-      Image(systemName: "questionmark.square.fill")
-        .font(.system(size: 18, weight: .bold))
-        .foregroundStyle(.primary)
-    }
+    HandIconView(hand: hand)
   }
   private func infoChip(title: String, value: String) -> some View {
     HStack(spacing: DesignSystem.Spacing.xs) {
@@ -746,55 +583,15 @@ struct RosterIdentityDetailView: View {
     title: String,
     items: [(String, String, String)]
   ) -> some View {
-    VStack(alignment: .leading, spacing: DesignSystem.Spacing.md) {
-      Text(title)
-        .font(DesignSystem.Typography.title3)
-        .fontWeight(.semibold)
-        .foregroundColor(DesignSystem.Colors.textPrimary)
-
-      // Match GameRulesSection spacing pattern: rows of two with md spacing
-      VStack(spacing: DesignSystem.Spacing.md) {
-        ForEach(Array(chunk(items, size: 2).enumerated()), id: \.offset) { _, row in
-          HStack(spacing: DesignSystem.Spacing.md) {
-            ForEach(0..<2) { index in
-              if index < row.count {
-                statCard(row[index])
-              } else {
-                // Keep spacing/layout consistent when odd count
-                Color.clear
-                  .frame(maxWidth: .infinity)
-                  .frame(height: 0)
-              }
-            }
-          }
-        }
-      }
-    }
+    StatsSection(title: title, items: items, themeColor: themeColor)
   }
 
   private func statCard(_ item: (String, String, String)) -> some View {
-    VStack(spacing: DesignSystem.Spacing.xs) {
-      Image(systemName: item.0)
-        .font(.system(size: 20, weight: .medium))
-        .foregroundStyle(themeColor)
-        .shadow(color: themeColor.opacity(0.3), radius: 3, x: 0, y: 2)
-
-      Text(item.1)
-        .font(DesignSystem.Typography.caption)
-        .fontWeight(.medium)
-        .foregroundStyle(.secondary)
-
-      Text(item.2)
-        .font(.system(size: 16, weight: .semibold))
-        .foregroundStyle(.primary)
-    }
-    .frame(maxWidth: .infinity)
-    .padding(DesignSystem.Spacing.md)
-    .glassEffect(
-      .regular.tint(
-        DesignSystem.Colors.containerFillSecondary.opacity(0.5)
-      ),
-      in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl)
+    RosterStatCard(
+      symbolName: item.0,
+      title: item.1,
+      value: item.2,
+      themeColor: themeColor
     )
   }
 

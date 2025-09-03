@@ -39,25 +39,27 @@ struct RosterHomeView: View {
           ScrollView {
             VStack(spacing: DesignSystem.Spacing.lg) {
               if !manager.players.isEmpty {
-                RosterSectionView(
-                  title: "Players",
-                  items: Array(manager.players)
-                ) { player in
-                  let identity: RosterIdentityCard.Identity = .player(
-                    player,
-                    teamCount: teamCount(for: player)
-                  )
-                  IdentityNavigationRow(identity: identity)
+                SectionContainer(title: "Players") {
+                  VStack(spacing: DesignSystem.Spacing.lg) {
+                    ForEach(manager.players, id: \.id) { player in
+                      let identity: RosterIdentityCard.Identity = .player(
+                        player,
+                        teamCount: teamCount(for: player)
+                      )
+                      IdentityNavigationRow(identity: identity)
+                    }
+                  }
                 }
               }
 
               if !manager.teams.isEmpty {
-                RosterSectionView(
-                  title: "Teams",
-                  items: Array(manager.teams)
-                ) { team in
-                  let identity: RosterIdentityCard.Identity = .team(team)
-                  IdentityNavigationRow(identity: identity)
+                SectionContainer(title: "Teams") {
+                  VStack(spacing: DesignSystem.Spacing.lg) {
+                    ForEach(manager.teams, id: \.id) { team in
+                      let identity: RosterIdentityCard.Identity = .team(team)
+                      IdentityNavigationRow(identity: identity)
+                    }
+                  }
                 }
               }
             }
@@ -328,13 +330,13 @@ private struct PlayerDetailView: View {
             .foregroundStyle(DesignSystem.Colors.textPrimary)
 
           HStack {
-            StatCard(title: "Games Played", value: "0")
-            StatCard(title: "Win Rate", value: "0%")
+            SimpleStatCard(title: "Games Played", value: "0")
+            SimpleStatCard(title: "Win Rate", value: "0%")
           }
 
           HStack {
-            StatCard(title: "Points Scored", value: "0")
-            StatCard(title: "Teams", value: "0")
+            SimpleStatCard(title: "Points Scored", value: "0")
+            SimpleStatCard(title: "Teams", value: "0")
           }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -449,13 +451,13 @@ private struct TeamDetailView: View {
             .foregroundStyle(DesignSystem.Colors.textPrimary)
 
           HStack {
-            StatCard(title: "Games Played", value: "0")
-            StatCard(title: "Win Rate", value: "0%")
+            SimpleStatCard(title: "Games Played", value: "0")
+            SimpleStatCard(title: "Win Rate", value: "0%")
           }
 
           HStack {
-            StatCard(title: "Total Points", value: "0")
-            StatCard(title: "Avg Score", value: "0.0")
+            SimpleStatCard(title: "Total Points", value: "0")
+            SimpleStatCard(title: "Avg Score", value: "0.0")
           }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -467,26 +469,7 @@ private struct TeamDetailView: View {
   }
 }
 
-private struct StatCard: View {
-  let title: String
-  let value: String
-
-  var body: some View {
-    VStack(spacing: DesignSystem.Spacing.xs) {
-      Text(value)
-        .font(DesignSystem.Typography.title2)
-        .foregroundStyle(DesignSystem.Colors.textPrimary)
-
-      Text(title)
-        .font(DesignSystem.Typography.caption)
-        .foregroundStyle(DesignSystem.Colors.textSecondary)
-    }
-    .frame(maxWidth: .infinity)
-    .padding(DesignSystem.Spacing.md)
-    .background(DesignSystem.Colors.neutralSurface)
-    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
-  }
-}
+// SimpleStatCard now shared under UI/Components
 
 #Preview("Empty") {
   let container = try! CorePackage.PreviewGameData.createRosterPreviewContainer(

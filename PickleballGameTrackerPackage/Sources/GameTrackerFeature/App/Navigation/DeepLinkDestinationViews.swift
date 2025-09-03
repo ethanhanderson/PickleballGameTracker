@@ -75,15 +75,16 @@ struct DeepLinkDestinationView: View {
 struct DeepLinkErrorView: View {
   let message: String
   var body: some View {
-    VStack(spacing: 16) {
-      Image(systemName: "link.badge.plus")
-        .font(.system(size: 24, weight: .semibold))
-        .foregroundStyle(.secondary)
-      Text(message)
-        .font(DesignSystem.Typography.body)
-        .foregroundStyle(.primary)
+    SectionContainer(title: "Link Error") {
+      VStack(spacing: 16) {
+        Image(systemName: "link.badge.plus")
+          .font(.system(size: 24, weight: .semibold))
+          .foregroundStyle(.secondary)
+        Text(message)
+          .font(DesignSystem.Typography.body)
+          .foregroundStyle(.primary)
+      }
     }
-    .padding()
   }
 }
 
@@ -91,24 +92,25 @@ struct StatisticsDeepLinkRouter: View {
   let gameId: String?
   let gameTypeId: String?
   var body: some View {
-    VStack(spacing: 12) {
-      Image(systemName: "chart.bar")
-        .font(.system(size: 22, weight: .semibold))
-        .foregroundStyle(.secondary)
-      Text("Statistics will open here with filters applied.")
-        .font(DesignSystem.Typography.body)
-        .foregroundStyle(.primary)
-      if let gameId {
-        Text("gameId: \(gameId)")
-          .font(DesignSystem.Typography.caption)
+    SectionContainer(title: "Statistics") {
+      VStack(spacing: 12) {
+        Image(systemName: "chart.bar")
+          .font(.system(size: 22, weight: .semibold))
           .foregroundStyle(.secondary)
-      }
-      if let gameTypeId {
-        Text("gameType: \(gameTypeId)")
-          .font(DesignSystem.Typography.caption)
-          .foregroundStyle(.secondary)
+        Text("Statistics will open here with filters applied.")
+          .font(DesignSystem.Typography.body)
+          .foregroundStyle(.primary)
+        if let gameId {
+          Text("gameId: \(gameId)")
+            .font(DesignSystem.Typography.caption)
+            .foregroundStyle(.secondary)
+        }
+        if let gameTypeId {
+          Text("gameType: \(gameTypeId)")
+            .font(DesignSystem.Typography.caption)
+            .foregroundStyle(.secondary)
+        }
       }
     }
-    .padding()
   }
 }

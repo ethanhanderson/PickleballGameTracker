@@ -149,7 +149,7 @@ struct GameOptionCard: View {
     .padding(.bottom, bottomPadding)
     .glassEffect(
       .regular.tint(DesignSystem.Colors.gameType(gameType)),
-      in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xxl)
+      in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.cardRounded)
     )
   }
 }

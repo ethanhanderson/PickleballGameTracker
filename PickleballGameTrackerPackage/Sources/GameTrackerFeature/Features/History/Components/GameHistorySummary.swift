@@ -203,14 +203,10 @@ public struct GameHistorySummary: View {
             }
         }
         .padding(.vertical, DesignSystem.Spacing.lg)
-        .glassEffect(
-            .regular.tint(DesignSystem.Colors.containerFillSecondary.opacity(0.2)),
-            in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl)
-        )
     }
 
     private func statItem(_ stat: GameStat) -> some View {
-        VStack(spacing: DesignSystem.Spacing.xs) {
+        VStack(spacing: DesignSystem.Spacing.sm) {
             Image(systemName: stat.icon)
                 .font(.system(size: 20, weight: .medium))
                 .foregroundStyle(DesignSystem.Colors.primary)
@@ -221,18 +217,7 @@ public struct GameHistorySummary: View {
                     y: 2
                 )
 
-            Text(stat.title)
-                .font(DesignSystem.Typography.caption)
-                .fontWeight(.semibold)
-                .foregroundColor(DesignSystem.Colors.textSecondary)
-
-            Text(stat.value)
-                .font(DesignSystem.Typography.headline)
-                .fontWeight(.bold)
-                .fontDesign(.rounded)
-                .foregroundColor(DesignSystem.Colors.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            SimpleStatCard(title: stat.title, value: stat.value)
         }
         .frame(maxWidth: .infinity)
     }
