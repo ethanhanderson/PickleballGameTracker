@@ -38,7 +38,7 @@ public struct GameHistoryCard: View {
         rightSideContent
         Image(systemName: "chevron.right")
           .font(.system(size: 16, weight: .semibold))
-          .foregroundColor(.white.opacity(0.6))
+          .foregroundColor(DesignSystem.Colors.textOnColorMuted)
           .shadow(color: .black.opacity(0.08), radius: 2, x: 0, y: 1)
           .padding(.leading, DesignSystem.Spacing.sm)
       }
@@ -66,13 +66,13 @@ public struct GameHistoryCard: View {
         Text(game.gameType.displayName)
           .font(DesignSystem.Typography.headline)
           .fontWeight(.bold)
-          .foregroundColor(.white)
+          .foregroundColor(DesignSystem.Colors.textOnColor)
           .lineLimit(1)
 
         Text(compactFormattedDate)
           .font(DesignSystem.Typography.caption)
           .fontWeight(.medium)
-          .foregroundColor(.white.opacity(0.85))
+          .foregroundColor(DesignSystem.Colors.textOnColorMuted)
           .lineLimit(1)
       }
     }
@@ -81,7 +81,7 @@ public struct GameHistoryCard: View {
   private var gameIcon: some View {
     Image(systemName: game.gameType.iconName)
       .font(.system(size: 24, weight: .medium))
-      .foregroundStyle(.white.gradient)
+      .foregroundStyle(DesignSystem.Colors.textOnColor)
       .shadow(color: .black.opacity(0.20), radius: 3, x: 0, y: 1)
       .frame(width: 32, height: 32)
   }
@@ -151,7 +151,7 @@ public struct GameHistoryCard: View {
       .font(DesignSystem.Typography.title1)
       .fontWeight(.bold)
       .fontDesign(.rounded)
-      .foregroundColor(isWinning ? .white : .white.opacity(0.7))
+      .foregroundColor(isWinning ? DesignSystem.Colors.textOnColor : DesignSystem.Colors.textOnColorMuted)
       .monospacedDigit()
       .shadow(color: .black.opacity(0.15), radius: 2, x: 0, y: 1)
       .frame(width: 45, alignment: .center)
@@ -184,14 +184,14 @@ public struct GameHistoryCard: View {
     HStack(spacing: DesignSystem.Spacing.xs) {
       Image(systemName: icon)
         .font(.system(size: 14, weight: .medium))
-        .foregroundColor(.white.opacity(0.8))
+        .foregroundColor(DesignSystem.Colors.textOnColorMuted)
         .frame(width: 16)
 
       Text(value)
         .font(DesignSystem.Typography.subheadline)
         .fontWeight(.semibold)
         .fontDesign(.rounded)
-        .foregroundColor(.white)
+        .foregroundColor(DesignSystem.Colors.textOnColor)
         .lineLimit(1)
     }
   }

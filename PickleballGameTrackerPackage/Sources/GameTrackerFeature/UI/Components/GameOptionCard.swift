@@ -80,7 +80,7 @@ struct GameOptionCard: View {
           HStack(alignment: .center, spacing: DesignSystem.Spacing.md) {
             Image(systemName: gameType.iconName)
               .font(.system(size: iconLargeSize, weight: .medium))
-              .foregroundStyle(.white.gradient)
+              .foregroundStyle(DesignSystem.Colors.textOnColor)
               .shadow(
                 color: .black.opacity(0.20),
                 radius: 3,
@@ -92,14 +92,14 @@ struct GameOptionCard: View {
             Text(gameType.displayName)
               .font(DesignSystem.Typography.headline)
               .fontWeight(.bold)
-              .foregroundColor(.white)
+              .foregroundColor(DesignSystem.Colors.textOnColor)
               .multilineTextAlignment(.leading)
               .frame(maxWidth: .infinity, alignment: .leading)
           }
 
           Text(gameType.description)
             .font(DesignSystem.Typography.subheadline)
-            .foregroundColor(.white.opacity(0.9))
+            .foregroundColor(DesignSystem.Colors.textOnColorMuted)
             .multilineTextAlignment(.leading)
             .lineLimit(2)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -107,7 +107,7 @@ struct GameOptionCard: View {
 
         Image(systemName: "chevron.right")
           .font(.system(size: iconSmallSize, weight: .semibold))
-          .foregroundColor(.white.opacity(isInteractive ? 0.6 : 0.3))
+          .foregroundColor(DesignSystem.Colors.textOnColorMuted.opacity(isInteractive ? 0.75 : 0.4))
       }
       .padding(.bottom, headerBottomPadding)
 
@@ -164,19 +164,19 @@ private struct MetricColumn: View {
     VStack(spacing: DesignSystem.Spacing.xs) {
       Image(systemName: icon)
         .font(.system(size: iconSize, weight: .medium))
-        .foregroundColor(.white.opacity(0.8))
+        .foregroundColor(DesignSystem.Colors.textOnColorMuted)
         .shadow(color: .black.opacity(0.08), radius: 2, x: 0, y: 1)
 
       Text(label)
         .font(DesignSystem.Typography.caption)
         .fontWeight(.semibold)
-        .foregroundColor(.white.opacity(0.7))
+        .foregroundColor(DesignSystem.Colors.textOnColorMuted)
 
       Text(value)
         .font(DesignSystem.Typography.headline)
         .fontWeight(.bold)
         .fontDesign(.rounded)
-        .foregroundColor(.white)
+        .foregroundColor(DesignSystem.Colors.textOnColor)
         .monospacedDigit()
     }
     .frame(maxWidth: .infinity)
