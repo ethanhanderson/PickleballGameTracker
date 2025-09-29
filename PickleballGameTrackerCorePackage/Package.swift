@@ -4,32 +4,21 @@
 import PackageDescription
 
 let package = Package(
-  name: "CorePackage",
+  name: "GameTrackerCore",
   platforms: [
     .iOS(.v26),
     .watchOS(.v26)
   ],
   products: [
     .library(
-      name: "CorePackage",
-      targets: ["CorePackage"]
-    )
+      name: "GameTrackerCore",
+      targets: ["GameTrackerCore"]
+    ),
   ],
   targets: [
     .target(
-      name: "CorePackage",
-      path: "Sources/Core",
-      resources: [
-        .process("Assets.xcassets")
-      ],
-      swiftSettings: [
-        .enableUpcomingFeature("ExistentialAny"),
-        .enableUpcomingFeature("StrictConcurrency")
-      ]
-    ),
-    .testTarget(
-      name: "CorePackageTests",
-      dependencies: ["CorePackage"]
+      name: "GameTrackerCore",
+      path: "Sources/GameTrackerCore"
     ),
   ]
 )

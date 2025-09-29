@@ -1,10 +1,11 @@
-import CorePackage
+import GameTrackerCore
 import SwiftData
 import SwiftUI
 
 @MainActor
 struct TimerCard: View {
   @Bindable var game: Game
+  @Environment(LiveGameStateManager.self) private var activeGameStateManager
   let formattedElapsedTime: String
   let isTimerPaused: Bool
   let isGameActive: Bool
@@ -16,11 +17,15 @@ struct TimerCard: View {
   let onResetTimer: () -> Void
   let onToggleTimer: () -> Void
 
+  private var gameTypeColor: Color {
+    activeGameStateManager.currentGameTypeColor ?? Color.accentColor
+  }
+
   private var timerIconColor: Color {
-    isTimerPaused ? DesignSystem.Colors.paused : DesignSystem.Colors.gameType(game.gameType)
+    isTimerPaused ? .gray : gameTypeColor
   }
   private var timerBackgroundColor: Color {
-    isTimerPaused ? DesignSystem.Colors.paused : DesignSystem.Colors.gameType(game.gameType)
+    isTimerPaused ? .gray : gameTypeColor
   }
 
   private var shouldShowControls: Bool {
@@ -70,7 +75,7 @@ struct TimerCard: View {
         HStack(spacing: DesignSystem.Spacing.sm) {
           Image(systemName: "timer")
             .font(.system(size: 20, weight: .semibold))
-            .foregroundStyle(DesignSystem.Colors.paused.gradient)
+            .foregroundStyle(Color.gray.gradient)
             .opacity(0.7)
           Text(formattedElapsedTime)
             .font(.system(.title2, design: .monospaced))
@@ -101,11 +106,10 @@ struct TimerCard: View {
     .glassEffect(.regular.tint(timerBackgroundColor.opacity(0.35)), in: Capsule())
     .opacity(pulseAnimation ? 0.6 : 1.0)
     .animation(.easeInOut(duration: 0.3), value: pulseAnimation)
-    .padding(.horizontal, DesignSystem.Spacing.lg)
   }
 }
 
-#Preview {
+#Preview("Live Game Timer") {
   TimerCard(
     game: PreviewGameData.earlyGame,
     formattedElapsedTime: "02:05.67",
@@ -120,7 +124,25 @@ struct TimerCard: View {
     onToggleTimer: {}
   )
   .padding()
-  .modelContainer(try! PreviewGameData.createPreviewContainer(with: [PreviewGameData.earlyGame]))
+  .minimalPreview(environment: PreviewEnvironment.componentWithGame())
+}
+
+#Preview("Basic Timer") {
+  TimerCard(
+    game: PreviewGameData.earlyGame,
+    formattedElapsedTime: "02:05.67",
+    isTimerPaused: false,
+    isGameActive: true,
+    isResetting: false,
+    isToggling: false,
+    pulseAnimation: false,
+    resetTrigger: false,
+    playPauseTrigger: false,
+    onResetTimer: {},
+    onToggleTimer: {}
+  )
+  .padding()
+  .minimalPreview(environment: PreviewEnvironment.component())
 }
 
 #Preview("Timer Paused") {
@@ -138,7 +160,7 @@ struct TimerCard: View {
     onToggleTimer: {}
   )
   .padding()
-  .modelContainer(try! PreviewGameData.createPreviewContainer(with: [PreviewGameData.trainingGame]))
+  .minimalPreview(environment: PreviewEnvironment.component())
 }
 
 #Preview("Game Paused") {
@@ -156,7 +178,7 @@ struct TimerCard: View {
     onToggleTimer: {}
   )
   .padding()
-  .modelContainer(try! PreviewGameData.createPreviewContainer(with: [PreviewGameData.pausedGame]))
+  .minimalPreview(environment: PreviewEnvironment.component())
 }
 
 #Preview("Game Completed") {
@@ -174,5 +196,5 @@ struct TimerCard: View {
     onToggleTimer: {}
   )
   .padding()
-  .modelContainer(try! PreviewGameData.createPreviewContainer(with: [PreviewGameData.completedGame]))
+  .minimalPreview(environment: PreviewEnvironment.component())
 }

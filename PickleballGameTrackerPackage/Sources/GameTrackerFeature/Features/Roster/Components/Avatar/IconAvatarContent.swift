@@ -1,10 +1,10 @@
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
 @MainActor
 struct IconAvatarContent: View {
   @Binding var selectedIconName: String
-  @Binding var selectedIconColor: DesignSystem.AppleSystemColor
+  @Binding var selectedIconColor: Color
   let iconOptions: [String]
 
   var body: some View {
@@ -13,14 +13,14 @@ struct IconAvatarContent: View {
         if !selectedIconName.isEmpty {
           Image(systemName: selectedIconName)
             .font(.system(size: 44, weight: .semibold))
-            .foregroundStyle(selectedIconColor.color)
-            .shadow(color: selectedIconColor.color.opacity(0.6), radius: 3)
+            .foregroundStyle(selectedIconColor)
+            .shadow(color: selectedIconColor.opacity(0.6), radius: 3)
             .transition(.opacity)
         } else {
           Image(systemName: "person.fill")
             .font(.system(size: 44, weight: .semibold))
-            .foregroundStyle(DesignSystem.Colors.primary.gradient)
-            .shadow(color: DesignSystem.Colors.primary.opacity(0.6), radius: 3)
+            .foregroundStyle(Color.accentColor.gradient)
+            .shadow(color: .accentColor.opacity(0.6), radius: 3)
             .transition(.opacity)
         }
       }
@@ -31,8 +31,8 @@ struct IconAvatarContent: View {
         Circle()
           .fill(
             selectedIconName.isEmpty
-              ? DesignSystem.Colors.primary.opacity(0.15).gradient
-              : selectedIconColor.color.opacity(0.15).gradient
+              ? Color.accentColor.opacity(0.15)
+              : selectedIconColor.opacity(0.15)
           )
           .transition(.opacity)
           .animation(.easeInOut(duration: 0.15), value: selectedIconColor)
@@ -41,9 +41,9 @@ struct IconAvatarContent: View {
 
       VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
         Text("Icon")
-          .font(DesignSystem.Typography.body)
+          .font(.body)
           .fontWeight(.semibold)
-          .foregroundStyle(DesignSystem.Colors.textPrimary)
+          .foregroundStyle(.primary)
 
         ScrollView(.horizontal, showsIndicators: false) {
           HStack(spacing: DesignSystem.Spacing.md) {
@@ -52,8 +52,8 @@ struct IconAvatarContent: View {
                 Circle()
                   .fill(
                     selectedIconName == iconName
-                      ? selectedIconColor.color.opacity(0.2)
-                      : DesignSystem.Colors.surfaceSecondary.opacity(0.3)
+                      ? selectedIconColor.opacity(0.2)
+                      : Color.gray.opacity(0.3)
                   )
                   .frame(width: 46, height: 46)
 
@@ -63,8 +63,8 @@ struct IconAvatarContent: View {
                   .frame(width: 22, height: 22)
                   .foregroundStyle(
                     selectedIconName == iconName
-                      ? selectedIconColor.color
-                      : DesignSystem.Colors.textSecondary
+                      ? selectedIconColor
+                      : .secondary
                   )
               }
               .overlay(
@@ -75,7 +75,7 @@ struct IconAvatarContent: View {
                     .overlay(
                       Image(systemName: "checkmark")
                         .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(selectedIconColor.color.opacity(0.8))
+                        .foregroundStyle(selectedIconColor.opacity(0.8))
                     )
                     .transition(.scale.combined(with: .opacity))
                     .animation(.easeInOut(duration: 0.12), value: selectedIconName)
@@ -89,41 +89,6 @@ struct IconAvatarContent: View {
         }
       }
 
-      VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
-        Text("Color")
-          .font(DesignSystem.Typography.body)
-          .fontWeight(.semibold)
-          .foregroundStyle(DesignSystem.Colors.textPrimary)
-
-        ScrollView(.horizontal, showsIndicators: false) {
-          HStack(spacing: DesignSystem.Spacing.md) {
-            ForEach(DesignSystem.AppleSystemColor.allCases, id: \.self) { color in
-              ZStack {
-                Circle()
-                  .fill(color.color)
-                  .frame(width: 46, height: 46)
-                  .overlay(
-                    selectedIconColor == color
-                      ? Circle()
-                        .fill(.ultraThinMaterial)
-                        .frame(width: 46, height: 46)
-                        .overlay(
-                          Image(systemName: "checkmark")
-                            .font(.system(size: 22, weight: .bold))
-                            .foregroundStyle(selectedIconColor.color.opacity(0.8))
-                        )
-                        .transition(.scale.combined(with: .opacity))
-                        .animation(.easeInOut(duration: 0.12), value: selectedIconColor)
-                      : nil
-                  )
-              }
-              .onTapGesture { selectedIconColor = color }
-              .accessibilityLabel("Select \(color.displayName) color")
-              .accessibilityAddTraits(selectedIconColor == color ? .isSelected : [])
-            }
-          }
-        }
-      }
     }
   }
 }

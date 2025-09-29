@@ -32,3 +32,45 @@ alwaysApply: true
 - Every PR description links to the relevant wiki page(s).
 - New features or systems include an index entry in Features or Systems.
 - Architecture changes update the overview map if affected.
+
+## Wiki Documentation Templates Policy
+
+All documentation pages in `PickleballGameTracker.wiki` must be created from the canonical templates and follow the structure defined there. This ensures consistency, maintainability, and alignment with the Documentation Governance.
+
+### Templates
+
+- Architecture: [architecture-page.md](mdc:PickleballGameTracker.wiki/templates/architecture-page.md)
+- Feature or System: [feature-or-system-page.md](mdc:PickleballGameTracker.wiki/templates/feature-or-system-page.md)
+- Swift Package: [swift-package-page.md](mdc:PickleballGameTracker.wiki/templates/swift-package-page.md)
+- Technical Detail: [technical-detail-page.md](mdc:PickleballGameTracker.wiki/templates/technical-detail-page.md)
+- Model Definition: [model-definition-page.md](mdc:PickleballGameTracker.wiki/templates/model-definition-page.md)
+- Usage guide: [README.md](mdc:PickleballGameTracker.wiki/templates/README.md)
+
+### How to create or update a page
+
+1. Copy the appropriate template from `PickleballGameTracker.wiki/templates/`.
+2. Fill out the metadata block near the top:
+   - Document name
+   - Category (architecture | feature | system | package | model)
+   - Area (cross-cutting, data, runtime, ux, etc.)
+   - Audience & Owners
+   - Last updated (YYYY-MM-DD)
+   - Status (draft | active | deprecated)
+   - Version (e.g., v0.3, v0.6, v1.0)
+3. Complete all required sections in the template.
+4. Fill the Version Differences table and per-version subsections at minimum for v0.3, v0.6, v1.0.
+5. Link the new page from the appropriate index pages:
+   - Architecture index: [Architecture.md](mdc:PickleballGameTracker.wiki/Architecture.md)
+   - Features index: [Features.md](mdc:PickleballGameTracker.wiki/Features.md)
+   - Systems index: [Systems.md](mdc:PickleballGameTracker.wiki/systems/README.md)
+6. Cross-link relevant model pages under `systems/data/` when referencing data contracts.
+
+### Acceptance checklist (must be satisfied in PRs)
+
+- The page was copied from the correct template and follows its structure
+- Metadata block is complete and accurate
+- Version Differences table and v0.3/v0.6/v1.0 subsections are completed
+- Responsibilities, boundaries, and non-goals are explicit
+- References include relevant code files/types and related docs
+- Page is linked from the correct index page(s)
+- Content focuses on what the code should be and how to organize it; avoids step-by-step coding instructions

@@ -153,6 +153,97 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
     return game
   }
 
+  /// Start a new game using a standardized configuration contract
+  public func startNewGame(with config: GameStartConfiguration) async throws -> Game {
+    guard let gm = _gameManager else { throw GameError.noActiveGame }
+
+    // Validate invariants
+    try validateStartConfiguration(config)
+
+    // Derive or validate variation
+    let variation: GameVariation
+    if let provided = config.variation {
+      // Ensure provided variation matches the requested type/team size
+      guard provided.gameType == config.gameType else {
+        throw GameVariationError.invalidConfiguration("Variation gameType mismatch")
+      }
+      guard provided.teamSize == config.teamSize.playersPerSide else {
+        throw GameVariationError.invalidTeamSize(provided.teamSize)
+      }
+      variation = provided
+    } else {
+      // Create a minimal validated variation from the game type and team size
+      let displayName: String
+      switch (config.participants.side1, config.participants.side2) {
+      case (.players(let a), .players(let b)):
+        let aName = a.first.map { _ in "Side A" } ?? "Side A"
+        let bName = b.first.map { _ in "Side B" } ?? "Side B"
+        displayName = "\(aName) vs \(bName)"
+      case (.team, .team):
+        displayName = "Teams Match"
+      default:
+        displayName = "\(config.gameType.displayName) Game"
+      }
+
+      variation = try GameVariation.createValidated(
+        name: displayName,
+        gameType: config.gameType,
+        teamSize: config.teamSize.playersPerSide,
+        winningScore: config.gameType.defaultWinningScore,
+        winByTwo: config.gameType.defaultWinByTwo,
+        kitchenRule: config.gameType.defaultKitchenRule,
+        doubleBounceRule: config.gameType.defaultDoubleBounceRule,
+        servingRotation: .standard,
+        sideSwitchingRule: config.gameType.defaultSideSwitchingRule,
+        isCustom: true
+      )
+    }
+
+    // Build a MatchupSelection from participants
+    let matchup: MatchupSelection
+    switch (config.participants.side1, config.participants.side2) {
+    case (.players(let a), .players(let b)):
+      matchup = MatchupSelection(teamSize: config.teamSize.playersPerSide, mode: .players(sideA: a, sideB: b))
+    case (.team(let t1), .team(let t2)):
+      matchup = MatchupSelection(teamSize: config.teamSize.playersPerSide, mode: .teams(team1Id: t1, team2Id: t2))
+    default:
+      throw GameVariationError.invalidConfiguration("Participants shape does not match team size")
+    }
+
+    // Persist via manager; set as current
+    let game = try await gm.createGame(variation: variation, matchup: matchup)
+    game.notes = config.notes
+    setCurrentGame(game)
+    return game
+  }
+
+  private func validateStartConfiguration(_ config: GameStartConfiguration) throws(GameVariationError) {
+    // Ensure team size supported by game type bounds
+    let minSize = config.gameType.minTeamSize
+    let maxSize = config.gameType.maxTeamSize
+    let size = config.teamSize.playersPerSide
+    guard size >= minSize && size <= maxSize else {
+      throw GameVariationError.invalidTeamSize(size)
+    }
+
+    switch (config.participants.side1, config.participants.side2, config.teamSize) {
+    case (.players(let a), .players(let b), .singles):
+      guard a.count == 1 && b.count == 1 else {
+        throw GameVariationError.invalidConfiguration("Singles requires exactly one player per side")
+      }
+    case (.team, .team, .doubles):
+      // Team entities represent multiples; allow any team size permitted by type
+      break
+    case (.players(let a), .players(let b), .doubles):
+      // Allow specifying two players per side as ad-hoc doubles
+      guard a.count == 2 && b.count == 2 else {
+        throw GameVariationError.invalidConfiguration("Doubles requires exactly two players per side when using players mode")
+      }
+    default:
+      throw GameVariationError.invalidConfiguration("Participants must both be players or both teams and match team size")
+    }
+  }
+
   public func toggleGameState() async throws {
     guard let game = currentGame, let gm = _gameManager else { throw GameError.noActiveGame }
     switch game.gameState {

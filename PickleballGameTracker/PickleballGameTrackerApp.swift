@@ -1,4 +1,4 @@
-import CorePackage
+import GameTrackerCore
 import GameTrackerFeature
 import SwiftData
 import SwiftUI
@@ -14,7 +14,7 @@ struct PickleballGameTrackerApp: App {
     WindowGroup {
       AppNavigationView()
         .modelContainer(SwiftDataContainer.shared.modelContainer)
-        .environment(ActiveGameStateManager.shared)
+        .environment(LiveGameStateManager.production())
     }
   }
 }

@@ -1,4 +1,4 @@
-import CorePackage
+import GameTrackerCore
 import SwiftData
 import SwiftUI
 
@@ -12,28 +12,14 @@ struct ServeWinDetailView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 16) {
         Text("Serve Win %")
-          .font(DesignSystem.Typography.largeTitle)
+          .font(.largeTitle)
 
-        // KPI
-        HStack {
-          Text("Overall")
-            .font(DesignSystem.Typography.body)
-            .foregroundStyle(DesignSystem.Colors.textSecondary)
-          Spacer()
-          Text(overallText)
-            .font(DesignSystem.Typography.title2)
-            .foregroundStyle(DesignSystem.Colors.textPrimary)
-        }
-        .padding(DesignSystem.Spacing.cardPadding)
-        .background(
-          RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.cardRounded, style: .continuous)
-            .fill(DesignSystem.Colors.containerFillSecondary)
-        )
+        KPIRow(title: "Overall", value: overallText)
         StatChartPlaceholder(title: "Serve win % over time")
         StatFilterSummary(filters: filters)
       }
       .padding()
-      .task { await compute() }
+      .task(id: filters) { await compute() }
     }
     .navigationTitle("Serve Win %")
     .navigationBarTitleDisplayMode(.inline)
@@ -53,9 +39,16 @@ struct ServeWinDetailView: View {
   }
 }
 
-#Preview("With Data") {
+#Preview("With Live Game Data") {
   NavigationStack {
     ServeWinDetailView(filters: .init(gameId: nil, gameTypeId: GameType.recreational.rawValue))
   }
-  .modelContainer(try! PreviewGameData.createFullPreviewContainer())
+  .minimalPreview(environment: PreviewEnvironment.componentWithGame())
+}
+
+#Preview("With Basic Data") {
+  NavigationStack {
+    ServeWinDetailView(filters: .init(gameId: nil, gameTypeId: GameType.recreational.rawValue))
+  }
+  .minimalPreview(environment: PreviewEnvironment.component())
 }

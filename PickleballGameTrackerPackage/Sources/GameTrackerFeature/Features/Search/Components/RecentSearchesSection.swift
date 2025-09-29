@@ -1,7 +1,7 @@
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
-struct RecentSearchesSection: View {
+struct RecentlyViewedGameTypesSection: View {
   let recentSearches: [GameType]
   let onGameTypeTapped: (GameType) -> Void
   let onDeleteFromHistory: (GameType) -> Void
@@ -9,9 +9,9 @@ struct RecentSearchesSection: View {
   var body: some View {
     VStack(alignment: .leading, spacing: DesignSystem.Spacing.md) {
       Text("Recently Viewed Games")
-        .font(DesignSystem.Typography.headline)
+        .font(.headline)
         .fontWeight(.semibold)
-        .foregroundColor(DesignSystem.Colors.textPrimary)
+        .foregroundStyle(.primary)
         .frame(maxWidth: .infinity, alignment: .leading)
 
       List {
@@ -19,7 +19,7 @@ struct RecentSearchesSection: View {
           Button {
             onGameTypeTapped(gameType)
           } label: {
-            GameOptionCard(
+            GameTypeCard(
               gameType: gameType,
               isEnabled: true,
               fillsWidth: true
@@ -27,7 +27,7 @@ struct RecentSearchesSection: View {
           }
           .buttonStyle(.plain)
           .listRowSeparator(.hidden)
-          .listRowBackground(DesignSystem.Colors.clear)
+          .listRowBackground(Color.clear)
           .listRowInsets(
             EdgeInsets(top: 0, leading: 0, bottom: DesignSystem.Spacing.md, trailing: 0)
           )
@@ -49,8 +49,8 @@ struct RecentSearchesSection: View {
 }
 
 #Preview("Recent Searches Section") {
-  RecentSearchesSection(
-    recentSearches: [.training, .recreational, .tournament],
+  RecentlyViewedGameTypesSection(
+    recentSearches: PreviewGameData.sampleGameTypes,
     onGameTypeTapped: { _ in },
     onDeleteFromHistory: { _ in }
   )

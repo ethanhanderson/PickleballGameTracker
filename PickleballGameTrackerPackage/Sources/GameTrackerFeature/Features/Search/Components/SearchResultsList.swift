@@ -1,7 +1,7 @@
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
-struct SearchResultsList: View {
+struct GameTypeResultsList: View {
   let filteredGameTypes: [GameType]
   let onGameTypeTapped: (GameType) -> Void
   let onAddToHistory: (GameType) -> Void
@@ -10,7 +10,7 @@ struct SearchResultsList: View {
   var body: some View {
     ForEach(filteredGameTypes, id: \.self) { gameType in
       NavigationLink(value: GameSectionDestination.gameDetail(gameType)) {
-        GameOptionCard(
+        GameTypeCard(
           gameType: gameType,
           isEnabled: true,
           fillsWidth: true
@@ -27,8 +27,8 @@ struct SearchResultsList: View {
 }
 
 #Preview("Search Results List") {
-  SearchResultsList(
-    filteredGameTypes: [.training, .recreational, .tournament],
+  return GameTypeResultsList(
+    filteredGameTypes: PreviewGameData.sampleGameTypes,
     onGameTypeTapped: { _ in },
     onAddToHistory: { _ in },
     navigationState: AppNavigationState()

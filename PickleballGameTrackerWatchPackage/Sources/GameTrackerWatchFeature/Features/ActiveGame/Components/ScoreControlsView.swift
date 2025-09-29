@@ -1,10 +1,10 @@
-import CorePackage
+import GameTrackerCore
 import SwiftData
 import SwiftUI
 
 struct ScoreControlsView: View {
   @Bindable var game: Game
-  let activeGameStateManager: ActiveGameStateManager
+  let activeGameStateManager: LiveGameStateManager
   let onScorePoint: (Int) -> Void
   let onDecrementScore: (Int) -> Void
   let onToggleTimer: () -> Void
@@ -29,7 +29,7 @@ struct ScoreControlsView: View {
           teamNumber: 1,
           teamName: game.effectivePlayerLabel1,
           score: game.score1,
-          color: DesignSystem.Colors.scorePlayer1,
+          color: .blue,
           isServing: game.currentServer == 1 && !game.isCompleted
         )
 
@@ -37,7 +37,7 @@ struct ScoreControlsView: View {
           teamNumber: 2,
           teamName: game.effectivePlayerLabel2,
           score: game.score2,
-          color: DesignSystem.Colors.scorePlayer2,
+          color: .orange,
           isServing: game.currentServer == 2 && !game.isCompleted
         )
       }
@@ -70,8 +70,8 @@ struct ScoreControlsView: View {
         }) {
           Image(systemName: "arrow.counterclockwise")
             .font(.system(size: 12, weight: .semibold))
-            .foregroundColor(
-              isTimerPaused ? .gray : DesignSystem.Colors.primary
+            .foregroundStyle(
+              isTimerPaused ? .gray : Color.accentColor
             )
             .symbolEffect(.rotate, value: resetTrigger)
         }
@@ -89,9 +89,9 @@ struct ScoreControlsView: View {
           HStack(spacing: 4) {
             Image(systemName: "timer")
               .font(.system(size: 12, weight: .semibold))
-              .foregroundColor(
+              .foregroundStyle(
                 isTimerPaused
-                  ? .gray : DesignSystem.Colors.primary
+                  ? .gray : Color.accentColor
               )
 
             Text(
@@ -105,7 +105,7 @@ struct ScoreControlsView: View {
                 design: .monospaced
               )
             )
-            .foregroundColor(DesignSystem.Colors.textPrimary)
+            .foregroundStyle(.white)
           }
         }
         .buttonStyle(.plain)
@@ -114,7 +114,7 @@ struct ScoreControlsView: View {
         HStack(spacing: 4) {
           Image(systemName: "timer")
             .font(.system(size: 12, weight: .semibold))
-            .foregroundColor(.gray)
+            .foregroundStyle(.gray)
 
           Text(
             activeGameStateManager
@@ -127,7 +127,7 @@ struct ScoreControlsView: View {
               design: .monospaced
             )
           )
-          .foregroundColor(DesignSystem.Colors.textSecondary)
+          .foregroundStyle(.gray)
         }
       }
 
@@ -141,8 +141,8 @@ struct ScoreControlsView: View {
             systemName: isTimerPaused ? "play.fill" : "pause.fill"
           )
           .font(.system(size: 12, weight: .semibold))
-          .foregroundColor(
-            isTimerPaused ? .gray : DesignSystem.Colors.primary
+          .foregroundStyle(
+            isTimerPaused ? .gray : Color.accentColor
           )
           .symbolEffect(.bounce, value: playPauseTrigger)
         }
@@ -186,7 +186,7 @@ struct ScoreControlsView: View {
             .font(
               .system(size: 36, weight: .bold, design: .rounded)
             )
-            .foregroundColor(color)
+            .foregroundStyle(color)
             .monospacedDigit()
             .contentTransition(.numericText())
 
@@ -194,7 +194,7 @@ struct ScoreControlsView: View {
             Text("Tap")
               .font(.caption2)
               .fontWeight(.semibold)
-              .foregroundColor(.secondary.opacity(0.6))
+              .foregroundStyle(.secondary.opacity(0.6))
               .transition(.opacity)
           }
         }

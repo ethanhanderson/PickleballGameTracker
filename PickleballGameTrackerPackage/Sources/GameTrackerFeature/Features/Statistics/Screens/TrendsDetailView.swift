@@ -1,4 +1,5 @@
-import CorePackage
+import GameTrackerCore
+import SwiftData
 import SwiftUI
 
 @MainActor
@@ -14,7 +15,7 @@ struct TrendsDetailView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 16) {
         Text("Trends")
-          .font(DesignSystem.Typography.largeTitle)
+          .font(.largeTitle)
         StatChartPlaceholder(title: "7‑day win rate trend", points: trend7)
         StatChartPlaceholder(title: "30‑day win rate trend", points: trend30)
         StatChartPlaceholder(title: "7‑day point differential (avg)", points: diff7)
@@ -22,9 +23,7 @@ struct TrendsDetailView: View {
         StatFilterSummary(filters: filters)
       }
       .padding()
-      .task {
-        await compute()
-      }
+      .task(id: filters) { await compute() }
     }
     .navigationTitle("Trends")
     .navigationBarTitleDisplayMode(.inline)
@@ -48,12 +47,18 @@ struct TrendsDetailView: View {
   }
 }
 
-#Preview {
+#Preview("With Live Game Data") {
   NavigationStack {
     TrendsDetailView(filters: .init(gameId: nil, gameTypeId: nil))
   }
+  .minimalPreview(environment: PreviewEnvironment.componentWithGame())
 }
 
-// ChartPlaceholder extracted to `Features/Statistics/Components/StatChartPlaceholder.swift`
+#Preview("With Basic Data") {
+  NavigationStack {
+    TrendsDetailView(filters: .init(gameId: nil, gameTypeId: nil))
+  }
+  .minimalPreview(environment: PreviewEnvironment.component())
+}
 
-// FilterSummary extracted to `Features/Statistics/Components/StatFilterSummary.swift`
+// Components referenced: `StatChartPlaceholder`, `StatFilterSummary`

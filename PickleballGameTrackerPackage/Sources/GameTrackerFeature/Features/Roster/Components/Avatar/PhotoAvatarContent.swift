@@ -1,4 +1,4 @@
-import CorePackage
+import GameTrackerCore
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -20,18 +20,17 @@ struct PhotoAvatarContent: View {
             .frame(width: 96, height: 96)
             .clipShape(Circle())
             .overlay(
-              Circle().stroke(DesignSystem.Colors.surfaceSecondary.opacity(0.3), lineWidth: 2)
+              Circle().stroke(Color.gray.opacity(0.3), lineWidth: 2)
             )
-            .shadow(color: DesignSystem.Colors.primary.opacity(0.3), radius: 4)
             .transition(.opacity)
         } else {
           Circle()
-            .fill(DesignSystem.Colors.surfaceSecondary.opacity(0.3))
+            .fill(Color.gray.opacity(0.3))
             .frame(width: 96, height: 96)
             .overlay(
               Image(systemName: "photo.fill")
                 .font(.system(size: 32, weight: .medium))
-                .foregroundStyle(DesignSystem.Colors.textSecondary.opacity(0.6))
+                .foregroundStyle(.secondary.opacity(0.6))
             )
             .transition(.opacity)
         }
@@ -65,9 +64,9 @@ struct PhotoAvatarContent: View {
         Spacer()
         Image(systemName: "chevron.right")
           .font(.system(size: 14, weight: .semibold))
-          .foregroundStyle(DesignSystem.Colors.textSecondary)
+          .foregroundStyle(.secondary)
       }
-      .foregroundStyle(DesignSystem.Colors.textPrimary)
+      .foregroundStyle(.primary)
     }
     .accessibilityLabel("Select photo for avatar")
     .onChange(of: selectedPhotoItem, initial: false) { _, newItem in
@@ -91,9 +90,9 @@ struct PhotoAvatarContent: View {
         Spacer()
         Image(systemName: "chevron.right")
           .font(.system(size: 14, weight: .semibold))
-          .foregroundStyle(DesignSystem.Colors.textSecondary)
+          .foregroundStyle(.secondary)
       }
-      .foregroundStyle(DesignSystem.Colors.textPrimary)
+      .foregroundStyle(.primary)
     }
     .accessibilityLabel("Take photo with camera")
   }

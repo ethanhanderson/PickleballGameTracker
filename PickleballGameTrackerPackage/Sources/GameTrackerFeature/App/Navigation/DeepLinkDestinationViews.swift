@@ -1,4 +1,4 @@
-import CorePackage
+import GameTrackerCore
 import SwiftData
 import SwiftUI
 
@@ -9,7 +9,7 @@ struct DeepLinkDestinationView: View {
   @Environment(\.modelContext) private var modelContext
   let destination: DeepLinkDestination?
   let gameManager: SwiftDataGameManager
-  let activeGameStateManager: ActiveGameStateManager
+  let activeGameStateManager: LiveGameStateManager
 
   var body: some View {
     switch destination {
@@ -17,12 +17,15 @@ struct DeepLinkDestinationView: View {
       if let gameType = GameType(rawValue: id) {
         GameDetailView(
           gameType: gameType,
-          onStartGame: { variation in
+          onStartGame: { variation, matchup in
             Task { @MainActor in
               do {
-                let newGame = try await gameManager.createGame(
-                  variation: variation
-                )
+                let newGame: Game
+                if case .players(let a, let b) = matchup.mode, a.isEmpty && b.isEmpty {
+                  newGame = try await gameManager.createGame(variation: variation)
+                } else {
+                  newGame = try await gameManager.createGame(variation: variation, matchup: matchup)
+                }
                 activeGameStateManager.setCurrentGame(newGame)
                 Log.event(
                   .viewAppear,
@@ -81,7 +84,7 @@ struct DeepLinkErrorView: View {
           .font(.system(size: 24, weight: .semibold))
           .foregroundStyle(.secondary)
         Text(message)
-          .font(DesignSystem.Typography.body)
+          .font(.body)
           .foregroundStyle(.primary)
       }
     }
@@ -98,16 +101,16 @@ struct StatisticsDeepLinkRouter: View {
           .font(.system(size: 22, weight: .semibold))
           .foregroundStyle(.secondary)
         Text("Statistics will open here with filters applied.")
-          .font(DesignSystem.Typography.body)
+          .font(.body)
           .foregroundStyle(.primary)
         if let gameId {
           Text("gameId: \(gameId)")
-            .font(DesignSystem.Typography.caption)
+            .font(.caption)
             .foregroundStyle(.secondary)
         }
         if let gameTypeId {
           Text("gameType: \(gameTypeId)")
-            .font(DesignSystem.Typography.caption)
+            .font(.caption)
             .foregroundStyle(.secondary)
         }
       }

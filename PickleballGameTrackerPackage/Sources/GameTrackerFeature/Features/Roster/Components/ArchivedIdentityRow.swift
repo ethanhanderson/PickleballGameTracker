@@ -1,24 +1,22 @@
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
 @MainActor
 struct ArchivedIdentityRow: View {
-  let identity: RosterIdentityCard.Identity
+  let identity: IdentityCard.Identity
   let manager: PlayerTeamManager
 
   var body: some View {
     NavigationLink {
-      RosterIdentityDetailView(
+      IdentityDetailView(
         identity: identity,
         manager: manager
       )
     } label: {
-      RosterIdentityCard(identity: identity)
+      IdentityCard(identity: identity)
         .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .accessibilityIdentifier("archive.row.\(identity.id.uuidString)")
   }
 }
-
-

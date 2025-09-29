@@ -1,4 +1,4 @@
-import CorePackage
+import GameTrackerCore
 import SwiftData
 import SwiftUI
 
@@ -10,7 +10,7 @@ struct StreaksDetailView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 16) {
         Text("Streaks")
-          .font(DesignSystem.Typography.largeTitle)
+          .font(.largeTitle)
         KPIRow(title: "Current win streak", value: currentText)
         KPIRow(title: "Longest win streak", value: longestText)
         StatFilterSummary(filters: filters)
@@ -42,11 +42,18 @@ struct StreaksDetailView: View {
   }
 }
 
-#Preview("With Data") {
+#Preview("With Live Game Data") {
   NavigationStack {
     StreaksDetailView(filters: .init(gameId: nil, gameTypeId: GameType.recreational.rawValue))
   }
-  .modelContainer(try! PreviewGameData.createFullPreviewContainer())
+  .minimalPreview(environment: PreviewEnvironment.componentWithGame())
 }
 
-// KPIRow and FilterSummary extracted to shared Statistics components
+#Preview("With Basic Data") {
+  NavigationStack {
+    StreaksDetailView(filters: .init(gameId: nil, gameTypeId: GameType.recreational.rawValue))
+  }
+  .minimalPreview(environment: PreviewEnvironment.component())
+}
+
+// Components referenced: `KPIRow`, `StatFilterSummary`

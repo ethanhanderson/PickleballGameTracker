@@ -1,9 +1,9 @@
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
 @MainActor
 struct ShareIdentityView: View {
-  let identity: RosterIdentityCard.Identity
+  let identity: IdentityCard.Identity
   @Environment(\.dismiss) private var dismiss
 
   var body: some View {
@@ -11,20 +11,20 @@ struct ShareIdentityView: View {
       VStack(spacing: DesignSystem.Spacing.lg) {
         // Identity preview
         VStack(spacing: DesignSystem.Spacing.md) {
-          RosterIdentityCard(identity: identity)
+          IdentityCard(identity: identity)
             .padding(DesignSystem.Spacing.lg)
             .glassEffect(
               .regular.tint(
-                DesignSystem.Colors.containerFillSecondary.opacity(0.2)
+                Color.gray.opacity(0.15).opacity(0.2)
               ),
               in: RoundedRectangle(
-                cornerRadius: DesignSystem.CornerRadius.cardRounded
+                cornerRadius: DesignSystem.CornerRadius.xl
               )
             )
 
           Text("Share \(identity.displayName)")
-            .font(DesignSystem.Typography.title2)
-            .foregroundStyle(DesignSystem.Colors.textPrimary)
+            .font(.title2)
+            .foregroundStyle(.primary)
         }
 
         // Share options
@@ -36,7 +36,7 @@ struct ShareIdentityView: View {
             Label("Share via Messages", systemImage: "message.fill")
           }
           .buttonStyle(.borderedProminent)
-          .tint(DesignSystem.Colors.primary)
+          .tint(.accentColor)
 
           ShareLink(
             item: shareText,

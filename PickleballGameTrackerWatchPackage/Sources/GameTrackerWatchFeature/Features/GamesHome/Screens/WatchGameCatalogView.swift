@@ -1,21 +1,21 @@
+import GameTrackerCore
 //  WatchGameCatalogView.swift
 //  Pickleball Score Tracking Watch App
 //
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import CorePackage
 import SwiftData
 import SwiftUI
 
 public struct WatchGameCatalogView: View {
   @Environment(\.modelContext) private var modelContext
+  @Environment(LiveGameStateManager.self) private var activeGameStateManager
+  @Environment(SwiftDataGameManager.self) private var gameManager
 
   private let gameTypes = GameType.allCases
   @State private var currentGameTypeIndex = 0
-  @State private var gameManager = SwiftDataGameManager()
   @State private var isCreatingGame = false
-  @State private var activeGameStateManager = ActiveGameStateManager.shared
 
   private var currentGameType: GameType {
     gameTypes[currentGameTypeIndex]
@@ -46,7 +46,7 @@ public struct WatchGameCatalogView: View {
             gameType in
             GameTypeCard(gameType: gameType)
               .containerBackground(
-                DesignSystem.Colors.gameType(gameType).gradient,
+                gameType.color.gradient,
                 for: .tabView
               )
               .tag(index)
@@ -62,7 +62,7 @@ public struct WatchGameCatalogView: View {
                 metadata: ["platform": "watchOS"])
             } label: {
               Image(systemName: "chart.bar.fill")
-                .foregroundColor(DesignSystem.Colors.textOnColor)
+                .foregroundStyle(.white)
             }
           }
 
@@ -74,7 +74,7 @@ public struct WatchGameCatalogView: View {
                 metadata: ["platform": "watchOS"])
             } label: {
               Image(systemName: "clock")
-                .foregroundColor(DesignSystem.Colors.textOnColor)
+                .foregroundStyle(.white)
             }
           }
 
@@ -91,12 +91,12 @@ public struct WatchGameCatalogView: View {
               if isCreatingGame {
                 ProgressView()
                   .progressViewStyle(
-                    CircularProgressViewStyle(tint: DesignSystem.Colors.textOnColor)
+                    CircularProgressViewStyle(tint: .white)
                   )
                   .scaleEffect(0.8)
               } else {
                 Image(systemName: "play.fill")
-                  .foregroundColor(DesignSystem.Colors.textOnColor)
+                  .foregroundStyle(.white)
               }
             }
             .controlSize(.large)
@@ -111,12 +111,9 @@ public struct WatchGameCatalogView: View {
           }
         }
       }
-      .navigationTint()
       .task {
         // Configure shared active game manager with SwiftData context and manager
-        if activeGameStateManager.gameManager == nil {
-          activeGameStateManager.configure(with: modelContext, gameManager: gameManager)
-        }
+        if activeGameStateManager.gameManager == nil { activeGameStateManager.configure(gameManager: gameManager) }
         // Ensure device sync is enabled so iPhone sees watch-created games
         activeGameStateManager.setSyncEnabled(true)
       }
@@ -168,9 +165,10 @@ public struct WatchGameCatalogView: View {
 // MARK: - Previews
 
 #Preview("Game Catalog") {
+  let container = PreviewDataSeeder.container()
+  let env = LiveGameStateManager.preview(container: container)
   WatchGameCatalogView()
-    .modelContainer(
-      try! PreviewGameData.createPreviewContainer(with: [
-        PreviewGameData.midGame
-      ]))
+    .modelContainer(container)
+    .environment(env)
+    .environment(env.gameManager!)
 }

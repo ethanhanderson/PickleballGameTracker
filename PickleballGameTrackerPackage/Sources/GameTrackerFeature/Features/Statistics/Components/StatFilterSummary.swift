@@ -1,4 +1,4 @@
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
 /// Displays the active statistics filters in a compact list.
@@ -7,15 +7,15 @@ struct StatFilterSummary: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 4) {
       Text("Filters")
-        .font(DesignSystem.Typography.body)
+        .font(.body)
       if let gameId = filters.gameId {
         Text("gameId: \(gameId)")
-          .font(DesignSystem.Typography.caption)
+          .font(.caption)
           .foregroundStyle(.secondary)
       }
       if let gameTypeId = filters.gameTypeId {
         Text("gameType: \(gameTypeId)")
-          .font(DesignSystem.Typography.caption)
+          .font(.caption)
           .foregroundStyle(.secondary)
       }
     }

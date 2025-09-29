@@ -1,4 +1,4 @@
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
 struct HapticSettingsSection: View {
@@ -14,19 +14,19 @@ struct HapticSettingsSection: View {
         VStack(alignment: .leading, spacing: 4) {
           Text("Intensity")
             .font(.caption)
-            .foregroundColor(.secondary)
+            .foregroundStyle(.secondary)
 
           HStack {
             Text("Light")
               .font(.caption2)
-              .foregroundColor(.secondary)
+              .foregroundStyle(.secondary)
 
             Slider(value: $hapticIntensity, in: 0.5...2.0, step: 0.5)
-              .tint(DesignSystem.Colors.primary)
+              .tint(Color.accentColor)
 
             Text("Strong")
               .font(.caption2)
-              .foregroundColor(.secondary)
+              .foregroundStyle(.secondary)
           }
         }
         .padding(.vertical, 2)
@@ -34,7 +34,7 @@ struct HapticSettingsSection: View {
     } header: {
       Text("Haptics")
         .font(.caption)
-        .foregroundColor(.white)
+        .foregroundStyle(.white)
     }
   }
 }

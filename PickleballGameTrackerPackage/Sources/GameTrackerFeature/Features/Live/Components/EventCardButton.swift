@@ -1,90 +1,95 @@
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
 @MainActor
 struct EventCardButton: View {
-  let eventType: GameEventType
-  let tintColor: Color
-  let isEnabled: Bool
-  let action: () -> Void
+    let eventType: GameEventType
+    let tintColor: Color
+    let isEnabled: Bool
+    let action: () -> Void
+    let customDescription: String?
+    let customIconName: String?
 
-  var body: some View {
-    Button(action: action) {
-      VStack(spacing: DesignSystem.Spacing.sm) {
-        // Icon
-        Image(systemName: eventType.iconName)
-          .font(.system(size: 24, weight: .medium))
-          .foregroundStyle(isEnabled ? tintColor : Color.gray)
-
-        // Text
-        Text(eventType.displayName)
-          .font(DesignSystem.Typography.caption2)
-          .foregroundStyle(isEnabled ? Color.primary : Color.gray)
-          .multilineTextAlignment(.center)
-          .lineLimit(2)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-      .frame(width: 90, height: 90)
-      .background(
-        RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md)
-          .fill(isEnabled ? Color(UIColor.systemBackground) : Color(UIColor.systemGray6))
-          .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md)
-          .stroke(isEnabled ? tintColor.opacity(0.3) : Color.clear, lineWidth: 1)
-      )
+    private var displayText: String {
+        customDescription ?? eventType.displayName
     }
-    .scaleEffect(isEnabled ? 1.0 : 0.95)
-    .opacity(isEnabled ? 1.0 : 0.6)
-    .disabled(!isEnabled)
-    .buttonStyle(PlainButtonStyle())
-    .accessibilityLabel(eventType.displayName)
-    .accessibilityHint("Log \(eventType.displayName.lowercased()) event")
-    .help(eventType.displayName)
-  }
+
+    private var iconName: String {
+        customIconName ?? eventType.iconName
+    }
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: DesignSystem.Spacing.xs) {
+                Image(systemName: iconName)
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(tintColor)
+
+                Text(displayText)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .controlSize(.large)
+        .buttonStyle(.glassProminent)
+        .tint(tintColor.opacity(0.2))
+        .foregroundStyle(.primary)
+        .scaleEffect(isEnabled ? 1.0 : 0.95)
+        .opacity(isEnabled ? 1.0 : 0.6)
+        .disabled(!isEnabled)
+        .accessibilityLabel(displayText)
+        .accessibilityHint("Log \(displayText.lowercased()) event")
+        .help(displayText)
+    }
 }
 
 #Preview {
-  VStack(spacing: DesignSystem.Spacing.lg) {
-    HStack(spacing: DesignSystem.Spacing.md) {
-      EventCardButton(
-        eventType: .ballOutOfBounds,
-        tintColor: DesignSystem.AppleSystemColor.red.color,
-        isEnabled: true,
-        action: {}
-      )
+    VStack(spacing: DesignSystem.Spacing.lg) {
+        EventCardButton(
+            eventType: .ballOutOfBounds,
+            tintColor: Color.red,
+            isEnabled: true,
+            action: {},
+            customDescription: nil,
+            customIconName: nil
+        )
 
-      EventCardButton(
-        eventType: .serviceFault,
-        tintColor: DesignSystem.AppleSystemColor.orange.color,
-        isEnabled: true,
-        action: {}
-      )
+        EventCardButton(
+            eventType: .serviceFault,
+            tintColor: Color.orange,
+            isEnabled: true,
+            action: {},
+            customDescription: nil,
+            customIconName: nil
+        )
 
-      EventCardButton(
-        eventType: .gamePaused,
-        tintColor: DesignSystem.AppleSystemColor.blue.color,
-        isEnabled: false,
-        action: {}
-      )
+        EventCardButton(
+            eventType: .gamePaused,
+            tintColor: Color.blue,
+            isEnabled: false,
+            action: {},
+            customDescription: nil,
+            customIconName: nil
+        )
+
+        EventCardButton(
+            eventType: .ballInKitchenOnServe,
+            tintColor: Color.purple,
+            isEnabled: true,
+            action: {},
+            customDescription: nil,
+            customIconName: nil
+        )
+
+        EventCardButton(
+            eventType: .injuryTimeout,
+            tintColor: Color.green,
+            isEnabled: true,
+            action: {},
+            customDescription: nil,
+            customIconName: nil
+        )
     }
-
-    HStack(spacing: DesignSystem.Spacing.md) {
-      EventCardButton(
-        eventType: .ballInKitchenOnServe,
-        tintColor: DesignSystem.AppleSystemColor.purple.color,
-        isEnabled: true,
-        action: {}
-      )
-
-      EventCardButton(
-        eventType: .injuryTimeout,
-        tintColor: DesignSystem.AppleSystemColor.green.color,
-        isEnabled: true,
-        action: {}
-      )
-    }
-  }
-  .padding()
+    .padding()
 }

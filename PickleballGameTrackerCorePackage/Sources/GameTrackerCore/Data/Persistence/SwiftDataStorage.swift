@@ -939,6 +939,7 @@ extension SwiftDataStorage {
         gameType: pr.gameType,
         team1: pr.team1Id.flatMap { teamById[$0] },
         team2: pr.team2Id.flatMap { teamById[$0] },
+        accentColor: pr.accentColor,
         createdDate: pr.createdDate,
         lastModified: pr.lastModified
       )

@@ -5,9 +5,10 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
+@MainActor
 struct GameHistoryGroupedList: View {
   let groupedGames: [GroupedGames]
   let selectedGrouping: GroupingOption
@@ -29,9 +30,9 @@ struct GameHistoryGroupedList: View {
           if shouldShowHeader(for: group) {
             HStack {
               Text(group.title)
-                .font(DesignSystem.Typography.title3)
+                .font(.title3)
                 .fontWeight(.semibold)
-                .foregroundColor(DesignSystem.Colors.textPrimary)
+                .foregroundStyle(.primary)
               Spacer()
             }
           }

@@ -137,16 +137,81 @@ public enum PreviewDataSeeder {
       }
 
       // Add one active in-progress game for the preview bar
-      let active = PreviewGameData.midGame
-      let activeGame = Game(gameType: active.gameType)
-      activeGame.score1 = active.score1
-      activeGame.score2 = active.score2
-      activeGame.currentServer = active.currentServer
-      activeGame.serverNumber = active.serverNumber
-      activeGame.totalRallies = active.totalRallies
-      activeGame.lastModified = .now
-      context.insert(activeGame)
-      try? store.save(activeGame)
+      // Create a named variation using available roster if possible
+      let players = try? context.fetch(FetchDescriptor<PlayerProfile>()).filter { !$0.isArchived }
+      let teams = try? context.fetch(FetchDescriptor<TeamProfile>()).filter { !$0.isArchived }
+      let useSingles: Bool = {
+        switch ((players?.count ?? 0) >= 2, (teams?.count ?? 0) >= 2) {
+        case (true, true): return Bool.random()
+        case (true, false): return true
+        case (false, true): return false
+        default: return true
+        }
+      }()
+
+      if useSingles, let players, players.count >= 2 {
+        let p = players.shuffled()
+        let p1 = p[0], p2 = p[1]
+        let variation = try? GameVariation.createValidated(
+          name: "\(p1.name) vs \(p2.name)",
+          gameType: .recreational,
+          teamSize: 1,
+          winningScore: 11,
+          winByTwo: true,
+          kitchenRule: true,
+          doubleBounceRule: true,
+          servingRotation: .standard,
+          sideSwitchingRule: .never,
+          scoringType: .sideOut,
+          isCustom: true
+        )
+        let activeGame = Game(gameVariation: variation ?? GameVariation(name: "Preview Singles", gameType: .recreational, teamSize: 1))
+        activeGame.score1 = Int.random(in: 0...10)
+        activeGame.score2 = Int.random(in: 0...10)
+        activeGame.currentServer = [1, 2].randomElement()!
+        activeGame.serverNumber = 1
+        activeGame.totalRallies = Int.random(in: 8...24)
+        activeGame.lastModified = .now
+        context.insert(activeGame)
+        try? store.save(activeGame)
+      } else if let teams, teams.count >= 2 {
+        let t = teams.shuffled()
+        let t1 = t[0], t2 = t[1]
+        let variation = try? GameVariation.createValidated(
+          name: "\(t1.name) vs \(t2.name)",
+          gameType: .recreational,
+          teamSize: 2,
+          winningScore: 11,
+          winByTwo: true,
+          kitchenRule: true,
+          doubleBounceRule: true,
+          servingRotation: .standard,
+          sideSwitchingRule: .never,
+          scoringType: .sideOut,
+          isCustom: true
+        )
+        let activeGame = Game(gameVariation: variation ?? GameVariation(name: "Preview Doubles", gameType: .recreational, teamSize: 2))
+        activeGame.score1 = Int.random(in: 0...10)
+        activeGame.score2 = Int.random(in: 0...10)
+        activeGame.currentServer = [1, 2].randomElement()!
+        activeGame.serverNumber = [1, 2].randomElement()!
+        activeGame.totalRallies = Int.random(in: 8...24)
+        activeGame.lastModified = .now
+        context.insert(activeGame)
+        try? store.save(activeGame)
+      } else {
+        // Fallback to generic midGame
+        let active = PreviewGameData.midGame
+        let activeGame = Game(gameType: active.gameType)
+        activeGame.score1 = active.score1
+        activeGame.score2 = active.score2
+        activeGame.currentServer = active.currentServer
+        activeGame.serverNumber = active.serverNumber
+        activeGame.totalRallies = active.totalRallies
+        activeGame.lastModified = .now
+        context.insert(activeGame)
+        try? store.save(activeGame)
+      }
     }
   }
 
@@ -174,15 +239,15 @@ public enum PreviewDataSeeder {
 
       if doSingles, activePlayers.count >= 2 {
         let shuffled = activePlayers.shuffled()
-        _ = shuffled[0]
-        _ = shuffled[1]
+        let p1 = shuffled[0]
+        let p2 = shuffled[1]
 
         let variation: GameVariation
-        if let existing = try! context.fetch(FetchDescriptor<GameVariation>()).first(where: { $0.name == "Recreational Singles" }) {
+        if let existing = try! context.fetch(FetchDescriptor<GameVariation>()).first(where: { $0.name == "\(p1.name) vs \(p2.name)" }) {
           variation = existing
         } else {
           variation = try! GameVariation.createValidated(
-            name: "Preview Singles",
+            name: "\(p1.name) vs \(p2.name)",
             gameType: .recreational,
             teamSize: 1,
             winningScore: 11,
@@ -192,7 +257,7 @@ public enum PreviewDataSeeder {
             servingRotation: .standard,
             sideSwitchingRule: .never,
             scoringType: .sideOut,
-            isCustom: false
+            isCustom: true
           )
         }
 
@@ -205,16 +270,16 @@ public enum PreviewDataSeeder {
         context.insert(game)
       } else if activeTeams.count >= 2 {
         let shuffled = activeTeams.shuffled()
-        _ = shuffled[0]
-        _ = shuffled[1]
+        let t1 = shuffled[0]
+        let t2 = shuffled[1]
 
         let variation: GameVariation
         let allVariations = try! context.fetch(FetchDescriptor<GameVariation>())
-        if let existing = allVariations.first(where: { $0.name == "Recreational Doubles" }) {
+        if let existing = allVariations.first(where: { $0.name == "\(t1.name) vs \(t2.name)" }) {
           variation = existing
         } else {
           variation = try! GameVariation.createValidated(
-            name: "Preview Doubles",
+            name: "\(t1.name) vs \(t2.name)",
             gameType: .recreational,
             teamSize: 2,
             winningScore: 11,
@@ -224,7 +289,7 @@ public enum PreviewDataSeeder {
             servingRotation: .standard,
             sideSwitchingRule: .never,
             scoringType: .sideOut,
-            isCustom: false
+            isCustom: true
           )
         }
 

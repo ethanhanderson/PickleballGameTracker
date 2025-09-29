@@ -24,7 +24,21 @@ extension Game {
 
   /// Array of team configurations for dynamic UI rendering
   public var teamsWithLabels: [TeamConfig] {
-    [
+    // Prefer deriving names from variation name in format "A vs B"
+    if let name = gameVariation?.name {
+      let parts = name.split(separator: " vs ")
+      if parts.count == 2 {
+        let a = String(parts[0]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let b = String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
+        if a.isEmpty == false && b.isEmpty == false {
+          return [
+            TeamConfig(teamNumber: 1, teamName: a),
+            TeamConfig(teamNumber: 2, teamName: b)
+          ]
+        }
+      }
+    }
+    return [
       TeamConfig(teamNumber: 1, teamName: "Team 1"),
       TeamConfig(teamNumber: 2, teamName: "Team 2")
     ]
@@ -217,7 +231,16 @@ extension GameType {
 extension GameTypePreset {
   /// Color associated with the preset
   public var color: Color {
-    gameType.color
+    if let stored = accentColorStored {
+      return Color(
+        .sRGB,
+        red: Double(stored.red),
+        green: Double(stored.green),
+        blue: Double(stored.blue),
+        opacity: Double(stored.alpha)
+      )
+    }
+    return gameType.color
   }
 
   /// Primary color for the preset

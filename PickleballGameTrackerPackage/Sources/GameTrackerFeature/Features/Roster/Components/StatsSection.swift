@@ -1,4 +1,4 @@
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
 @MainActor
@@ -10,9 +10,9 @@ struct StatsSection: View {
   var body: some View {
     VStack(alignment: .leading, spacing: DesignSystem.Spacing.md) {
       Text(title)
-        .font(DesignSystem.Typography.title3)
+        .font(.title3)
         .fontWeight(.semibold)
-        .foregroundColor(DesignSystem.Colors.textPrimary)
+        .foregroundStyle(.primary)
 
       VStack(spacing: DesignSystem.Spacing.md) {
         ForEach(Array(chunk(items, size: 2).enumerated()), id: \.offset) { _, row in
@@ -20,7 +20,7 @@ struct StatsSection: View {
             ForEach(0..<2) { index in
               if index < row.count {
                 let item = row[index]
-                RosterStatCard(
+                StatCard(
                   symbolName: item.0,
                   title: item.1,
                   value: item.2,

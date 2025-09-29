@@ -8,10 +8,11 @@
 import SwiftData
 import SwiftUI
 import GameTrackerWatchFeature
-import CorePackage
+import GameTrackerCore
 
 @main
 struct PickleballGameTrackingWatchApp: App {
+  private let liveGameStateManager = LiveGameStateManager.production()
   init() {
     Task { await LoggingService.shared.configure(sinks: [OSLogSink(), ConsoleSink()]) }
     Log.event(.appLaunch, level: .info, message: "Watch app launch")
@@ -20,6 +21,8 @@ struct PickleballGameTrackingWatchApp: App {
     WindowGroup {
       WatchGameCatalogView()
         .modelContainer(SwiftDataContainer.shared.modelContainer)
+        .environment(liveGameStateManager)
+        .environment(liveGameStateManager.gameManager!)
     }
   }
 }

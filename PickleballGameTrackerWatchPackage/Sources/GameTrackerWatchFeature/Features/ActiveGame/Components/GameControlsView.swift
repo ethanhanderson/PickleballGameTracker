@@ -1,4 +1,4 @@
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
 struct GameControlsView: View {
@@ -65,9 +65,9 @@ struct GameControlsView: View {
   }
 
   private var gameStatusButtonColor: Color {
-    if game.isCompleted { return DesignSystem.Colors.success }
-    if isInitialState || isGamePaused { return DesignSystem.Colors.gameType(game.gameType) }
-    return DesignSystem.Colors.warning
+    if game.isCompleted { return .green }
+    if isInitialState || isGamePaused { return Color.accentColor }
+    return .yellow
   }
 
   private var isGameStatusButtonDisabled: Bool {

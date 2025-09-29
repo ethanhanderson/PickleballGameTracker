@@ -1,8 +1,8 @@
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
 @MainActor
-struct RosterStatCard: View {
+struct StatCard: View {
   let symbolName: String
   let title: String
   let value: String
@@ -16,7 +16,7 @@ struct RosterStatCard: View {
         .shadow(color: themeColor.opacity(0.3), radius: 3, x: 0, y: 2)
 
       Text(title)
-        .font(DesignSystem.Typography.caption)
+        .font(.caption)
         .fontWeight(.medium)
         .foregroundStyle(.secondary)
 
@@ -28,7 +28,7 @@ struct RosterStatCard: View {
     .padding(DesignSystem.Spacing.md)
     .glassEffect(
       .regular.tint(
-        DesignSystem.Colors.containerFillSecondary.opacity(0.5)
+        Color.gray.opacity(0.15).opacity(0.5)
       ),
       in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl)
     )

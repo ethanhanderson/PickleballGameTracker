@@ -1,8 +1,9 @@
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
-/// Lightweight line chart placeholder used across statistics detail views.
-/// Renders a titled card with an optional simple line path for provided points.
+/// A placeholder component for displaying trend data in statistics views.
+/// This component renders a simple line chart with provided data points.
+/// TODO: Replace with a full-featured chart component when charting requirements are finalized.
 struct StatChartPlaceholder: View {
   let title: String
   var points: [TrendPoint] = []
@@ -10,10 +11,10 @@ struct StatChartPlaceholder: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       Text(title)
-        .font(DesignSystem.Typography.body)
+        .font(.body)
       ZStack(alignment: .bottomLeading) {
-        RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.cardRounded)
-          .fill(DesignSystem.Colors.containerFillSecondary)
+        RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl)
+          .fill(Color.gray.opacity(0.15))
           .frame(height: 160)
         if !points.isEmpty {
           GeometryReader { proxy in
@@ -32,10 +33,10 @@ struct StatChartPlaceholder: View {
                 }
               }
             }
-            .stroke(DesignSystem.Colors.primary, lineWidth: 2)
+            .stroke(Color.accentColor, lineWidth: 2)
           }
           .frame(height: 160)
-          .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.cardRounded))
+          .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl))
         }
       }
     }

@@ -1,3 +1,4 @@
+import GameTrackerCore
 //
 //  WatchActiveGameView.swift
 //  Pickleball Score Tracking Watch App
@@ -5,16 +6,16 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import CorePackage
 import SwiftData
 import SwiftUI
 
 struct WatchActiveGameView: View {
   @Environment(\.modelContext) private var modelContext
   @Environment(\.dismiss) private var dismiss
+  @Environment(SwiftDataGameManager.self) private var gameManager
+  @Environment(LiveGameStateManager.self) private var activeGameStateManager
 
   @Bindable var game: Game
-  @State private var gameManager = SwiftDataGameManager()
   @State private var showingCompleteAlert = false
   @State private var selectedTab: String = "controls"
   @State private var isToggling = false
@@ -36,8 +37,6 @@ struct WatchActiveGameView: View {
   @State private var completionSuccessTrigger = false
   @State private var scoreControlsTrigger = false
 
-  // Use the same ActiveGameStateManager as iOS
-  private let activeGameStateManager = ActiveGameStateManager.shared
   let onCompleted: (() -> Void)?
 
   init(game: Game, onCompleted: (() -> Void)? = nil) {
@@ -85,7 +84,7 @@ struct WatchActiveGameView: View {
     .animation(.easeInOut(duration: 0.3), value: selectedTab)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .padding(0)
-    .background(DesignSystem.Colors.surface)
+    .background(.black)
     .alert("End Game", isPresented: $showingCompleteAlert) {
       Button("End", role: .destructive) {
         Task {
@@ -111,10 +110,7 @@ struct WatchActiveGameView: View {
     }
     .task {
       // Configure the activeGameStateManager for this watch session
-      activeGameStateManager.configure(
-        with: modelContext,
-        gameManager: gameManager
-      )
+      activeGameStateManager.configure(gameManager: gameManager)
       // Ensure device sync is enabled so phone-created games sync to watch and vice versa
       activeGameStateManager.setSyncEnabled(true)
       activeGameStateManager.setCurrentGame(game)
@@ -352,12 +348,15 @@ struct WatchActiveGameView: View {
 // MARK: - Previews
 
 #Preview("Active Singles Game") {
+  let container = PreviewDataSeeder.container()
   WatchActiveGameView(game: PreviewGameData.midGame)
-    .modelContainer(try! PreviewGameData.createPreviewContainer(with: [PreviewGameData.midGame]))
+    .modelContainer(container)
+    .environment(LiveGameStateManager.preview(container: container))
 }
 
 #Preview("Completed Game") {
+  let container = PreviewDataSeeder.container()
   WatchActiveGameView(game: PreviewGameData.completedGame)
-    .modelContainer(
-      try! PreviewGameData.createPreviewContainer(with: [PreviewGameData.completedGame]))
+    .modelContainer(container)
+    .environment(LiveGameStateManager.preview(container: container))
 }

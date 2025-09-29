@@ -1,4 +1,4 @@
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
 @MainActor
@@ -14,7 +14,6 @@ struct HistoryGroupingMenu: View {
       Image(
         systemName: selectedGrouping == .none ? "square.grid.2x2" : "square.grid.2x2.fill"
       )
-      .foregroundColor(DesignSystem.Colors.primary)
     }
   }
 

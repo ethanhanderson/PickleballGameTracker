@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
 // MARK: - App Navigation State
@@ -18,7 +18,7 @@ final class AppNavigationState {
 
   // MARK: - Games Tab Navigation Methods
 
-  func navigateToSection(_ section: GameCatalog.GameSection) {
+  func navigateToSection(_ section: GameCatalog.CatalogSectionInfo) {
     navigationPath.append(GameSectionDestination.sectionDetail(section.title, section.gameTypes))
   }
 
@@ -33,7 +33,7 @@ final class AppNavigationState {
   // MARK: - History Tab Navigation Methods
 
   func navigateToGameDetail(game: Game) {
-    navigationPath.append(GameHistoryDestination.gameDetail(game))
+    navigationPath.append(GameHistoryDestination.gameDetail(game.id))
   }
 
   // MARK: - Navigation Stack Management

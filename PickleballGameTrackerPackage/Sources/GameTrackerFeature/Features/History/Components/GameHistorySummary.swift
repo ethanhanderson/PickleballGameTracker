@@ -5,7 +5,7 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
 // MARK: - Models
@@ -209,9 +209,9 @@ public struct GameHistorySummary: View {
         VStack(spacing: DesignSystem.Spacing.sm) {
             Image(systemName: stat.icon)
                 .font(.system(size: 20, weight: .medium))
-                .foregroundStyle(DesignSystem.Colors.primary)
+                .foregroundStyle(Color.accentColor)
                 .shadow(
-                    color: DesignSystem.Colors.primary.opacity(0.3),
+                    color: Color.accentColor.opacity(0.3),
                     radius: 3,
                     x: 0,
                     y: 2
@@ -228,14 +228,17 @@ public struct GameHistorySummary: View {
 #Preview("With Games") {
     GameHistorySummary(games: PreviewGameData.competitivePlayerGames)
         .padding()
+        .accentColor(.green)
 }
 
 #Preview("New Player") {
     GameHistorySummary(games: PreviewGameData.newPlayerGames)
         .padding()
+        .accentColor(.green)
 }
 
 #Preview("Empty State") {
     GameHistorySummary(games: PreviewGameData.emptyGames)
         .padding()
+        .accentColor(.green)
 }

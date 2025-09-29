@@ -1,4 +1,4 @@
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
 struct AudioSettingsSection: View {
@@ -11,7 +11,7 @@ struct AudioSettingsSection: View {
     } header: {
       Text("Audio")
         .font(.caption)
-        .foregroundColor(.white)
+        .foregroundStyle(.white)
     }
   }
 }

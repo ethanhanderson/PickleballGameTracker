@@ -1,4 +1,4 @@
-import CorePackage
+import GameTrackerCore
 import SwiftData
 import SwiftUI
 
@@ -13,9 +13,8 @@ struct WinRateDetailView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 16) {
         Text("Win Rate")
-          .font(DesignSystem.Typography.largeTitle)
+          .font(.largeTitle)
 
-        // KPI and charts
         KPIRow(title: "Overall", value: summaryText)
         StatChartPlaceholder(title: "Win rate (7d)", points: trend7)
         StatChartPlaceholder(title: "Win rate (30d)", points: trend30)
@@ -52,9 +51,16 @@ struct WinRateDetailView: View {
   }
 }
 
-#Preview("With Data") {
+#Preview("With Live Game Data") {
   NavigationStack {
     WinRateDetailView(filters: .init(gameId: nil, gameTypeId: GameType.recreational.rawValue))
   }
-  .modelContainer(try! PreviewGameData.createFullPreviewContainer())
+  .minimalPreview(environment: PreviewEnvironment.componentWithGame())
+}
+
+#Preview("With Basic Data") {
+  NavigationStack {
+    WinRateDetailView(filters: .init(gameId: nil, gameTypeId: GameType.recreational.rawValue))
+  }
+  .minimalPreview(environment: PreviewEnvironment.component())
 }

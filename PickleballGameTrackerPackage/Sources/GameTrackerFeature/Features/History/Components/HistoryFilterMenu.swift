@@ -1,4 +1,4 @@
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
 @MainActor
@@ -26,7 +26,6 @@ struct HistoryFilterMenu: View {
         systemName: selectedFilter == .all
           ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill"
       )
-      .foregroundColor(DesignSystem.Colors.primary)
     }
   }
 

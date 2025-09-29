@@ -3,7 +3,7 @@ alwaysApply: false
 description: GitHub project management process for roadmap, issues, versioning, and branch strategy
 ---
 
-### GitHub Project Management: Roadmap, Issues, Versioning, Branching
+# GitHub Project Management: Roadmap, Issues, Versioning, Branching
 
 Use this rule when organizing work, creating issues/PRs, planning roadmap, or cutting releases.
 
@@ -13,7 +13,7 @@ Use this rule when organizing work, creating issues/PRs, planning roadmap, or cu
   - Systems index: [Systems.md](mdc:PickleballGameTracker.wiki/Systems.md)
   - Architecture overview: [overview.md](mdc:PickleballGameTracker.wiki/architecture/overview.md)
 
-### Roadmap with GitHub Projects
+## Roadmap with GitHub Projects
 
 - **Project board**: "Pickleball Game Tracker Roadmap"
 - **Columns**: Backlog → Next → In Progress → In Review → Done
@@ -28,7 +28,7 @@ Use this rule when organizing work, creating issues/PRs, planning roadmap, or cu
 - **WIP policy**: Only move to In Progress when a branch exists and an assignee is set.
 - **Review policy**: Items in In Review must have a linked PR.
 
-### Issue Management
+## Issue Management
 
 - **Naming**
   - Feature: [Feature] Concise outcome
@@ -48,9 +48,9 @@ Use this rule when organizing work, creating issues/PRs, planning roadmap, or cu
 - **Project linking**
   - Add every issue to the roadmap project and set fields (Priority, Size, Target Release).
 - **Closing automation**
-  - PRs must include "Closes #<issue>" to auto-close on merge.
+  - PRs must include "Closes #[issue]" to auto-close on merge.
 
-### Branching Strategy
+## Branching Strategy
 
 - **Default branch**: `main`
 - **Working branches** (short-lived; one issue per branch):
@@ -63,7 +63,7 @@ Use this rule when organizing work, creating issues/PRs, planning roadmap, or cu
   - Keep changes scoped to a single issue; open additional issues for out-of-scope work.
   - Rebase frequently; avoid long-lived divergence.
 
-### Pull Requests
+## Pull Requests
 
 - **PR title**: Conventional style preferred
   - feat: Short description (Closes #123)
@@ -79,7 +79,7 @@ Use this rule when organizing work, creating issues/PRs, planning roadmap, or cu
   - CI must be green before merge
 - **Merge method**: Squash and merge to keep a clean history
 
-### Versioning and Releases
+## Versioning and Releases
 
 - **Versioning**: Semantic Versioning (SemVer) for app releases and tags: `vMAJOR.MINOR.PATCH`
   - MAJOR: breaking changes to user experience or data contracts
@@ -97,7 +97,7 @@ Use this rule when organizing work, creating issues/PRs, planning roadmap, or cu
   - Pre-release: tests pass, app builds for all targets, docs updated (wiki + README), version bump committed
   - Post-release: tag pushed, Project items moved to Done, create follow-up issues for known gaps
 
-### Daily Flow (Quick Guide)
+## Daily Flow (Quick Guide)
 
 1. Create/validate an issue with Acceptance Criteria and wiki links → add to Project with fields
 2. Create branch `feature/…` and start work → move item to In Progress
@@ -106,13 +106,13 @@ Use this rule when organizing work, creating issues/PRs, planning roadmap, or cu
 5. Update relevant wiki pages and link them in PR description
 6. During release: cut `release/vX.Y.Z`, stabilize, tag `vX.Y.Z`, publish notes, move items to Done
 
-### Governance and Documentation
+## Governance and Documentation
 
 - Every PR description links to the relevant wiki page(s).
 - New features or systems include an index entry in [Features.md](mdc:PickleballGameTracker.wiki/Features.md) or [Systems.md](mdc:PickleballGameTracker.wiki/Systems.md).
 - Architecture changes update [overview.md](mdc:PickleballGameTracker.wiki/architecture/overview.md) if affected.
 
-### Acceptance Criteria for This Process
+## Acceptance Criteria for This Process
 
 - Issues consistently labeled and linked to the roadmap project
 - Branches follow naming and scope conventions

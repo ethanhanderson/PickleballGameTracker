@@ -1,4 +1,4 @@
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
 struct DisplaySettingsSection: View {
@@ -15,7 +15,7 @@ struct DisplaySettingsSection: View {
     } header: {
       Text("Display")
         .font(.caption)
-        .foregroundColor(.white)
+        .foregroundStyle(.white)
     }
   }
 }

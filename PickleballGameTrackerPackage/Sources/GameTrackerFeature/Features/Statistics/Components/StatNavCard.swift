@@ -1,4 +1,4 @@
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
 @MainActor
@@ -10,26 +10,26 @@ struct StatNavCard: View {
   var body: some View {
     HStack(spacing: DesignSystem.Spacing.md) {
       Image(systemName: systemImage)
-        .font(DesignSystem.Typography.headline)
-        .foregroundStyle(DesignSystem.Colors.textSecondary)
+        .font(.headline)
+        .foregroundStyle(.secondary)
         .frame(width: 28)
       VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
         Text(title)
-          .font(DesignSystem.Typography.body)
-          .foregroundStyle(DesignSystem.Colors.textPrimary)
+          .font(.body)
+          .foregroundStyle(.primary)
         Text(subtitle)
-          .font(DesignSystem.Typography.caption)
-          .foregroundStyle(DesignSystem.Colors.textSecondary)
+          .font(.caption)
+          .foregroundStyle(.secondary)
       }
       Spacer(minLength: 0)
       Image(systemName: "chevron.right")
-        .font(DesignSystem.Typography.subheadline)
-        .foregroundStyle(DesignSystem.Colors.textTertiary)
+        .font(.subheadline)
+        .foregroundStyle(.gray)
     }
-    .padding(DesignSystem.Spacing.cardPadding)
+    .padding(DesignSystem.Spacing.md)
     .background(
-      RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.cardRounded, style: .continuous)
-        .fill(DesignSystem.Colors.containerFillSecondary)
+      RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl, style: .continuous)
+        .fill(Color.gray.opacity(0.15))
     )
   }
 }

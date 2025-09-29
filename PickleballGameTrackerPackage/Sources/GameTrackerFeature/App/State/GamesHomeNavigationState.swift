@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
 // MARK: - Games Home Navigation State
@@ -18,7 +18,7 @@ final class GamesHomeNavigationState {
 
   // MARK: - Navigation Methods
 
-  func navigateToSection(_ section: GameCatalog.GameSection) {
+  func navigateToSection(_ section: GameCatalog.CatalogSectionInfo) {
     navigationPath.append(GameSectionDestination.sectionDetail(section.title, section.gameTypes))
   }
 
@@ -61,7 +61,7 @@ final class GamesHomeNavigationState {
 
   // MARK: - Navigation Analytics
 
-  func trackSectionNavigation(_ section: GameCatalog.GameSection) {
+  func trackSectionNavigation(_ section: GameCatalog.CatalogSectionInfo) {
     NavigationAnalytics.trackSectionNavigation(section)
   }
 
@@ -94,7 +94,7 @@ extension GamesHomeNavigationState {
 // MARK: - Navigation Analytics
 
 struct NavigationAnalytics {
-  static func trackSectionNavigation(_ section: GameCatalog.GameSection) {
+  static func trackSectionNavigation(_ section: GameCatalog.CatalogSectionInfo) {
     Log.event(
       .viewAppear, level: .debug, message: "Section opened", metadata: ["title": section.title])
   }

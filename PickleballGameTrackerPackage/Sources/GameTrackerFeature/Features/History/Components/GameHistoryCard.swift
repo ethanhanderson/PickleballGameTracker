@@ -5,7 +5,7 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
 public struct GameHistoryCard: View {
@@ -38,7 +38,7 @@ public struct GameHistoryCard: View {
         rightSideContent
         Image(systemName: "chevron.right")
           .font(.system(size: 16, weight: .semibold))
-          .foregroundColor(DesignSystem.Colors.textOnColorMuted)
+          .foregroundStyle(Color.white.opacity(0.7))
           .shadow(color: .black.opacity(0.08), radius: 2, x: 0, y: 1)
           .padding(.leading, DesignSystem.Spacing.sm)
       }
@@ -48,7 +48,17 @@ public struct GameHistoryCard: View {
     .padding(.horizontal, DesignSystem.Spacing.lg)
     .padding(.vertical, DesignSystem.Spacing.md)
     .glassEffect(
-      .regular.tint(DesignSystem.Colors.gameType(game.gameType)),
+      .regular.tint(
+        {
+          switch game.gameType {
+          case .recreational: Color.blue
+          case .tournament: Color.green
+          case .training: Color.purple
+          case .social: Color.orange
+          case .custom: Color.red
+          }
+        }()
+      ),
       in: RoundedRectangle(
         cornerRadius: DesignSystem.CornerRadius.xxl,
         style: .continuous
@@ -64,15 +74,15 @@ public struct GameHistoryCard: View {
 
       VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
         Text(game.gameType.displayName)
-          .font(DesignSystem.Typography.headline)
+          .font(.headline)
           .fontWeight(.bold)
-          .foregroundColor(DesignSystem.Colors.textOnColor)
+          .foregroundStyle(Color.white)
           .lineLimit(1)
 
         Text(compactFormattedDate)
-          .font(DesignSystem.Typography.caption)
+          .font(.caption)
           .fontWeight(.medium)
-          .foregroundColor(DesignSystem.Colors.textOnColorMuted)
+          .foregroundStyle(Color.white.opacity(0.7))
           .lineLimit(1)
       }
     }
@@ -81,7 +91,7 @@ public struct GameHistoryCard: View {
   private var gameIcon: some View {
     Image(systemName: game.gameType.iconName)
       .font(.system(size: 24, weight: .medium))
-      .foregroundStyle(DesignSystem.Colors.textOnColor)
+      .foregroundStyle(Color.white)
       .shadow(color: .black.opacity(0.20), radius: 3, x: 0, y: 1)
       .frame(width: 32, height: 32)
   }
@@ -122,9 +132,9 @@ public struct GameHistoryCard: View {
     HStack {
       VStack(spacing: DesignSystem.Spacing.xs) {
         Text(game.gameType.shortPlayerLabel1)
-          .font(DesignSystem.Typography.caption2)
+          .font(.caption2)
           .fontWeight(.semibold)
-          .foregroundColor(.white.opacity(0.8))
+          .foregroundStyle(.white.opacity(0.8))
 
         scoreDisplay(
           score: game.score1,
@@ -134,9 +144,9 @@ public struct GameHistoryCard: View {
 
       VStack(spacing: DesignSystem.Spacing.xs) {
         Text(game.gameType.shortPlayerLabel2)
-          .font(DesignSystem.Typography.caption2)
+          .font(.caption2)
           .fontWeight(.semibold)
-          .foregroundColor(.white.opacity(0.8))
+          .foregroundStyle(.white.opacity(0.8))
 
         scoreDisplay(
           score: game.score2,
@@ -148,10 +158,10 @@ public struct GameHistoryCard: View {
 
   private func scoreDisplay(score: Int, isWinning: Bool) -> some View {
     Text("\(score)")
-      .font(DesignSystem.Typography.title1)
+      .font(.title)
       .fontWeight(.bold)
       .fontDesign(.rounded)
-      .foregroundColor(isWinning ? DesignSystem.Colors.textOnColor : DesignSystem.Colors.textOnColorMuted)
+      .foregroundStyle(isWinning ? Color.white : Color.white.opacity(0.7))
       .monospacedDigit()
       .shadow(color: .black.opacity(0.15), radius: 2, x: 0, y: 1)
       .frame(width: 45, alignment: .center)
@@ -184,14 +194,14 @@ public struct GameHistoryCard: View {
     HStack(spacing: DesignSystem.Spacing.xs) {
       Image(systemName: icon)
         .font(.system(size: 14, weight: .medium))
-        .foregroundColor(DesignSystem.Colors.textOnColorMuted)
+        .foregroundStyle(Color.white.opacity(0.7))
         .frame(width: 16)
 
       Text(value)
-        .font(DesignSystem.Typography.subheadline)
+        .font(.subheadline)
         .fontWeight(.semibold)
         .fontDesign(.rounded)
-        .foregroundColor(DesignSystem.Colors.textOnColor)
+        .foregroundStyle(Color.white)
         .lineLimit(1)
     }
   }

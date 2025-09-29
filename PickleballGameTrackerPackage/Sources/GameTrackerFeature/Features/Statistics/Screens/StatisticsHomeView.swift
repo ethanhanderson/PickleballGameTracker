@@ -1,4 +1,4 @@
-import CorePackage
+import GameTrackerCore
 import SwiftData
 import SwiftUI
 
@@ -6,11 +6,10 @@ import SwiftUI
 struct StatisticsHomeView: View {
   var gameId: String? = nil
   var gameTypeId: String? = nil
-
-  @State private var navigateToDefaultDetail = false
+  @State private var path: [StatDetailDestination] = []
 
   var body: some View {
-    NavigationStack {
+    NavigationStack(path: $path) {
       ScrollView {
         VStack(spacing: 24) {
           // Results
@@ -52,12 +51,12 @@ struct StatisticsHomeView: View {
           // Deep-link context preview (optional)
           if let gameId {
             Text("Prefilter: gameId = \(gameId)")
-              .font(DesignSystem.Typography.caption)
+              .font(.caption)
               .foregroundStyle(.secondary)
           }
           if let gameTypeId {
             Text("Prefilter: gameType = \(gameTypeId)")
-              .font(DesignSystem.Typography.caption)
+              .font(.caption)
               .foregroundStyle(.secondary)
           }
         }
@@ -65,7 +64,7 @@ struct StatisticsHomeView: View {
         .padding(.vertical, 16)
       }
       .navigationTitle("Statistics")
-      .containerBackground(DesignSystem.Colors.navigationBrandGradient, for: .navigation)
+      .viewContainerBackground()
       .navigationDestination(for: StatDetailDestination.self) { destination in
         switch destination {
         case .winRate(let filters):
@@ -79,23 +78,15 @@ struct StatisticsHomeView: View {
         }
       }
       .task(id: gameId ?? "\(gameTypeId ?? "")") {
-        // If opened via deep link with pre-applied filters, default to Win Rate detail without an intermediate sheet
-        if (gameId != nil || gameTypeId != nil) && navigateToDefaultDetail == false {
-          // Yield to allow NavigationStack to settle before programmatic navigation
-          await Task.yield()
-          navigateToDefaultDetail = true
+        if gameId != nil || gameTypeId != nil {
+          // Navigate directly to default detail when pre-filtered via deep link
+          path = [.winRate(filters: filters)]
+        } else {
+          path.removeAll()
         }
       }
-      .background(
-        // Programmatic navigation trigger
-        NavigationLink(
-          value: StatDetailDestination.winRate(filters: filters),
-          label: { EmptyView() }
-        )
-        .opacity(0)
-      )
     }
-    .navigationTint()
+    .tint(.accentColor)
   }
 
   private var filters: StatisticsFilters {
@@ -103,29 +94,22 @@ struct StatisticsHomeView: View {
   }
 }
 
-// MARK: - Navigation Destinations
-
-enum StatDetailDestination: Hashable {
-  case winRate(filters: StatisticsFilters)
-  case serveWin(filters: StatisticsFilters)
-  case trends(filters: StatisticsFilters)
-  case streaks(filters: StatisticsFilters)
+#Preview("With Live Game Data") {
+  StatisticsHomeView()
+    .minimalPreview(environment: PreviewEnvironment.statistics())
 }
-
-// MARK: - Filters Value
-
-struct StatisticsFilters: Hashable, Sendable {
-  var gameId: String?
-  var gameTypeId: String?
-}
-
-// Components extracted to `Features/Statistics/Components/GroupedSection.swift` and `StatNavCard.swift`
 
 #Preview("Deep Link Context") {
   StatisticsHomeView(gameId: "demo-game-id", gameTypeId: "singles")
+    .minimalPreview(environment: PreviewEnvironment.statistics())
 }
 
 #Preview("Empty State") {
   StatisticsHomeView()
-    .modelContainer(try! PreviewGameData.createPreviewContainer(with: []))
+    .minimalPreview(environment: PreviewEnvironment.empty())
+}
+
+#Preview("Rich Statistics Data") {
+  StatisticsHomeView()
+    .minimalPreview(environment: PreviewEnvironment.statistics())
 }

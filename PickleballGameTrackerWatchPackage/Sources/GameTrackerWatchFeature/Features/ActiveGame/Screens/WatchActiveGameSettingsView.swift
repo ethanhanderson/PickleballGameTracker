@@ -1,3 +1,4 @@
+import GameTrackerCore
 //
 //  WatchActiveGameSettingsView.swift
 //  Pickleball Score Tracking Watch App
@@ -5,14 +6,13 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import CorePackage
 import SwiftData
 import SwiftUI
 
 struct WatchActiveGameSettingsView: View {
   @Bindable var game: Game
   let gameManager: SwiftDataGameManager
-  let activeGameStateManager: ActiveGameStateManager
+  let activeGameStateManager: LiveGameStateManager
 
   @Environment(\.dismiss) private var dismiss
 
@@ -125,20 +125,21 @@ struct WatchActiveGameSettingsView: View {
 // MARK: - Previews
 
 #Preview("Settings View") {
+  let container = PreviewDataSeeder.container()
   WatchActiveGameSettingsView(
     game: PreviewGameData.midGame,
     gameManager: PreviewGameData.gameManager,
-    activeGameStateManager: ActiveGameStateManager.shared
+    activeGameStateManager: LiveGameStateManager.preview(container: container)
   )
-  .modelContainer(try! PreviewGameData.createPreviewContainer(with: [PreviewGameData.midGame]))
+  .modelContainer(container)
 }
 
 #Preview("Settings - Completed Game") {
+  let container = PreviewDataSeeder.container()
   WatchActiveGameSettingsView(
     game: PreviewGameData.completedGame,
     gameManager: PreviewGameData.gameManager,
-    activeGameStateManager: ActiveGameStateManager.shared
+    activeGameStateManager: LiveGameStateManager.preview(container: container)
   )
-  .modelContainer(
-    try! PreviewGameData.createPreviewContainer(with: [PreviewGameData.completedGame]))
+  .modelContainer(container)
 }

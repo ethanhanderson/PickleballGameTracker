@@ -21,6 +21,27 @@ public enum PreviewEnvironment {
     public let withActiveGame: Bool
     public let withPlayerAssignments: Bool
     public let gameState: GameState?
+    public let randomizeTimer: Bool
+    public let initialElapsedTime: TimeInterval?
+    public let startTimer: Bool
+
+    public init(
+      scenario: Scenario,
+      withActiveGame: Bool = false,
+      withPlayerAssignments: Bool = false,
+      gameState: GameState? = nil,
+      randomizeTimer: Bool = false,
+      initialElapsedTime: TimeInterval? = nil,
+      startTimer: Bool = true
+    ) {
+      self.scenario = scenario
+      self.withActiveGame = withActiveGame
+      self.withPlayerAssignments = withPlayerAssignments
+      self.gameState = gameState
+      self.randomizeTimer = randomizeTimer
+      self.initialElapsedTime = initialElapsedTime
+      self.startTimer = startTimer
+    }
 
     public static let app: Configuration = Configuration(scenario: .app, withActiveGame: true, withPlayerAssignments: true, gameState: nil)
     public static let liveGame: Configuration = Configuration(scenario: .liveGame, withActiveGame: true, withPlayerAssignments: true, gameState: .playing)
@@ -80,14 +101,83 @@ public enum PreviewEnvironment {
     if configuration.withActiveGame {
       Task { @MainActor in
         active.configure(gameManager: gameManager)
-        if let desiredState = configuration.gameState {
-          do {
-            let allGames = try container.mainContext.fetch(FetchDescriptor<Game>())
-            if let firstGame = allGames.first {
-              firstGame.gameState = desiredState
-            }
-          } catch {
+        do {
+          var allGames = try container.mainContext.fetch(FetchDescriptor<Game>())
+          if allGames.isEmpty {
+            // Create a random active game with participants if none exist
+            let _ = try await PreviewGameData.createRandomActiveGame(using: gameManager)
+            allGames = try container.mainContext.fetch(FetchDescriptor<Game>())
           }
+          // Prefer a non-completed game for the active preview experience
+          var candidate = allGames.first(where: { !$0.isCompleted })
+          if candidate == nil {
+            // If none available, create one and try again
+            let _ = try await PreviewGameData.createRandomActiveGame(using: gameManager)
+            allGames = try container.mainContext.fetch(FetchDescriptor<Game>())
+            candidate = allGames.first(where: { !$0.isCompleted }) ?? allGames.first
+          }
+          if let firstGame = candidate {
+            // Apply desired game state via manager where possible
+            if let desiredState = configuration.gameState {
+              switch desiredState {
+              case .playing:
+                active.setCurrentGame(firstGame)
+                // Ensure timer stopped before applying elapsed
+                active.resetTimer()
+                // Apply timer configuration
+                if let initial = configuration.initialElapsedTime {
+                  active.setElapsedTime(initial)
+                } else if configuration.randomizeTimer {
+                  let minutes = Int.random(in: 1...35)
+                  let seconds = Int.random(in: 0...59)
+                  let random = TimeInterval(minutes * 60 + seconds)
+                  active.setElapsedTime(random)
+                }
+                if configuration.startTimer {
+                  try? await active.startGame()
+                } else {
+                  // Keep game in playing state but timer not running
+                  firstGame.gameState = .playing
+                  active.setCurrentGame(firstGame)
+                }
+              case .paused:
+                active.setCurrentGame(firstGame)
+                if let initial = configuration.initialElapsedTime {
+                  active.setElapsedTime(initial)
+                } else if configuration.randomizeTimer {
+                  let minutes = Int.random(in: 1...35)
+                  let seconds = Int.random(in: 0...59)
+                  let random = TimeInterval(minutes * 60 + seconds)
+                  active.setElapsedTime(random)
+                }
+                // Ensure paused state
+                try? await active.pauseGame()
+              case .initial, .completed, .serving:
+                firstGame.gameState = desiredState
+                active.setCurrentGame(firstGame)
+                if let initial = configuration.initialElapsedTime {
+                  active.setElapsedTime(initial)
+                } else if configuration.randomizeTimer {
+                  let minutes = Int.random(in: 1...35)
+                  let seconds = Int.random(in: 0...59)
+                  let random = TimeInterval(minutes * 60 + seconds)
+                  active.setElapsedTime(random)
+                }
+              }
+            } else {
+              // No explicit desired state; still set current and optional timer
+              active.setCurrentGame(firstGame)
+              if let initial = configuration.initialElapsedTime {
+                active.setElapsedTime(initial)
+              } else if configuration.randomizeTimer {
+                let minutes = Int.random(in: 1...35)
+                let seconds = Int.random(in: 0...59)
+                let random = TimeInterval(minutes * 60 + seconds)
+                active.setElapsedTime(random)
+              }
+            }
+          }
+        } catch {
         }
       }
     }
@@ -289,6 +379,50 @@ extension PreviewEnvironment.Context {
       container.mainContext.insert(game)
       try container.mainContext.save()
       activeGameStateManager.setCurrentGame(game)
+    }
+  }
+
+  /// Configures an active game with optional state and timer parameters
+  @MainActor
+  public func configureActiveGame(
+    gameState: GameState = .playing,
+    initialElapsedTime: TimeInterval? = nil,
+    randomizeElapsedTime: Bool = false
+  ) async throws {
+    // Ensure we have at least one game to work with
+    var allGames = try container.mainContext.fetch(FetchDescriptor<Game>())
+    if allGames.isEmpty {
+      _ = try await PreviewGameData.createRandomActiveGame(using: gameManager)
+      allGames = try container.mainContext.fetch(FetchDescriptor<Game>())
+    }
+
+    guard let firstGame = allGames.first else { return }
+
+    // Set current game
+    activeGameStateManager.setCurrentGame(firstGame)
+
+    // Apply elapsed time if requested
+    if let initialElapsedTime {
+      activeGameStateManager.setElapsedTime(initialElapsedTime)
+    } else if randomizeElapsedTime {
+      let random = TimeInterval(Int.random(in: 0...(15 * 60)))
+      activeGameStateManager.setElapsedTime(random)
+    }
+
+    // Apply desired game state
+    switch gameState {
+    case .playing:
+      try? await activeGameStateManager.startGame()
+    case .paused:
+      try? await activeGameStateManager.pauseGame()
+    case .initial:
+      firstGame.gameState = .initial
+    case .completed:
+      firstGame.gameState = .completed
+      firstGame.isCompleted = true
+      firstGame.completedDate = Date()
+    case .serving:
+      firstGame.gameState = .serving
     }
   }
 }

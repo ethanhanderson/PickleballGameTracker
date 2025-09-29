@@ -5,10 +5,11 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import CorePackage
+import GameTrackerCore
 import SwiftData
 import SwiftUI
 
+@MainActor
 struct GameHistoryContent: View {
   let completedGames: [Game]
   let filteredGames: [Game]

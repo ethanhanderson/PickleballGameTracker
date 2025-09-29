@@ -163,6 +163,7 @@ public struct BackupPresetDTO: Codable, Sendable, Identifiable {
   public let gameType: GameType
   public let team1Id: UUID?
   public let team2Id: UUID?
+  public let accentColor: StoredRGBAColor?
   public let createdDate: Date
   public let lastModified: Date
 
@@ -174,6 +175,7 @@ public struct BackupPresetDTO: Codable, Sendable, Identifiable {
     self.gameType = preset.gameType
     self.team1Id = preset.team1?.id
     self.team2Id = preset.team2?.id
+    self.accentColor = preset.accentColorStored
     self.createdDate = preset.createdDate
     self.lastModified = preset.lastModified
   }

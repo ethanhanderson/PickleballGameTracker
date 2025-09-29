@@ -1,4 +1,4 @@
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
 @MainActor
@@ -37,13 +37,13 @@ struct AddPlayerToTeamView: View {
             HStack {
               Image(systemName: "plus.circle.fill")
                 .font(.system(size: 24))
-                .foregroundStyle(DesignSystem.Colors.primary)
+                .foregroundStyle(Color.accentColor)
               Text("Create New Team")
               Spacer()
               Image(systemName: "chevron.right")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(
-                  DesignSystem.Colors.textSecondary
+                  .secondary
                 )
             }
           }
@@ -68,7 +68,7 @@ struct AddPlayerToTeamView: View {
         }
       }
       .sheet(isPresented: $showCreateTeamSheet) {
-        RosterIdentityEditorView(
+        IdentityEditorView(
           identity: .team(nil),
           manager: manager
         )
@@ -134,7 +134,7 @@ private struct TeamRowView: View {
       }
     } label: {
       HStack {
-        RosterIdentityCard(identity: .team(team))
+        IdentityCard(identity: .team(team))
           .padding(.vertical, DesignSystem.Spacing.xs)
           .opacity(isAlreadyMember ? 0.6 : 1.0)
 
@@ -143,18 +143,18 @@ private struct TeamRowView: View {
         if isAlreadyMember {
           // Badge indicating player is already in this team
           Text("MEMBER")
-            .font(DesignSystem.Typography.caption2)
+            .font(.caption2)
             .fontWeight(.semibold)
-            .foregroundStyle(DesignSystem.Colors.textSecondary)
+            .foregroundStyle(.secondary)
             .padding(.horizontal, DesignSystem.Spacing.sm)
             .padding(.vertical, DesignSystem.Spacing.xs)
             .background(
-              DesignSystem.Colors.containerFillSecondary.opacity(0.8)
+              Color.gray.opacity(0.8)
             )
             .clipShape(Capsule())
         } else if isSelected {
           Image(systemName: "checkmark")
-            .foregroundStyle(DesignSystem.Colors.primary)
+            .foregroundStyle(Color.accentColor)
         }
       }
     }

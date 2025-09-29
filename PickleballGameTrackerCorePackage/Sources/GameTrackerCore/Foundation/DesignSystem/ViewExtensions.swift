@@ -50,8 +50,8 @@ public extension View {
         self.containerBackground(
             LinearGradient(
                 stops: [
-                    .init(color: color, location: 0.0),
-                    .init(color: Color.clear, location: 0.3)
+                    .init(color: color.opacity(0.65), location: 0.0),
+                    .init(color: .clear, location: 0.23)
                 ],
                 startPoint: .top,
                 endPoint: .bottom

@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import CorePackage
+import GameTrackerCore
 
 // MARK: - Game Section Destination
 

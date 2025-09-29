@@ -1,0 +1,1 @@
+Scan the work we just did and document it in the repo wiki. Look for relevant files to update and consider if new ones need to be added. Follow the workspace rules for docs maintenance and addition guidelines

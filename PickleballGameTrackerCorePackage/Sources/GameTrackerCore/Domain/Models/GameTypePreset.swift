@@ -19,6 +19,7 @@ public final class GameTypePreset: Hashable {
     public var gameTypeRaw: String
     @Relationship public var team1: TeamProfile?
     @Relationship public var team2: TeamProfile?
+    public var accentColorStored: StoredRGBAColor?
 
     public var createdDate: Date
     public var lastModified: Date
@@ -31,6 +32,7 @@ public final class GameTypePreset: Hashable {
         gameType: GameType,
         team1: TeamProfile? = nil,
         team2: TeamProfile? = nil,
+        accentColor: StoredRGBAColor? = nil,
         createdDate: Date = Date(),
         lastModified: Date = Date()
     ) {
@@ -41,6 +43,7 @@ public final class GameTypePreset: Hashable {
         self.gameTypeRaw = gameType.rawValue
         self.team1 = team1
         self.team2 = team2
+        self.accentColorStored = accentColor
         self.createdDate = createdDate
         self.lastModified = lastModified
     }

@@ -1,4 +1,4 @@
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
 @MainActor
@@ -11,12 +11,12 @@ struct SelectablePlayerRow: View {
     Button(action: onToggle) {
       HStack(spacing: DesignSystem.Spacing.sm) {
         Image(systemName: "person.crop.circle")
-          .foregroundStyle(DesignSystem.Colors.primary)
+          .foregroundStyle(Color.accentColor)
         Text(name)
         Spacer()
         if isSelected {
           Image(systemName: "checkmark")
-            .foregroundStyle(DesignSystem.Colors.primary)
+            .foregroundStyle(Color.accentColor)
         }
       }
     }

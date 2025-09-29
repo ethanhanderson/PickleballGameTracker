@@ -5,7 +5,7 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import CorePackage
+import GameTrackerCore
 import SwiftUI
 
 public struct GameInsightsCard: View {
@@ -111,12 +111,12 @@ public struct GameInsightsCard: View {
         if let streak = currentStreak, streak.count >= 3 {
             if streak.isWinning {
                 let (icon, message) = winningStreakMessage(for: streak.count)
-                return (icon, message, DesignSystem.Colors.success)
+                return (icon, message, Color.green)
             } else {
                 return (
                     "arrow.up.circle.fill",
                     "Learning phase - \(streak.count) games to analyze and improve",
-                    DesignSystem.Colors.warning
+                    Color.orange
                 )
             }
         }
@@ -127,13 +127,13 @@ public struct GameInsightsCard: View {
                 return (
                     "chart.line.uptrend.xyaxis",
                     "Hot streak - winning 80%+ of recent games!",
-                    DesignSystem.Colors.success
+                    Color.green
                 )
             } else if recentForm <= 0.2 {
                 return (
                     "lightbulb.fill",
                     "Time to adjust strategy - fresh approach needed",
-                    DesignSystem.Colors.primary
+                    Color.accentColor
                 )
             }
         }
@@ -145,7 +145,7 @@ public struct GameInsightsCard: View {
                 return (
                     "target",
                     "Thriving in pressure - 50%+ games decided by 2 points",
-                    DesignSystem.Colors.primary
+                    Color.accentColor
                 )
             }
         }
@@ -155,7 +155,7 @@ public struct GameInsightsCard: View {
             return (
                 "crown.fill",
                 "Dominant performance - biggest win by \(bestMargin) points!",
-                DesignSystem.Colors.warning
+                Color.orange
             )
         }
 
@@ -164,19 +164,19 @@ public struct GameInsightsCard: View {
             if winRate >= 0.7 {
                 return (
                     "star.fill", "Excellent form - winning 70%+ of your games!",
-                    DesignSystem.Colors.success
+                    Color.green
                 )
             } else if winRate >= 0.5 {
                 return (
                     "scale.3d",
                     "Balanced competitor - even match record shows growth",
-                    DesignSystem.Colors.primary
+                    Color.accentColor
                 )
             } else {
                 return (
                     "graduationcap.fill",
                     "Building fundamentals - every game teaches valuable lessons",
-                    DesignSystem.Colors.primary
+                    Color.accentColor
                 )
             }
         }
@@ -185,17 +185,17 @@ public struct GameInsightsCard: View {
         return (
             "play.circle.fill",
             "Welcome to pickleball! Track your journey and improvement",
-            DesignSystem.Colors.primary
+            .accentColor
         )
     }
 
     public var body: some View {
         let insight = primaryInsight
 
-        InsightRow(
+        GameInsightRow(
             iconName: insight.icon,
             message: insight.message,
-            iconGradient: DesignSystem.Colors.primary.gradient,
+            iconGradient: Color.accentColor.gradient,
             backgroundOpacity: 0.2
         )
     }
@@ -208,24 +208,29 @@ public struct GameInsightsCard: View {
 #Preview("Hot Streak Player") {
     GameInsightsCard(games: PreviewGameData.hotStreakPlayerGames)
         .padding()
+        .accentColor(.green)
 }
 
 #Preview("New Player") {
     GameInsightsCard(games: PreviewGameData.newPlayerGames)
         .padding()
+        .accentColor(.green)
 }
 
 #Preview("Competitive Player") {
     GameInsightsCard(games: PreviewGameData.competitivePlayerGames)
         .padding()
+        .accentColor(.green)
 }
 
 #Preview("Dominant Player") {
     GameInsightsCard(games: PreviewGameData.dominantPlayerGames)
         .padding()
+        .accentColor(.green)
 }
 
 #Preview("Empty State") {
     GameInsightsCard(games: PreviewGameData.emptyGames)
         .padding()
+        .accentColor(.green)
 }

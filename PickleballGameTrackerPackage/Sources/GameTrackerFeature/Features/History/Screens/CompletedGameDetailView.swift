@@ -2,16 +2,16 @@
 //  CompletedGameDetailView.swift
 //  Pickleball Score Tracking
 //
-//  Created by Assistant on 8/10/25.
+//  Created by Ethan Anderson on 8/10/25.
 //
 
-import CorePackage
+import GameTrackerCore
 import SwiftData
 import SwiftUI
 
+@MainActor
 struct CompletedGameDetailView: View {
   @Bindable var game: Game
-  @Environment(\.modelContext) private var modelContext
   @Environment(SwiftDataGameManager.self) private var gameManager
   @State private var editingNotes: String = ""
   @State private var isEditingNotes = false
@@ -53,36 +53,48 @@ struct CompletedGameDetailView: View {
   }
 
   private var header: some View {
-    InfoCard(
-      title: game.gameType.displayName, icon: game.gameType.iconName, style: .info,
-      gameType: game.gameType
-    ) {
+    VStack(alignment: .leading, spacing: DesignSystem.Spacing.md) {
+      HStack(spacing: DesignSystem.Spacing.md) {
+        Image(systemName: game.gameType.iconName)
+          .font(.system(size: 40, weight: .medium))
+          .foregroundStyle(game.gameType.color.gradient)
+          .shadow(color: game.gameType.color.opacity(0.3), radius: 6, x: 0, y: 3)
+
+        Text(game.gameType.displayName)
+          .font(.largeTitle)
+          .fontWeight(.bold)
+          .foregroundStyle(.primary)
+      }
+
       VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
         Text(game.formattedDate)
-          .font(DesignSystem.Typography.caption)
-          .foregroundColor(DesignSystem.Colors.textSecondary)
+          .font(.caption)
+          .foregroundStyle(.secondary)
         if let duration = game.formattedDuration {
           Text("Duration: \(duration)")
-            .font(DesignSystem.Typography.caption)
-            .foregroundColor(DesignSystem.Colors.textSecondary)
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
       }
     }
+    .padding(DesignSystem.Spacing.md)
+    .background(Color.gray.opacity(0.1))
+    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
   }
 
   private var scoreSection: some View {
     HStack(spacing: DesignSystem.Spacing.lg) {
-      ScoreDisplayView(
+      HistoryScoreDisplay(
         score: game.score1,
         label: game.effectivePlayerLabel1,
-        color: DesignSystem.Colors.scorePlayer1,
+        color: .blue,
         size: .large,
         isWinner: (game.score1 > game.score2)
       )
-      ScoreDisplayView(
+      HistoryScoreDisplay(
         score: game.score2,
         label: game.effectivePlayerLabel2,
-        color: DesignSystem.Colors.scorePlayer2,
+        color: .green,
         size: .large,
         isWinner: (game.score2 > game.score1)
       )
@@ -109,8 +121,6 @@ struct CompletedGameDetailView: View {
     }
     .cardGradientStyle()
   }
-
-  // metric view extracted to Features/History/Components/GameMetricRow.swift
 
   private var actions: some View {
     VStack(spacing: DesignSystem.Spacing.sm) {
@@ -168,38 +178,17 @@ struct CompletedGameDetailView: View {
 
   private var notesSection: some View {
     VStack(spacing: DesignSystem.Spacing.sm) {
-      InfoCard(title: "Notes", icon: "note.text") {
-        if isEditingNotes {
-          VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
-            TextEditor(text: $editingNotes)
-              .frame(minHeight: 120)
-              .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                  .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-              )
-            HStack {
-              Button("Save", systemImage: "tray.and.arrow.down.fill") { Task { await saveNotes() } }
-                .primaryButton()
-                .disabled(isSaving)
-              Button("Discard", systemImage: "trash") {
-                editingNotes = game.notes ?? ""
-                isEditingNotes = false
-              }
-              .secondaryButton()
-            }
-          }
-        } else {
-          if let notes = game.notes, !notes.isEmpty {
-            Text(notes)
-              .font(DesignSystem.Typography.body)
-              .foregroundColor(DesignSystem.Colors.textPrimary)
-          } else {
-            Text("No notes yet.")
-              .font(DesignSystem.Typography.caption)
-              .foregroundColor(DesignSystem.Colors.textSecondary)
-          }
-        }
-      }
+      HistoryInfoCard(title: "Notes", value: getNotesDisplayText())
+    }
+  }
+
+  private func getNotesDisplayText() -> String {
+    if isEditingNotes {
+      return editingNotes
+    } else if let notes = game.notes, !notes.isEmpty {
+      return notes
+    } else {
+      return "No notes yet."
     }
   }
 
@@ -249,9 +238,12 @@ struct CompletedGameDetailView: View {
 }
 
 #Preview("Completed Game") {
-  NavigationStack {
-    CompletedGameDetailView(game: PreviewGameData.completedGame)
+  let ctx = try! PreviewGameData.makeActiveGameContext(game: PreviewGameData.completedGame)
+  return NavigationStack {
+    CompletedGameDetailView(game: ctx.game)
   }
-  .modelContainer(
-    try! PreviewGameData.createPreviewContainer(with: [PreviewGameData.completedGame]))
+  .modelContainer(ctx.container)
+  .environment(ctx.gameManager)
+  .environment(ctx.activeGameStateManager)
+  .accentColor(.green)
 }

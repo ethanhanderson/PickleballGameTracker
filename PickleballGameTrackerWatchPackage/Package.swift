@@ -21,11 +21,7 @@ let package = Package(
     .target(
       name: "GameTrackerWatchFeature",
       dependencies: [
-        .product(
-          name: "CorePackage", package: "PickleballGameTrackerCorePackage")
-      ],
-      swiftSettings: [
-        .enableUpcomingFeature("StrictConcurrency")
+        .product(name: "GameTrackerCore", package: "PickleballGameTrackerCorePackage")
       ]
     ),
     .testTarget(

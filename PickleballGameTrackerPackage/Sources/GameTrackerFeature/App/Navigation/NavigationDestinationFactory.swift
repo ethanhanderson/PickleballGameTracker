@@ -5,7 +5,7 @@
 //  Created by Ethan Anderson on 7/9/25.
 //
 
-import CorePackage
+import GameTrackerCore
 import SwiftData
 import SwiftUI
 
@@ -18,42 +18,31 @@ struct NavigationDestinationFactory {
   @MainActor @ViewBuilder
   static func createDestination(
     for destination: GameSectionDestination,
-    modelContext: ModelContext,
     navigationState: AppNavigationState
   ) -> some View {
     switch destination {
     case .quickStart, .allGames, .recommended, .beginnerFriendly, .advancedPlay, .testing,
       .customizable:
-      GameSectionDetailView(
-        destination: destination,
-        modelContext: modelContext,
-        navigationState: navigationState
-      )
-      .task { @MainActor in
-        Log.event(
-          .viewAppear, level: .debug, message: "Open section detail",
-          metadata: ["title": destination.title])
-        navigationState.trackSectionNavigation(destination.title)
-      }
+      CatalogSectionDetailView(destination: destination, navigationState: navigationState)
+        .task { @MainActor in
+          Log.event(
+            .viewAppear, level: .debug, message: "Open section detail",
+            metadata: ["title": destination.title])
+          navigationState.trackSectionNavigation(destination.title)
+        }
     case .gameDetail(let gameType):
       createGameDetailView(
         gameType: gameType,
-        modelContext: modelContext,
         navigationState: navigationState
       )
-    case .sectionDetail(let title, let gameTypes):
-      GameSectionDetailView(
-        sectionTitle: title,
-        gameTypes: gameTypes,
-        modelContext: modelContext,
-        navigationState: navigationState
-      )
-      .task { @MainActor in
-        Log.event(
-          .viewAppear, level: .debug, message: "Open custom section detail",
-          metadata: ["title": title])
-        navigationState.trackSectionNavigation(title)
-      }
+    case .sectionDetail:
+      CatalogSectionDetailView(destination: destination, navigationState: navigationState)
+        .task { @MainActor in
+          Log.event(
+            .viewAppear, level: .debug, message: "Open custom section detail",
+            metadata: ["title": destination.title])
+          navigationState.trackSectionNavigation(destination.title)
+        }
     }
   }
 
@@ -62,7 +51,6 @@ struct NavigationDestinationFactory {
   @ViewBuilder
   static func createGameDetailView(
     gameType: GameType,
-    modelContext: ModelContext,
     navigationState: AppNavigationState
   ) -> some View {
     GameDetailDestinationView(gameType: gameType, navigationState: navigationState)
@@ -75,7 +63,7 @@ struct NavigationDestinationFactory {
 @MainActor
 private struct GameDetailDestinationView: View {
   @Environment(SwiftDataGameManager.self) private var gameManager
-  @Environment(ActiveGameStateManager.self) private var activeGameStateManager
+  @Environment(LiveGameStateManager.self) private var activeGameStateManager
 
   let gameType: GameType
   @Bindable var navigationState: AppNavigationState
@@ -83,20 +71,32 @@ private struct GameDetailDestinationView: View {
   var body: some View {
     GameDetailView(
       gameType: gameType,
-      onStartGame: { variation in
+      onStartGame: { variation, matchup in
         Task {
           do {
-            let newGame = try await gameManager.createGame(variation: variation)
-            activeGameStateManager.setCurrentGame(newGame)
+            let config = GameStartConfiguration(
+              gameType: gameType,
+              teamSize: TeamSize(playersPerSide: matchup.teamSize) ?? .doubles,
+              participants: {
+                switch matchup.mode {
+                case .players(let a, let b):
+                  return Participants(side1: .players(a), side2: .players(b))
+                case .teams(let t1, let t2):
+                  return Participants(side1: .team(t1), side2: .team(t2))
+                }
+              }(),
+              notes: nil,
+              variation: variation
+            )
+            _ = try await activeGameStateManager.startNewGame(with: config)
             Log.event(
               .viewAppear,
               level: .info,
-              message: "New game created and set current (paused)",
-              context: .current(gameId: newGame.id),
-              metadata: ["source": "Navigation", "gameId": newGame.id.uuidString]
+              message: "New game created via LiveGameStateManager",
+              metadata: ["source": "Navigation"]
             )
           } catch {
-            Log.error(error, event: .saveFailed, metadata: ["action": "createAndStartGame"])
+            Log.error(error, event: .saveFailed, metadata: ["action": "startNewGame"])
           }
         }
       }
