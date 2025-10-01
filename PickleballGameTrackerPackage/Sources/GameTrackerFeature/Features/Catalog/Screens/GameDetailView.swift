@@ -30,9 +30,9 @@ struct GameDetailView: View {
 
   @State private var showNavigationTitle = false
 
-  @State private var showingActiveGameConflict = false
+  @State private var showingLiveGameConflict = false
   @State private var pendingGameVariation: GameVariation?
-  @State private var conflictingActiveGame: Game?
+  @State private var conflictingLiveGame: Game?
   @State private var showingSetupSheet = false
 
   init(
@@ -151,9 +151,9 @@ struct GameDetailView: View {
               let matchup = MatchupSelection(teamSize: variation.teamSize, mode: .players(sideA: [], sideB: []))
               if activeGameStateManager.hasActiveGame {
                 pendingGameVariation = variation
-                conflictingActiveGame =
+                conflictingLiveGame =
                   activeGameStateManager.currentGame
-                showingActiveGameConflict = true
+                showingLiveGameConflict = true
               } else {
                 onStartGame(variation, matchup)
               }
@@ -204,8 +204,8 @@ struct GameDetailView: View {
 
       if activeGameStateManager.hasActiveGame {
         pendingGameVariation = variation
-        conflictingActiveGame = activeGameStateManager.currentGame
-        showingActiveGameConflict = true
+        conflictingLiveGame = activeGameStateManager.currentGame
+        showingLiveGameConflict = true
       } else {
         onStartGame(variation, matchup)
       }
@@ -269,8 +269,8 @@ struct GameDetailView: View {
 
         if activeGameStateManager.hasActiveGame {
           pendingGameVariation = variation
-          conflictingActiveGame = activeGameStateManager.currentGame
-          showingActiveGameConflict = true
+          conflictingLiveGame = activeGameStateManager.currentGame
+          showingLiveGameConflict = true
         } else {
           onStartGame(variation, matchup)
         }

@@ -21,7 +21,6 @@ struct RecentlyViewedGameTypesSection: View {
           } label: {
             GameTypeCard(
               gameType: gameType,
-              isEnabled: true,
               fillsWidth: true
             )
           }

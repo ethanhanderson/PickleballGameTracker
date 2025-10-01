@@ -61,7 +61,7 @@ struct GameEventsHistoryView: View {
 // MARK: - Preview
 
 #Preview("Game Events History - Randomized") {
-    GameEventsHistoryView(game: PreviewGameData.createGameWithRandomEvents(count: 28))
+    GameEventsHistoryView(game: PreviewGameData.createGameWithRealisticEvents(rallyCount: 28))
         .minimalPreview(environment: PreviewEnvironment.liveGame())
 }
 

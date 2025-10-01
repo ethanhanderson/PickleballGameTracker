@@ -95,6 +95,10 @@ private struct GameDetailDestinationView: View {
               message: "New game created via LiveGameStateManager",
               metadata: ["source": "Navigation"]
             )
+            NotificationCenter.default.post(
+              name: Notification.Name("OpenLiveGameRequested"),
+              object: nil
+            )
           } catch {
             Log.error(error, event: .saveFailed, metadata: ["action": "startNewGame"])
           }

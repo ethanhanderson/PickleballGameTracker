@@ -1,20 +1,10 @@
 import GameTrackerCore
 import SwiftUI
 
+@MainActor
 struct GameTypeCard: View {
   let gameType: GameType
-  let isEnabled: Bool
   let fillsWidth: Bool
-  let action: (() -> Void)?
-
-  private let iconLargeSize: CGFloat = 24
-  private let iconSmallSize: CGFloat = 16
-  private let levelIconSize: CGFloat = 18
-  private let headerBottomPadding: CGFloat =
-    DesignSystem.Spacing.sm + DesignSystem.Spacing.xs
-  private let horizontalPadding: CGFloat = 22
-  private let topPadding: CGFloat = 18
-  private let bottomPadding: CGFloat = 20
 
   private let playersLabel: LocalizedStringResource = LocalizedStringResource(
     "players_label",
@@ -25,61 +15,21 @@ struct GameTypeCard: View {
     defaultValue: "Level"
   )
 
-  private var isInteractive: Bool { action != nil }
-
   public init(
     gameType: GameType,
-    isEnabled: Bool = true,
-    fillsWidth: Bool = false,
-    action: (() -> Void)? = nil
-  ) {
-    self.gameType = gameType
-    self.isEnabled = isEnabled
-    self.fillsWidth = fillsWidth
-    self.action = action
-  }
-
-  public init(
-    gameType: GameType,
-    isEnabled: Bool,
     fillsWidth: Bool = false
   ) {
-    self.init(
-      gameType: gameType,
-      isEnabled: isEnabled,
-      fillsWidth: fillsWidth,
-      action: nil
-    )
+    self.gameType = gameType
+    self.fillsWidth = fillsWidth
   }
 
   public var body: some View {
-    let cardContent =
-      cardView
-      .contentShape(.rect)
-      .opacity(isEnabled ? 1.0 : 0.6)
-      .accessibilityElement(children: .combine)
-      .accessibilityAddTraits(isInteractive ? .isButton : [])
-      .accessibilityLabel(a11yLabelText)
-
-    if let action = action {
-      Button(action: action) {
-        cardContent
-      }
-      .buttonStyle(.plain)
-      .disabled(!isEnabled)
-    } else {
-      cardContent
-    }
-  }
-
-  @ViewBuilder
-  private var cardView: some View {
     VStack(spacing: DesignSystem.Spacing.sm) {
       HStack(alignment: .center, spacing: DesignSystem.Spacing.md) {
         VStack(spacing: DesignSystem.Spacing.sm) {
           HStack(alignment: .center, spacing: DesignSystem.Spacing.md) {
             Image(systemName: gameType.iconName)
-              .font(.system(size: iconLargeSize, weight: .medium))
+              .font(.system(size: DesignSystem.Spacing.lg, weight: .medium))
               .foregroundStyle(.white)
               .shadow(
                 color: .black.opacity(0.20),
@@ -106,32 +56,33 @@ struct GameTypeCard: View {
         }
 
         Image(systemName: "chevron.right")
-          .font(.system(size: iconSmallSize, weight: .semibold))
-          .foregroundStyle(.white.opacity(0.7).opacity(isInteractive ? 0.75 : 0.4))
+          .font(.system(size: DesignSystem.Spacing.md, weight: .semibold))
+          .foregroundStyle(.white.opacity(0.7))
       }
-      .padding(.bottom, headerBottomPadding)
+      .padding(.bottom, DesignSystem.Spacing.md)
 
       HStack(spacing: DesignSystem.Spacing.lg) {
-        MetricColumn(
+        GameDetailItem(
           icon: "person.2.fill",
-          iconSize: iconSmallSize,
+          iconSize: DesignSystem.Spacing.md,
           label: playersLabel,
           value: gameType.playerCountValue
         )
 
-        MetricColumn(
+        GameDetailItem(
           icon: "clock.fill",
-          iconSize: iconSmallSize,
+          iconSize: DesignSystem.Spacing.md,
           label: LocalizedStringResource("time_label", defaultValue: "Minutes"),
           value: gameType.estimatedTimeValue
         )
 
-        LevelMetricColumn(
+        GameDetailItem(
           icon: "star.fill",
-          iconSize: iconSmallSize,
+          iconSize: DesignSystem.Spacing.md,
           label: levelLabel,
+          value: "\(Int(gameType.difficultyFillProgress * 100))%",
           levelValue: gameType.difficultyFillProgress,
-          levelIconSize: levelIconSize
+          levelIconSize: DesignSystem.Spacing.md
         )
       }
     }
@@ -144,69 +95,86 @@ struct GameTypeCard: View {
       maxWidth: fillsWidth ? .infinity : nil,
       alignment: .topLeading
     )
-    .padding(.horizontal, horizontalPadding)
-    .padding(.top, topPadding)
-    .padding(.bottom, bottomPadding)
+    .padding(.horizontal, DesignSystem.Spacing.lg)
+    .padding(.top, DesignSystem.Spacing.lg)
+    .padding(.bottom, DesignSystem.CornerRadius.xl)
     .glassEffect(
-      .regular.tint(gameType.color),
-      in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl)
+        .regular.tint(gameType.color).interactive(),
+      in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xxl)
     )
+    .contentShape(.rect)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(a11yLabelText)
   }
 }
 
-private struct MetricColumn: View {
+@MainActor
+private struct GameDetailItem: View {
   let icon: String
   let iconSize: CGFloat
   let label: LocalizedStringResource
   let value: String
+  var levelValue: Double?
+  var levelIconSize: CGFloat?
+
+  init(
+    icon: String,
+    iconSize: CGFloat,
+    label: LocalizedStringResource,
+    value: String,
+    levelValue: Double? = nil,
+    levelIconSize: CGFloat? = nil
+  ) {
+    self.icon = icon
+    self.iconSize = iconSize
+    self.label = label
+    self.value = value
+    self.levelValue = levelValue
+    self.levelIconSize = levelIconSize
+  }
 
   var body: some View {
     VStack(spacing: DesignSystem.Spacing.xs) {
-      Image(systemName: icon)
-        .font(.system(size: iconSize, weight: .medium))
-        .foregroundStyle(.white.opacity(0.7))
-        .shadow(color: .black.opacity(0.08), radius: 2, x: 0, y: 1)
+      iconView
 
-      Text(label)
-        .font(.caption)
-        .fontWeight(.semibold)
-        .foregroundStyle(.white.opacity(0.7))
+      labelView
 
-      Text(value)
-        .font(.headline)
-        .fontWeight(.bold)
-        .fontDesign(.rounded)
-        .foregroundStyle(.white)
-        .monospacedDigit()
+      if let levelValue = levelValue, let levelIconSize = levelIconSize {
+        levelIndicatorView(levelValue: levelValue, iconSize: levelIconSize)
+      } else {
+        valueView
+      }
     }
     .frame(maxWidth: .infinity)
   }
-}
 
-private struct LevelMetricColumn: View {
-  let icon: String
-  let iconSize: CGFloat
-  let label: LocalizedStringResource
-  let levelValue: Double
-  let levelIconSize: CGFloat
+  private var iconView: some View {
+    Image(systemName: icon)
+      .font(.system(size: iconSize, weight: .medium))
+      .foregroundStyle(.white.opacity(levelValue != nil ? 0.8 : 0.7))
+      .shadow(color: .black.opacity(0.08), radius: 2, x: 0, y: 1)
+  }
 
-  var body: some View {
-    VStack(spacing: DesignSystem.Spacing.xs) {
-      Image(systemName: icon)
-        .font(.system(size: iconSize, weight: .medium))
-        .foregroundStyle(.white.opacity(0.8))
-        .shadow(color: .black.opacity(0.08), radius: 2, x: 0, y: 1)
+  private var labelView: some View {
+    Text(label)
+      .font(.caption)
+      .fontWeight(.semibold)
+      .foregroundStyle(.white.opacity(0.7))
+  }
 
-      Text(label)
-        .font(.caption)
-        .fontWeight(.semibold)
-        .foregroundStyle(.white.opacity(0.7))
+  private var valueView: some View {
+    Text(value)
+      .font(.headline)
+      .fontWeight(.bold)
+      .fontDesign(.rounded)
+      .foregroundStyle(.white)
+      .monospacedDigit()
+  }
 
-      Image(systemName: "chart.bar.fill", variableValue: levelValue)
-        .font(.system(size: levelIconSize, weight: .bold))
-        .foregroundStyle(.white)
-    }
-    .frame(maxWidth: .infinity)
+  private func levelIndicatorView(levelValue: Double, iconSize: CGFloat) -> some View {
+    Image(systemName: "chart.bar.fill", variableValue: levelValue)
+      .font(.system(size: iconSize, weight: .bold))
+      .foregroundStyle(.white)
   }
 }
 
@@ -218,4 +186,15 @@ extension GameTypeCard {
   }
 }
 
+// MARK: - Preview
+
+#Preview {
+  @Previewable @State var selectedGameType = GameType.allCases.randomElement() ?? .recreational
+
+  return GameTypeCard(
+    gameType: selectedGameType,
+    fillsWidth: false
+  )
+  .frame(width: 280, height: 200)
+}
 

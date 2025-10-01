@@ -12,7 +12,7 @@ public struct AppNavigationView: View {
     @State private var rosterManager: PlayerTeamManager
     @State private var gameManager = SwiftDataGameManager()
     @State private var selectedTab: AppTab = .games
-    @State private var showingActiveGameSheet = false
+    @State private var showingLiveGameSheet = false
     @State private var deepLinkDestination: DeepLinkDestination?
     @State private var showDeepLink: Bool = false
     @State private var statisticsFilter:
@@ -97,10 +97,10 @@ public struct AppNavigationView: View {
             }
         }
         .environment(gameManager)
-        .tabViewBottomAccessory {
-            if activeGameStateManager.hasActiveGame {
+        .if(activeGameStateManager.hasActiveGame) { view in
+            view.tabViewBottomAccessory {
                 LiveGameMiniPreview(
-                    onTap: { showingActiveGameSheet = true },
+                    onTap: { showingLiveGameSheet = true },
                     animation: animation
                 )
             }
@@ -158,7 +158,7 @@ public struct AppNavigationView: View {
                 queue: .main
             ) { _ in
                 Task { @MainActor in
-                    showingActiveGameSheet = true
+                    showingLiveGameSheet = true
                 }
             }
         }
@@ -190,7 +190,7 @@ public struct AppNavigationView: View {
                 )
             }
         }
-        .sheet(isPresented: $showingActiveGameSheet) {
+        .sheet(isPresented: $showingLiveGameSheet) {
             if let currentGame = activeGameStateManager.currentGame {
                 NavigationStack {
                     LiveView(
@@ -198,11 +198,13 @@ public struct AppNavigationView: View {
                         gameManager: gameManager,
                         onDismiss: {
                             Task { @MainActor in
-                                showingActiveGameSheet = false
+                                showingLiveGameSheet = false
                             }
-                        }
+                        },
+                        animation: animation
                     )
                 }
+                .navigationTransition(.zoom(sourceID: "sheet", in: animation))
                 .tint(.accentColor)
             }
         }
@@ -230,7 +232,7 @@ public struct AppNavigationView: View {
     let env = PreviewEnvironment.make(
         configuration: .init(
             scenario: .app,
-            withActiveGame: true,
+            withLiveGame: true,
             withPlayerAssignments: true,
             gameState: .playing,
             randomizeTimer: true,
@@ -241,7 +243,7 @@ public struct AppNavigationView: View {
         rosterManager: env.rosterManager ?? PlayerTeamManager(storage: env.storage),
         gameManager: env.gameManager
     )
-    .accentColor(.orange)
+    .tint(.green)
     .modelContainer(env.container)
     .environment(env.activeGameStateManager)
 }
@@ -252,7 +254,7 @@ public struct AppNavigationView: View {
         rosterManager: PlayerTeamManager(storage: env.storage),
         gameManager: SwiftDataGameManager(storage: env.storage)
     )
-    .accentColor(.green)
+    .tint(.green)
     .modelContainer(env.container)
     .environment(env.activeGameStateManager)
 }

@@ -10,23 +10,27 @@ public enum SwiftDataSeeding {
   }
 
   public static func seedCommonVariations(into context: ModelContext) {
-    let rec = GameVariation(
-      name: "Recreational Doubles",
-      gameType: .recreational,
-      teamSize: 2,
-      winningScore: 11,
-      winByTwo: true
-    )
-    context.insert(rec)
-
-    let tour = GameVariation(
-      name: "Tournament Doubles",
-      gameType: .tournament,
-      teamSize: 2,
-      winningScore: 15,
-      winByTwo: true
-    )
-    context.insert(tour)
+    let variations = [
+      try! GameVariationFactory()
+        .name("Recreational Doubles")
+        .gameType(.recreational)
+        .teamSize(2)
+        .winningScore(11)
+        .winByTwo(true)
+        .generate(),
+      
+      try! GameVariationFactory()
+        .name("Tournament Doubles")
+        .gameType(.tournament)
+        .teamSize(2)
+        .winningScore(15)
+        .winByTwo(true)
+        .generate()
+    ]
+    
+    for variation in variations {
+      context.insert(variation)
+    }
   }
 
   public static func seedGames(from templates: [Game], into context: ModelContext) {
@@ -112,84 +116,15 @@ public enum SwiftDataSeeding {
   }
 
   public static func seedSampleRoster(into context: ModelContext) {
-    let p1 = PlayerProfile(
-      name: "Ethan",
-      iconSymbolName: "tennis.racket",
-      accentColor: StoredRGBAColor(Color.blue),
-      skillLevel: .advanced,
-      preferredHand: .right
-    )
-    let p2 = PlayerProfile(
-      name: "Reed",
-      iconSymbolName: "figure.tennis",
-      accentColor: StoredRGBAColor(Color.green),
-      skillLevel: .intermediate,
-      preferredHand: .right
-    )
-    let p3 = PlayerProfile(
-      name: "Ricky",
-      iconSymbolName: "figure.walk",
-      accentColor: StoredRGBAColor(Color.orange),
-      skillLevel: .beginner,
-      preferredHand: .left
-    )
-    let p4 = PlayerProfile(
-      name: "Dave",
-      iconSymbolName: "medal.fill",
-      accentColor: StoredRGBAColor(Color.purple),
-      skillLevel: .expert,
-      preferredHand: .right
-    )
+    let (players, teams) = TeamProfileFactory.realisticTeams(playerCount: 12, teamSize: 2)
 
-    let archived1 = PlayerProfile(
-      name: "Alex",
-      iconSymbolName: "person.fill",
-      accentColor: StoredRGBAColor(Color.brown),
-      skillLevel: .intermediate,
-      preferredHand: .right
-    )
-    archived1.isArchived = true
+    for player in players {
+      context.insert(player)
+    }
 
-    let archived2 = PlayerProfile(
-      name: "Jordan",
-      iconSymbolName: "person.fill",
-      accentColor: StoredRGBAColor(Color.indigo),
-      skillLevel: .advanced,
-      preferredHand: .left
-    )
-    archived2.isArchived = true
-
-    for p in [p1, p2, p3, p4, archived1, archived2] { context.insert(p) }
-
-    let t1 = TeamProfile(
-      name: "Ethan & Reed",
-      iconSymbolName: "person.2.fill",
-      accentColor: StoredRGBAColor(Color.teal),
-      players: [p1, p2]
-    )
-    let t2 = TeamProfile(
-      name: "Ricky & Dave",
-      iconSymbolName: "figure.mind.and.body",
-      accentColor: StoredRGBAColor(Color.pink),
-      players: [p3, p4]
-    )
-    let archivedTeam1 = TeamProfile(
-      name: "Alex & Jordan",
-      iconSymbolName: "person.2.fill",
-      accentColor: StoredRGBAColor(Color.brown),
-      players: [archived1, archived2]
-    )
-    archivedTeam1.isArchived = true
-
-    let archivedTeam2 = TeamProfile(
-      name: "Old Veterans",
-      iconSymbolName: "trophy.fill",
-      accentColor: StoredRGBAColor(Color.indigo),
-      players: [p1, p4]
-    )
-    archivedTeam2.isArchived = true
-
-    for t in [t1, t2, archivedTeam1, archivedTeam2] { context.insert(t) }
+    for team in teams {
+      context.insert(team)
+    }
   }
 }
 

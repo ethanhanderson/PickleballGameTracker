@@ -9,15 +9,18 @@ struct LiveView: View {
     @Environment(LiveGameStateManager.self) private var activeGameStateManager
     @Environment(\.modelContext) private var modelContext
     let onDismiss: (() -> Void)?
+    var animation: Namespace.ID?
 
     init(
         game: Game,
         gameManager: SwiftDataGameManager,
-        onDismiss: (() -> Void)? = nil
+        onDismiss: (() -> Void)? = nil,
+        animation: Namespace.ID? = nil
     ) {
         self.game = game
         self.gameManager = gameManager
         self.onDismiss = onDismiss
+        self.animation = animation
     }
 
     @State private var isResetting: Bool = false

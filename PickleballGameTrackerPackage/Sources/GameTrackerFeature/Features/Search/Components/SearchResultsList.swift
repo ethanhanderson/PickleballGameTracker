@@ -12,7 +12,6 @@ struct GameTypeResultsList: View {
       NavigationLink(value: GameSectionDestination.gameDetail(gameType)) {
         GameTypeCard(
           gameType: gameType,
-          isEnabled: true,
           fillsWidth: true
         )
       }

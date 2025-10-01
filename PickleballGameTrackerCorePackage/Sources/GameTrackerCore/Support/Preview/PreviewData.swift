@@ -9,7 +9,59 @@ import Foundation
 import SwiftData
 import SwiftUI
 
-/// Centralized preview data provider for all views in the Pickleball Score Tracking app
+/// Centralized preview data provider for all views in the Pickleball Score Tracking app.
+///
+/// ## Overview
+///
+/// This struct provides static game data collections for use in SwiftUI previews and tests.
+/// The data uses `CompletedGameFactory` for flexible, realistic game generation.
+///
+/// ## Generating Custom Games
+///
+/// For custom preview scenarios, use `CompletedGameFactory` directly:
+///
+/// ```swift
+/// // Random game with default settings
+/// let game = CompletedGameFactory().generate()
+///
+/// // Specific tournament game
+/// let tournamentGame = CompletedGameFactory()
+///     .gameType(.tournament)
+///     .scores(winner: 15, loser: 13)
+///     .timestamp(hoursAgo: 2)
+///     .duration(minutes: 35)
+///     .generate()
+///
+/// // Batch generation with consistent settings
+/// let games = CompletedGameFactory.batch(count: 10) { factory in
+///     factory
+///         .gameType(.recreational)
+///         .timestamp(withinDays: 7)
+/// }
+/// ```
+///
+/// ## Convenience Methods
+///
+/// For common scenarios, use the helper methods:
+/// - `generateRandomHistory(count:)` - Random games with varied data
+/// - `generateRecentHistory(count:withinDays:)` - Games within a time range
+/// - `generateGamesOfType(count:gameType:)` - Games of a specific type
+///
+/// For specific testing scenarios, use `CompletedGameFactory` presets:
+/// - `recentCompetitiveWin()` - Close match from last few hours
+/// - `dominantVictory()` - Large point differential
+/// - `trainingSession()` - Quick game to 7 points
+/// - `tournamentMatch()` - Tournament format (15 or 21 points)
+/// - `realisticHistory(count:withinDays:)` - Realistic mix of game types
+/// - `balancedWinLoss(count:)` - Equal wins and losses
+/// - `improvementProgression(count:)` - Shows player improvement over time
+///
+/// ## Individual Game Scenarios
+///
+/// Use the static properties for testing individual game states:
+/// - `earlyGame`, `midGame`, `closeGame` - In-progress game states
+/// - `completedGame` - Completed game example
+/// - `emptyGames` - Empty array for testing empty states
 @MainActor
 public struct PreviewGameData {
 
@@ -21,52 +73,24 @@ public struct PreviewGameData {
   // MARK: - Single Game Scenarios
 
   /// Early game state (low scores)
-  public static let earlyGame: Game = {
-    let game = Game(gameType: .recreational)
-    game.score1 = 2
-    game.score2 = 3
-    game.currentServer = 1
-    game.gameState = .playing
-    game.totalRallies = 5
-    game.lastModified = Date()
-    return game
-  }()
+  public static var earlyGame: Game {
+    ActiveGameFactory.earlyGame()
+  }
 
   /// Mid-game state (moderate scores)
-  public static let midGame: Game = {
-    let game = Game(gameType: .recreational)
-    game.score1 = 7
-    game.score2 = 5
-    game.currentServer = 2
-    game.gameState = .playing
-    game.totalRallies = 15
-    game.lastModified = Date()
-    return game
-  }()
+  public static var midGame: Game {
+    ActiveGameFactory.midGame()
+  }
 
   /// Close game state (near winning)
-  public static let closeGame: Game = {
-    let game = Game(gameType: .recreational)
-    game.score1 = 10
-    game.score2 = 9
-    game.currentServer = 1
-    game.gameState = .playing
-    game.totalRallies = 25
-    game.lastModified = Date()
-    return game
-  }()
+  public static var closeGame: Game {
+    ActiveGameFactory.closeGame()
+  }
 
   /// Match point scenario
-  public static let matchPointGame: Game = {
-    let game = Game(gameType: .recreational)
-    game.score1 = 10
-    game.score2 = 8
-    game.currentServer = 1
-    game.gameState = .playing
-    game.totalRallies = 22
-    game.lastModified = Date()
-    return game
-  }()
+  public static var matchPointGame: Game {
+    ActiveGameFactory.matchPoint()
+  }
 
   /// Completed game (Team 1 wins)
   public static let completedGame: Game = {
@@ -82,121 +106,61 @@ public struct PreviewGameData {
   }()
 
   /// High-scoring tournament game
-  public static let highScoreGame: Game = {
-    let game = Game(gameType: .tournament)
-    game.score1 = 15
-    game.score2 = 13
-    game.currentServer = 2
-    game.gameState = .playing
-    game.totalRallies = 35
-    game.lastModified = Date()
-    return game
-  }()
+  public static var highScoreGame: Game {
+    ActiveGameFactory()
+      .gameType(.tournament)
+      .scores(15, 13)
+      .winningScore(15)
+      .server(team: 2)
+      .state(.playing)
+      .generate()
+  }
 
   /// Training game (shorter format)
-  public static let trainingGame: Game = {
-    let game = Game(gameType: .training)
-    game.score1 = 6
-    game.score2 = 4
-    game.currentServer = 1
-    game.gameState = .playing
-    game.totalRallies = 12
-    game.lastModified = Date()
-    return game
-  }()
+  public static var trainingGame: Game {
+    ActiveGameFactory()
+      .gameType(.training)
+      .scores(6, 4)
+      .winningScore(7)
+      .server(team: 1)
+      .state(.playing)
+      .generate()
+  }
 
   /// Paused game
-  public static let pausedGame: Game = {
-    let game = Game(gameType: .recreational)
-    game.score1 = 5
-    game.score2 = 6
-    game.currentServer = 2
-    game.gameState = .paused
-    game.totalRallies = 14
-    game.lastModified = Date()
-    return game
-  }()
+  public static var pausedGame: Game {
+    ActiveGameFactory.pausedGame()
+  }
 
   // MARK: - Serving Scenarios
 
   /// Team 1 serving, player 1
-  public static let team1Player1Serving: Game = {
-    let game = Game(gameType: .recreational)
-    game.score1 = 5
-    game.score2 = 3
-    game.currentServer = 1
-    game.serverNumber = 1
-    game.gameState = .playing
-    game.totalRallies = 10
-    return game
-  }()
+  public static var team1Player1Serving: Game {
+    ActiveGameFactory()
+      .scores(5, 3)
+      .server(team: 1, player: 1)
+      .state(.playing)
+      .generate()
+  }
 
   /// Team 1 serving, player 2
-  public static let team1Player2Serving: Game = {
-    let game = Game(gameType: .recreational)
-    game.score1 = 7
-    game.score2 = 5
-    game.currentServer = 1
-    game.serverNumber = 2
-    game.gameState = .playing
-    game.totalRallies = 15
-    return game
-  }()
+  public static var team1Player2Serving: Game {
+    ActiveGameFactory()
+      .scores(7, 5)
+      .server(team: 1, player: 2)
+      .state(.playing)
+      .generate()
+  }
 
   /// Team 2 serving
-  public static let team2Serving: Game = {
-    let game = Game(gameType: .recreational)
-    game.score1 = 4
-    game.score2 = 6
-    game.currentServer = 2
-    game.serverNumber = 1
-    game.gameState = .playing
-    game.totalRallies = 12
-    return game
-  }()
+  public static var team2Serving: Game {
+    ActiveGameFactory()
+      .scores(4, 6)
+      .server(team: 2, player: 1)
+      .state(.playing)
+      .generate()
+  }
 
-  // MARK: - Historical Game Collections
-
-  /// Games representing a competitive player's recent history
-  public static let competitivePlayerGames: [Game] = [
-    createCompletedGame(.recreational, 11, 9, hoursAgo: 1, duration: 28 * 60, rallies: 24),
-    createCompletedGame(.tournament, 15, 13, hoursAgo: 6, duration: 40 * 60, rallies: 32),
-    createCompletedGame(.recreational, 11, 13, daysAgo: 1, duration: 35 * 60, rallies: 28),
-    createCompletedGame(.training, 7, 5, daysAgo: 2, duration: 18 * 60, rallies: 14),
-    createCompletedGame(.recreational, 12, 10, daysAgo: 3, duration: 32 * 60, rallies: 26),
-  ]
-
-  /// Games representing a recreational player's history
-  public static let recreationalPlayerGames: [Game] = [
-    createCompletedGame(.recreational, 11, 6, hoursAgo: 2, duration: 22 * 60, rallies: 18),
-    createCompletedGame(.training, 7, 8, daysAgo: 1, duration: 15 * 60, rallies: 10),
-    createCompletedGame(.recreational, 11, 8, daysAgo: 3, duration: 25 * 60, rallies: 16),
-    createCompletedGame(.training, 6, 7, daysAgo: 5, duration: 12 * 60, rallies: 8),
-  ]
-
-  /// Games representing a new player learning
-  public static let newPlayerGames: [Game] = [
-    createCompletedGame(.training, 7, 11, hoursAgo: 3, duration: 20 * 60, rallies: 8),
-    createCompletedGame(.recreational, 8, 11, daysAgo: 1, duration: 25 * 60, rallies: 12),
-    createCompletedGame(.training, 11, 9, daysAgo: 2, duration: 18 * 60, rallies: 10),
-  ]
-
-  /// Games representing a player on a hot streak
-  public static let hotStreakPlayerGames: [Game] = [
-    createCompletedGame(.recreational, 11, 7, hoursAgo: 2, duration: 25 * 60, rallies: 15),
-    createCompletedGame(.training, 7, 4, hoursAgo: 8, duration: 18 * 60, rallies: 8),
-    createCompletedGame(.recreational, 11, 8, daysAgo: 1, duration: 22 * 60, rallies: 12),
-    createCompletedGame(.tournament, 15, 12, daysAgo: 2, duration: 35 * 60, rallies: 20),
-    createCompletedGame(.recreational, 11, 6, daysAgo: 3, duration: 20 * 60, rallies: 10),
-  ]
-
-  /// Games representing a dominant player
-  public static let dominantPlayerGames: [Game] = [
-    createCompletedGame(.recreational, 11, 3, hoursAgo: 4, duration: 22 * 60, rallies: 12),
-    createCompletedGame(.training, 7, 2, daysAgo: 1, duration: 15 * 60, rallies: 6),
-    createCompletedGame(.tournament, 15, 6, daysAgo: 2, duration: 28 * 60, rallies: 18),
-    createCompletedGame(.recreational, 11, 4, daysAgo: 4, duration: 20 * 60, rallies: 10),
-  ]
 
   /// Empty game collection for testing empty states
   public static let emptyGames: [Game] = []
@@ -211,104 +175,6 @@ public struct PreviewGameData {
   ]
 
   // MARK: - Roster (Players/Teams)
-
-  @available(*, deprecated, message: "Use SwiftDataSeeding.seedSampleRoster or seedRoster")
-  public static let samplePlayers: [PlayerProfile] = {
-    let ethan = PlayerProfile(
-      name: "Ethan",
-      avatarImageData: nil,
-      iconSymbolName: "tennis.racket",
-      accentColor: StoredRGBAColor(Color.blue),
-      skillLevel: .advanced,
-      preferredHand: .right
-    )
-    let reed = PlayerProfile(
-      name: "Reed",
-      avatarImageData: nil,
-      iconSymbolName: "figure.tennis",
-      accentColor: StoredRGBAColor(Color.green),
-      skillLevel: .intermediate,
-      preferredHand: .right
-    )
-    let ricky = PlayerProfile(
-      name: "Ricky",
-      avatarImageData: nil,
-      iconSymbolName: "figure.walk",
-      accentColor: StoredRGBAColor(Color.orange),
-      skillLevel: .beginner,
-      preferredHand: .left
-    )
-    let dave = PlayerProfile(
-      name: "Dave",
-      avatarImageData: nil,
-      iconSymbolName: "medal.fill",
-      accentColor: StoredRGBAColor(Color.purple),
-      skillLevel: .expert,
-      preferredHand: .right
-    )
-
-    // Archived players
-    let archivedAlex = PlayerProfile(
-      name: "Alex",
-      avatarImageData: nil,
-      iconSymbolName: "person.fill",
-      accentColor: StoredRGBAColor(Color.brown),
-      skillLevel: .intermediate,
-      preferredHand: .right
-    )
-    archivedAlex.isArchived = true
-
-    let archivedJordan = PlayerProfile(
-      name: "Jordan",
-      avatarImageData: nil,
-      iconSymbolName: "person.fill",
-      accentColor: StoredRGBAColor(Color.indigo),
-      skillLevel: .advanced,
-      preferredHand: .left
-    )
-    archivedJordan.isArchived = true
-
-    return [ethan, reed, ricky, dave, archivedAlex, archivedJordan]
-  }()
-
-  @available(*, deprecated, message: "Use SwiftDataSeeding.seedSampleRoster or seedRoster")
-  public static let sampleTeams: [TeamProfile] = {
-    let t1 = TeamProfile(
-      name: "Ethan & Reed",
-      avatarImageData: nil,
-      iconSymbolName: "person.2.fill",
-      accentColor: StoredRGBAColor(Color.teal),
-      players: [samplePlayers[0], samplePlayers[1]]
-    )
-    let t2 = TeamProfile(
-      name: "Ricky & Dave",
-      avatarImageData: nil,
-      iconSymbolName: "figure.mind.and.body",
-      accentColor: StoredRGBAColor(Color.pink),
-      players: [samplePlayers[2], samplePlayers[3]]
-    )
-
-    // Archived teams
-    let archivedTeam1 = TeamProfile(
-      name: "Alex & Jordan",
-      avatarImageData: nil,
-      iconSymbolName: "person.2.fill",
-      accentColor: StoredRGBAColor(Color.brown),
-      players: [samplePlayers[4], samplePlayers[5]]  // archived players
-    )
-    archivedTeam1.isArchived = true
-
-    let archivedTeam2 = TeamProfile(
-      name: "Old Veterans",
-      avatarImageData: nil,
-      iconSymbolName: "trophy.fill",
-      accentColor: StoredRGBAColor(Color.indigo),
-      players: [samplePlayers[0], samplePlayers[3]]  // mix of active and archived players
-    )
-    archivedTeam2.isArchived = true
-
-    return [t1, t2, archivedTeam1, archivedTeam2]
-  }()
 
   /// Creates a model container populated with roster data for previews
   public static func createRosterPreviewContainer(
@@ -372,13 +238,10 @@ public struct PreviewGameData {
     // Add active game
     context.insert(midGame)
 
-    // Add historical games
-    for game in competitivePlayerGames {
-      context.insert(game)
-    }
-
-    for game in recreationalPlayerGames {
-      context.insert(game)
+    // Add historical games using factory
+    let generatedGames = CompletedGameFactory.realisticHistory(count: 15, withinDays: 30)
+    for generated in generatedGames {
+      context.insert(generated.game)
     }
 
     try context.save()
@@ -386,40 +249,64 @@ public struct PreviewGameData {
   }
 
   // MARK: - Helper Functions
-
-  /// Creates a completed game with specified parameters
-  public static func createCompletedGame(
-    _ gameType: GameType,
-    _ score1: Int,
-    _ score2: Int,
-    hoursAgo: Int = 0,
-    daysAgo: Int = 0,
-    duration: TimeInterval = 20 * 60,
-    rallies: Int = 15,
-    notes: String? = nil
-  ) -> Game {
-    let game = Game(gameType: gameType)
-    game.score1 = score1
-    game.score2 = score2
-    game.isCompleted = true
-    game.duration = duration
-    game.totalRallies = rallies
-    game.notes = notes
-
-    var dateComponents = DateComponents()
-    if hoursAgo > 0 {
-      dateComponents.hour = -hoursAgo
-    }
-    if daysAgo > 0 {
-      dateComponents.day = -daysAgo
-    }
-
-    let completedDate = Calendar.current.date(byAdding: dateComponents, to: Date()) ?? Date()
-    game.completedDate = completedDate
-    game.lastModified = completedDate
-
-    return game
+  
+  /// Generates a collection of random completed games with their completion dates.
+  ///
+  /// Uses `CompletedGameFactory` to generate realistic, varied game data.
+  /// Each game will have randomized scores, timestamps, and game types.
+  ///
+  /// Returns `GeneratedGame` instances that include both the game and its intended
+  /// completion date for proper seeding via `GameStore.complete()`.
+  ///
+  /// - Parameter count: Number of games to generate (default: 10)
+  /// - Returns: Array of GeneratedGame instances
+  ///
+  /// Example:
+  /// ```swift
+  /// let generated = PreviewGameData.generateRandomHistory(count: 20)
+  /// for gen in generated {
+  ///     context.insert(gen.game)
+  ///     try? store.complete(gen.game, at: gen.completionDate)
+  /// }
+  /// ```
+  public static func generateRandomHistory(count: Int = 10) -> [CompletedGameFactory.GeneratedGame] {
+    CompletedGameFactory.batchWithDates(count: count)
   }
+  
+  /// Generates a collection of games within a specific time range with completion dates.
+  ///
+  /// - Parameters:
+  ///   - count: Number of games to generate
+  ///   - withinDays: Maximum days in the past to distribute games
+  /// - Returns: Array of GeneratedGame instances with varied timestamps
+  ///
+  /// Example:
+  /// ```swift
+  /// let generated = PreviewGameData.generateRecentHistory(count: 15, withinDays: 7)
+  /// ```
+  public static func generateRecentHistory(count: Int = 10, withinDays days: Int = 7) -> [CompletedGameFactory.GeneratedGame] {
+    CompletedGameFactory.batchWithDates(count: count) { factory in
+      factory.timestamp(withinDays: days)
+    }
+  }
+  
+  /// Generates a collection of games for a specific game type with completion dates.
+  ///
+  /// - Parameters:
+  ///   - count: Number of games to generate
+  ///   - gameType: The type of games to generate
+  /// - Returns: Array of GeneratedGame instances of the specified type
+  ///
+  /// Example:
+  /// ```swift
+  /// let generated = PreviewGameData.generateGamesOfType(count: 5, gameType: .tournament)
+  /// ```
+  public static func generateGamesOfType(count: Int = 10, gameType: GameType) -> [CompletedGameFactory.GeneratedGame] {
+    CompletedGameFactory.batchWithDates(count: count) { factory in
+      factory.gameType(gameType)
+    }
+  }
+
 
   /// Creates an active game with specified scores
   public static func createActiveGame(
@@ -439,6 +326,11 @@ public struct PreviewGameData {
     game.totalRallies = rallies
     game.lastModified = Date()
     return game
+  }
+
+  /// Count how many teams a player is a member of
+  public static func teamCount(for player: PlayerProfile, in teams: [TeamProfile]) -> Int {
+    teams.filter { $0.players.contains(where: { $0.id == player.id }) }.count
   }
 
   /// Team names for consistent preview display
@@ -469,28 +361,6 @@ public struct PreviewGameData {
     [trainingGame.gameType, midGame.gameType, highScoreGame.gameType]
   }
 
-  /// Helper to filter only active (non-archived) players from `samplePlayers`
-  public static var sampleActivePlayers: [PlayerProfile] {
-    // Use context-based sample data seeding
-    if let ctx = try? makeRosterPreviewContext(includeArchived: true) {
-      return ctx.players.filter { $0.isArchived == false }
-    }
-    return []
-  }
-
-  /// Helper to filter only active (non-archived) teams from `sampleTeams`
-  public static var sampleActiveTeams: [TeamProfile] {
-    // Use context-based sample data seeding
-    if let ctx = try? makeRosterPreviewContext(includeArchived: true) {
-      return ctx.teams.filter { $0.isArchived == false }
-    }
-    return []
-  }
-
-  /// Counts how many teams include the given player
-  public static func teamCount(for player: PlayerProfile, in teams: [TeamProfile]) -> Int {
-    teams.filter { $0.players.contains(where: { $0.id == player.id }) }.count
-  }
 
   /// Lightweight roster preview context for common roster previews
   public struct RosterPreviewContext {
@@ -512,43 +382,52 @@ public struct PreviewGameData {
       for: schema,
       configurations: [config]
     )
-    SwiftDataSeeding.seedSampleRoster(into: container.mainContext)
+    
+    let (allPlayers, allTeams) = TeamProfileFactory.realisticTeams(playerCount: 12, teamSize: 2)
+    for player in allPlayers {
+      container.mainContext.insert(player)
+    }
+    for team in allTeams {
+      container.mainContext.insert(team)
+    }
+    
     let context = container.mainContext
-    let allPlayers = try context.fetch(FetchDescriptor<PlayerProfile>())
-    let allTeams = try context.fetch(FetchDescriptor<TeamProfile>())
-    let players = includeArchived ? allPlayers : allPlayers.filter { $0.isArchived == false }
-    let teams = includeArchived ? allTeams : allTeams.filter { $0.isArchived == false }
+    let players = try context.fetch(FetchDescriptor<PlayerProfile>())
+      .filter { includeArchived || !$0.isArchived }
+    let teams = try context.fetch(FetchDescriptor<TeamProfile>())
+      .filter { includeArchived || !$0.isArchived }
+    
     return RosterPreviewContext(container: container, players: players, teams: teams)
   }
 
-  // MARK: - Active Game Context
+  // MARK: - Live Game Context
 
-  /// Lightweight active game preview context for screens that need a game + manager
-  public struct ActiveGamePreviewContext {
+  /// Lightweight live game preview context for screens that need a game + manager
+  public struct LiveGamePreviewContext {
     public let container: ModelContainer
     public let game: Game
     public let gameManager: SwiftDataGameManager
-    public let activeGameStateManager: LiveGameStateManager
+    public let liveGameStateManager: LiveGameStateManager
   }
 
-  /// Creates an active game preview context from a provided sample game
-  public static func makeActiveGameContext(game: Game) throws -> ActiveGamePreviewContext {
+  /// Creates a live game preview context from a provided sample game
+  public static func makeLiveGameContext(game: Game) throws -> LiveGamePreviewContext {
     let container = try createContainer(for: game)
     let storage = SwiftDataStorage(modelContainer: container)
     let gameManager = SwiftDataGameManager(storage: storage)
     let active = LiveGameStateManager.production(storage: storage)
     active.configure(gameManager: gameManager)
     active.setCurrentGame(game)
-    return ActiveGamePreviewContext(
+    return LiveGamePreviewContext(
       container: container,
       game: game,
       gameManager: gameManager,
-      activeGameStateManager: active
+      liveGameStateManager: active
     )
   }
 
-  /// Create a random active game using the provided game manager and loaded roster
-  public static func createRandomActiveGame(using gameManager: SwiftDataGameManager) async throws
+  /// Create a random live game using the provided game manager and loaded roster
+  public static func createRandomLiveGame(using gameManager: SwiftDataGameManager) async throws
     -> Game
   {
     let context = gameManager.storage.modelContainer.mainContext
@@ -633,81 +512,64 @@ public struct PreviewGameData {
 // MARK: - Event Factories for Previews
 
 extension PreviewGameData {
-  /// Generate a list of random events and attach to the given game
+
+  /// Attach realistic events to a game using GameEventFactory
   /// - Parameters:
   ///   - game: The game to attach events to
-  ///   - count: Number of events to generate
-  ///   - maxTime: Upper bound for generated timestamps (seconds)
+  ///   - eventCount: Maximum number of events to generate
   /// - Returns: The same game instance for chaining
   @discardableResult
-  public static func attachRandomEvents(
-    to game: Game,
-    count: Int = 20,
-    maxTime: TimeInterval = 20 * 60
-  ) -> Game {
-    guard count > 0 else { return game }
-
-    var currentTime: TimeInterval = 0
-    let stepRange: ClosedRange<TimeInterval> = 5...45 // seconds between events
-
-    for _ in 0..<count {
-      // Advance time by a random step
-      let delta = TimeInterval(Int.random(in: Int(stepRange.lowerBound)...Int(stepRange.upperBound)))
-      currentTime = min(currentTime + delta, maxTime)
-
-      // Pick a random event type
-      let eventType = GameEventType.allCases.randomElement() ?? .serviceFault
-
-      // Some event types are not team-specific
-      let teamSpecificTypes: Set<GameEventType> = [
-        .ballOutOfBounds, .ballInKitchenOnServe, .serviceFault,
-        .ballHitNet, .doubleBounce, .kitchenViolation,
-        .injuryTimeout, .substitution, .delayPenalty,
-      ]
-
-      let teamAffected: Int? = teamSpecificTypes.contains(eventType) ? [1, 2].randomElement() : nil
-
-      // Optional short description for variety
-      let descriptions = [
-        "Rally ended abruptly",
-        "Close call at the line",
-        "Strong serve caused error",
-        "Quick exchange at the net",
-        "Long rally, forced mistake",
-        "Communication mix-up",
-        "Tactical timeout",
-      ]
-      let description: String? = Bool.random() ? descriptions.randomElement() : nil
-
-      game.logEvent(eventType, at: currentTime, teamAffected: teamAffected, description: description)
+  public static func attachRealisticEvents(to game: Game, eventCount: Int? = nil) -> Game {
+    if let eventCount = eventCount {
+      return GameEventFactory.populateGameWithEvents(game, eventCount: eventCount)
+    } else {
+      let estimatedDuration: TimeInterval = Double(game.totalRallies) * Double.random(in: 20...40)
+      let events = GameEventFactory.createRealisticGameNarrative(
+        for: game,
+        targetDuration: estimatedDuration
+      )
+      game.events = events
+      return game
     }
+  }
 
+  /// Create a game with realistic event narrative
+  public static var gameWithRealisticEvents: Game {
+    let game = midGame
+    return attachRealisticEvents(to: game)
+  }
+
+  /// Create a completed game with full narrative
+  public static var gameWithFullNarrative: Game {
+    let game = completedGame
+    let events = GameEventFactory.createRealisticGameNarrative(
+      for: game,
+      targetDuration: game.duration ?? 1200
+    )
+    game.events = events
     return game
   }
 
-  /// Create an active game pre-populated with a set of random events
-  /// - Parameter count: Number of events to generate
-  /// - Returns: A game with random scores and events, suitable for previews
-  public static func createGameWithRandomEvents(count: Int = 24) -> Game {
+  /// Create an active game with realistic rally sequences
+  public static func createGameWithRealisticEvents(rallyCount: Int = 15) -> Game {
     let base = createActiveGame(
       .recreational,
       score1: Int.random(in: 0...10),
       score2: Int.random(in: 0...10),
       currentServer: [1, 2].randomElement()!,
       serverNumber: [1, 2].randomElement()!,
-      rallies: Int.random(in: 8...28)
+      rallies: rallyCount
     )
 
-    // Give a chance for a different game type for visual variety
     if Bool.random() {
       base.gameType = .training
     }
 
-    return attachRandomEvents(to: base, count: count)
+    return attachRealisticEvents(to: base)
   }
 
-  /// Convenience to create a container preloaded with a single random-events game
-  public static func createContainerWithRandomEventsGame(count: Int = 24) throws -> ModelContainer {
-    try createContainer(for: createGameWithRandomEvents(count: count))
+  /// Create a container preloaded with a game with realistic events
+  public static func createContainerWithRealisticEventsGame(rallyCount: Int = 15) throws -> ModelContainer {
+    try createContainer(for: createGameWithRealisticEvents(rallyCount: rallyCount))
   }
 }

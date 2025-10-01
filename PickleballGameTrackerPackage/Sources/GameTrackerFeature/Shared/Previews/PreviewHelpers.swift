@@ -37,7 +37,7 @@ public struct PreviewEnvironmentSetup {
     /// Creates a standard preview environment setup
     public static func create(
         container: ModelContainer? = nil,
-        configureActiveGame: Bool = false
+        configureLiveGame: Bool = false
     ) async throws -> PreviewEnvironmentSetup {
         let ctx = container ?? PreviewEnvironment.app().container
         let environment = PreviewEnvironment.custom(ctx)
@@ -53,9 +53,9 @@ public struct PreviewEnvironmentSetup {
         // Set up proper delegation
         gameManager.activeGameDelegate = activeGameStateManager
 
-        // Configure active game if requested
-        if configureActiveGame {
-            try await environment.configureActiveGame()
+        // Configure live game if requested
+        if configureLiveGame {
+            try await environment.configureLiveGame()
         }
 
         return PreviewEnvironmentSetup(
@@ -112,12 +112,12 @@ public extension View {
     /// Standard preview setup for views that need full environment
     func standardPreview(
         environment: PreviewEnvironment.Context,
-        configureActiveGame: Bool = false
+        configureLiveGame: Bool = false
     ) -> some View {
         self
             .previewContainer(environment)
             .previewConfiguration()
-            // Note: configureActiveGame removed due to async issues in preview context
+            // Note: configureLiveGame removed due to async issues in preview context
     }
 
     /// Minimal preview setup for component-level previews
@@ -152,7 +152,7 @@ public enum PreviewDataHelpers {
             }
         }()
 
-        let setup = try await PreviewEnvironmentSetup.create(container: env.container, configureActiveGame: true)
+        let setup = try await PreviewEnvironmentSetup.create(container: env.container, configureLiveGame: true)
 
         return AnyView(
             NavigationStack {

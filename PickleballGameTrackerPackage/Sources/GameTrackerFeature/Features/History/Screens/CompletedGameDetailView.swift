@@ -237,13 +237,85 @@ struct CompletedGameDetailView: View {
   }
 }
 
+// MARK: - Local Components (Detail)
+
+struct HistoryInfoCard: View {
+  let title: String
+  let value: String
+
+  init(title: String, value: String) {
+    self.title = title
+    self.value = value
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
+      Text(title)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      Text(value)
+        .font(.body)
+        .fontWeight(.semibold)
+        .foregroundStyle(.primary)
+    }
+    .padding(DesignSystem.Spacing.sm)
+    .background(Color.gray.opacity(0.1))
+    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
+  }
+}
+
+struct HistoryScoreDisplay: View {
+  let score: Int
+  let label: String
+  let color: Color
+  let size: Size
+  let isWinner: Bool
+
+  enum Size {
+    case small, medium, large
+  }
+
+  init(score: Int, label: String, color: Color, size: Size = .medium, isWinner: Bool = false) {
+    self.score = score
+    self.label = label
+    self.color = color
+    self.size = size
+    self.isWinner = isWinner
+  }
+
+  var body: some View {
+    VStack(spacing: DesignSystem.Spacing.xs) {
+      Text(label)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+
+      Text("\(score)")
+        .font(size == .small ? .title2 : size == .medium ? .title : .largeTitle)
+        .fontWeight(isWinner ? .bold : .semibold)
+        .foregroundStyle(color)
+    }
+    .frame(minWidth: size == .small ? 60 : size == .medium ? 80 : 100)
+    .padding(size == .small ? DesignSystem.Spacing.sm : DesignSystem.Spacing.md)
+    .background(
+      RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md)
+        .fill(color.opacity(0.1))
+        .overlay(
+          isWinner ?
+            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md)
+              .stroke(color, lineWidth: 2)
+            : nil
+        )
+    )
+  }
+}
+
 #Preview("Completed Game") {
-  let ctx = try! PreviewGameData.makeActiveGameContext(game: PreviewGameData.completedGame)
-  return NavigationStack {
+  let ctx = try! PreviewGameData.makeLiveGameContext(game: PreviewGameData.completedGame)
+  NavigationStack {
     CompletedGameDetailView(game: ctx.game)
   }
   .modelContainer(ctx.container)
   .environment(ctx.gameManager)
-  .environment(ctx.activeGameStateManager)
+  .environment(ctx.liveGameStateManager)
   .accentColor(.green)
 }

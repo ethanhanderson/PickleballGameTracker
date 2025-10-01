@@ -67,36 +67,14 @@ public enum PreviewDataSeeder {
   // New: history-focused container that ensures GameSummary records are created
   public static func historyContainer() -> ModelContainer {
     SwiftDataContainer.createPreviewContainer { context in
-      // Seed a couple variations
       SwiftDataSeeding.seedCommonVariations(into: context)
 
-      // Use GameStore so summaries are produced
       let store = GameStore(context: context)
+      let generatedGames = CompletedGameFactory.realisticHistory(count: 18, withinDays: 30)
 
-      let historyTemplates: [Game] =
-        PreviewGameData.competitivePlayerGames
-        + PreviewGameData.recreationalPlayerGames
-        + PreviewGameData.newPlayerGames
-
-      for template in historyTemplates {
-        let g = Game(gameType: template.gameType)
-        g.score1 = template.score1
-        g.score2 = template.score2
-        g.currentServer = template.currentServer
-        g.serverNumber = template.serverNumber
-        g.totalRallies = template.totalRallies
-        g.createdDate = template.createdDate
-        g.lastModified = template.lastModified
-        g.isArchived = template.isArchived
-        if template.isCompleted {
-          g.duration = template.duration
-        }
-        context.insert(g)
-        if template.isCompleted {
-          try? store.complete(g, at: template.completedDate ?? .now)
-        } else {
-          try? store.save(g)
-        }
+      for generated in generatedGames {
+        context.insert(generated.game)
+        try? store.complete(generated.game, at: generated.completionDate)
       }
     }
   }
@@ -110,34 +88,15 @@ public enum PreviewDataSeeder {
       // Seed common variations
       SwiftDataSeeding.seedCommonVariations(into: context)
 
-      // Seed history via GameStore for summaries
       let store = GameStore(context: context)
-      let historyTemplates: [Game] =
-        PreviewGameData.competitivePlayerGames
-        + PreviewGameData.recreationalPlayerGames
-        + PreviewGameData.newPlayerGames
-      for template in historyTemplates {
-        let g = Game(gameType: template.gameType)
-        g.score1 = template.score1
-        g.score2 = template.score2
-        g.currentServer = template.currentServer
-        g.serverNumber = template.serverNumber
-        g.totalRallies = template.totalRallies
-        g.createdDate = template.createdDate
-        g.lastModified = template.lastModified
-        if template.isCompleted {
-          g.duration = template.duration
-        }
-        context.insert(g)
-        if template.isCompleted {
-          try? store.complete(g, at: template.completedDate ?? .now)
-        } else {
-          try? store.save(g)
-        }
+      let generatedGames = CompletedGameFactory.realisticHistory(count: 18, withinDays: 30)
+      
+      for generated in generatedGames {
+        context.insert(generated.game)
+        try? store.complete(generated.game, at: generated.completionDate)
       }
 
       // Add one active in-progress game for the preview bar
-      // Create a named variation using available roster if possible
       let players = try? context.fetch(FetchDescriptor<PlayerProfile>()).filter { !$0.isArchived }
       let teams = try? context.fetch(FetchDescriptor<TeamProfile>()).filter { !$0.isArchived }
       let useSingles: Bool = {
@@ -152,63 +111,32 @@ public enum PreviewDataSeeder {
       if useSingles, let players, players.count >= 2 {
         let p = players.shuffled()
         let p1 = p[0], p2 = p[1]
-        let variation = try? GameVariation.createValidated(
-          name: "\(p1.name) vs \(p2.name)",
-          gameType: .recreational,
-          teamSize: 1,
-          winningScore: 11,
-          winByTwo: true,
-          kitchenRule: true,
-          doubleBounceRule: true,
-          servingRotation: .standard,
-          sideSwitchingRule: .never,
-          scoringType: .sideOut,
-          isCustom: true
-        )
-        let activeGame = Game(gameVariation: variation ?? GameVariation(name: "Preview Singles", gameType: .recreational, teamSize: 1))
-        activeGame.score1 = Int.random(in: 0...10)
-        activeGame.score2 = Int.random(in: 0...10)
-        activeGame.currentServer = [1, 2].randomElement()!
-        activeGame.serverNumber = 1
-        activeGame.totalRallies = Int.random(in: 8...24)
-        activeGame.lastModified = .now
+        let variation = GameVariationFactory.forMatchup(players: [p1, p2], gameType: .recreational)
+        let activeGame = ActiveGameFactory(context: context)
+          .variation(variation)
+          .midGame()
+          .state(.playing)
+          .server(team: [1, 2].randomElement()!)
+          .generate()
         context.insert(activeGame)
         try? store.save(activeGame)
       } else if let teams, teams.count >= 2 {
         let t = teams.shuffled()
         let t1 = t[0], t2 = t[1]
-        let variation = try? GameVariation.createValidated(
-          name: "\(t1.name) vs \(t2.name)",
-          gameType: .recreational,
-          teamSize: 2,
-          winningScore: 11,
-          winByTwo: true,
-          kitchenRule: true,
-          doubleBounceRule: true,
-          servingRotation: .standard,
-          sideSwitchingRule: .never,
-          scoringType: .sideOut,
-          isCustom: true
-        )
-        let activeGame = Game(gameVariation: variation ?? GameVariation(name: "Preview Doubles", gameType: .recreational, teamSize: 2))
-        activeGame.score1 = Int.random(in: 0...10)
-        activeGame.score2 = Int.random(in: 0...10)
-        activeGame.currentServer = [1, 2].randomElement()!
-        activeGame.serverNumber = [1, 2].randomElement()!
-        activeGame.totalRallies = Int.random(in: 8...24)
-        activeGame.lastModified = .now
+        let variation = GameVariationFactory.forMatchup(teams: [t1, t2], gameType: .recreational)
+        let activeGame = ActiveGameFactory(context: context)
+          .variation(variation)
+          .midGame()
+          .state(.playing)
+          .server(team: [1, 2].randomElement()!, player: [1, 2].randomElement()!)
+          .generate()
         context.insert(activeGame)
         try? store.save(activeGame)
       } else {
-        // Fallback to generic midGame
-        let active = PreviewGameData.midGame
-        let activeGame = Game(gameType: active.gameType)
-        activeGame.score1 = active.score1
-        activeGame.score2 = active.score2
-        activeGame.currentServer = active.currentServer
-        activeGame.serverNumber = active.serverNumber
-        activeGame.totalRallies = active.totalRallies
-        activeGame.lastModified = .now
+        let activeGame = ActiveGameFactory(context: context)
+          .midGame()
+          .state(.playing)
+          .generate()
         context.insert(activeGame)
         try? store.save(activeGame)
       }
@@ -246,27 +174,15 @@ public enum PreviewDataSeeder {
         if let existing = try! context.fetch(FetchDescriptor<GameVariation>()).first(where: { $0.name == "\(p1.name) vs \(p2.name)" }) {
           variation = existing
         } else {
-          variation = try! GameVariation.createValidated(
-            name: "\(p1.name) vs \(p2.name)",
-            gameType: .recreational,
-            teamSize: 1,
-            winningScore: 11,
-            winByTwo: true,
-            kitchenRule: true,
-            doubleBounceRule: true,
-            servingRotation: .standard,
-            sideSwitchingRule: .never,
-            scoringType: .sideOut,
-            isCustom: true
-          )
+          variation = GameVariationFactory.forMatchup(players: [p1, p2], gameType: .recreational)
         }
 
-        let game = Game(gameVariation: variation)
-        game.currentServer = [1, 2].randomElement()!
-        game.serverNumber = 1
-        game.gameState = .playing
-        game.score1 = Int.random(in: 0...10)
-        game.score2 = Int.random(in: 0...10)
+        let game = ActiveGameFactory(context: context)
+          .variation(variation)
+          .midGame()
+          .state(.playing)
+          .server(team: [1, 2].randomElement()!, player: 1)
+          .generate()
         context.insert(game)
       } else if activeTeams.count >= 2 {
         let shuffled = activeTeams.shuffled()
@@ -278,28 +194,15 @@ public enum PreviewDataSeeder {
         if let existing = allVariations.first(where: { $0.name == "\(t1.name) vs \(t2.name)" }) {
           variation = existing
         } else {
-          variation = try! GameVariation.createValidated(
-            name: "\(t1.name) vs \(t2.name)",
-            gameType: .recreational,
-            teamSize: 2,
-            winningScore: 11,
-            winByTwo: true,
-            kitchenRule: true,
-            doubleBounceRule: true,
-            servingRotation: .standard,
-            sideSwitchingRule: .never,
-            scoringType: .sideOut,
-            isCustom: true
-          )
+          variation = GameVariationFactory.forMatchup(teams: [t1, t2], gameType: .recreational)
         }
 
-        let game = Game(gameVariation: variation)
-
-        game.currentServer = [1, 2].randomElement()!
-        game.serverNumber = [1, 2].randomElement()!
-        game.gameState = .playing
-        game.score1 = Int.random(in: 0...10)
-        game.score2 = Int.random(in: 0...10)
+        let game = ActiveGameFactory(context: context)
+          .variation(variation)
+          .midGame()
+          .state(.playing)
+          .server(team: [1, 2].randomElement()!, player: [1, 2].randomElement()!)
+          .generate()
         context.insert(game)
       }
     }
@@ -355,29 +258,12 @@ public enum PreviewDataSeeder {
       // Seed common variations
       SwiftDataSeeding.seedCommonVariations(into: context)
 
-      // Create mixed game history with varied metadata for search
       let store = GameStore(context: context)
-      let searchTemplates: [Game] = PreviewGameData.competitivePlayerGames +
-        PreviewGameData.recreationalPlayerGames
+      let generatedGames = CompletedGameFactory.realisticHistory(count: 15, withinDays: 30)
 
-      for template in searchTemplates {
-        let g = Game(gameVariation: template.gameVariation!)
-        g.score1 = template.score1
-        g.score2 = template.score2
-        g.currentServer = template.currentServer
-        g.serverNumber = template.serverNumber
-        g.totalRallies = template.totalRallies
-        g.createdDate = template.createdDate
-        g.lastModified = template.lastModified
-        if template.isCompleted {
-          g.duration = template.duration
-        }
-        context.insert(g)
-        if template.isCompleted {
-          try? store.complete(g, at: template.completedDate ?? .now)
-        } else {
-          try? store.save(g)
-        }
+      for generated in generatedGames {
+        context.insert(generated.game)
+        try? store.complete(generated.game, at: generated.completionDate)
       }
     }
   }

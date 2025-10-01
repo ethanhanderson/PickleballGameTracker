@@ -59,6 +59,16 @@ public extension View {
             for: .navigation
         )
     }
+
+    /// Conditionally apply a transformation to the view
+    @ViewBuilder
+    func `if`<Content: View>(_ condition: Bool, transform: (Self) -> Content) -> some View {
+        if condition {
+            transform(self)
+        } else {
+            self
+        }
+    }
 }
 
 

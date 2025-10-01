@@ -2,6 +2,180 @@ import GameTrackerCore
 import SwiftData
 import SwiftUI
 
+struct TeamSizeOption: Identifiable {
+  let id: Int
+  let size: Int
+  let displayName: String
+  let description: String
+
+  init(size: Int, displayName: String, description: String) {
+    self.id = size
+    self.size = size
+    self.displayName = displayName
+    self.description = description
+  }
+}
+
+protocol GameEntity: Identifiable, Hashable {
+  var id: UUID { get }
+  var name: String { get }
+  var displayName: String { get }
+  var skillLevelDisplay: String? { get }
+}
+
+extension PlayerProfile: GameEntity {
+  var displayName: String { name }
+  var skillLevelDisplay: String? {
+    skillLevel.displayName != "Unknown" ? skillLevel.displayName : nil
+  }
+}
+
+extension TeamProfile: GameEntity {
+  var displayName: String { name }
+  var skillLevelDisplay: String? { nil }
+}
+
+@MainActor
+struct TeamFormatSection: View {
+  let gameType: GameType
+  @Binding var selectedTeamSize: Int
+  let teamSizeOptions: [TeamSizeOption]
+
+  var body: some View {
+    Section("Team Format") {
+      Picker("Team Size", selection: $selectedTeamSize) {
+        ForEach(teamSizeOptions, id: \.size) { option in
+          Text(option.displayName).tag(option.size)
+        }
+      }
+      .pickerStyle(.menu)
+      .tint(gameType.color)
+    }
+  }
+}
+
+@MainActor
+struct EntitySelectionRow: View {
+  let entity: any GameEntity
+  let isSelected: Bool
+  let isDisabled: Bool
+  let selectionIndex: Int?
+  let selectionColor: Color
+
+  var body: some View {
+    HStack(spacing: DesignSystem.Spacing.md) {
+      if let player = entity as? PlayerProfile {
+        AvatarView(player: player, style: .small)
+      } else if let team = entity as? TeamProfile {
+        AvatarView(team: team, style: .small)
+      }
+
+      VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
+        Text(entity.displayName)
+          .font(.title3)
+          .fontWeight(isSelected ? .semibold : .regular)
+          .foregroundStyle(
+            isSelected
+              ? .black
+              : (isDisabled
+                ? .gray
+                : .primary)
+          )
+
+        if let skillLevelDisplay = entity.skillLevelDisplay {
+          Text(skillLevelDisplay)
+            .font(.subheadline)
+            .foregroundStyle(
+              isDisabled
+                ? .gray
+                : .secondary
+            )
+        }
+
+        if let team = entity as? TeamProfile, !team.players.isEmpty {
+          Text(team.players.map { $0.name }.joined(separator: ", "))
+            .font(.subheadline)
+            .foregroundStyle(
+              isDisabled
+                ? .gray
+                : .secondary
+            )
+            .lineLimit(1)
+            .truncationMode(.tail)
+        }
+      }
+
+      Spacer()
+
+      ZStack {
+        if isSelected {
+          Circle()
+            .fill(selectionColor)
+            .frame(width: 26, height: 26)
+          if let selectionIndex {
+            Text("\(selectionIndex)")
+              .font(.system(size: 20, weight: .bold, design: .rounded))
+              .foregroundStyle(.white)
+          }
+        } else {
+          Circle()
+            .strokeBorder(
+              isDisabled ? .gray.opacity(0.5) : .gray,
+              lineWidth: 2
+            )
+            .frame(width: 26, height: 26)
+        }
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .contentShape(.rect)
+    .opacity(isDisabled ? 0.5 : 1.0)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("\(entity.displayName)\(selectionIndex != nil && isSelected ? ", selected number \(selectionIndex!)" : "")")
+    .accessibilityIdentifier("entity.selection.\(entity.id.uuidString)")
+  }
+}
+
+@MainActor
+struct EntitySelectionSection: View {
+  let title: String
+  let entities: [any GameEntity]
+  let selectedEntityIds: Set<UUID>
+  let maxSelections: Int
+  let onToggleSelection: (any GameEntity) -> Void
+  let selectionNumbers: [UUID: Int]?
+  let selectionColor: Color
+
+  private var canSelectMore: Bool { selectedEntityIds.count < maxSelections }
+
+  var body: some View {
+    Section(title) {
+      if entities.isEmpty {
+        Text("No \(title.lowercased()) available")
+          .foregroundStyle(.secondary)
+      } else {
+        ForEach(entities, id: \.id) { entity in
+          let isSelected = selectedEntityIds.contains(entity.id)
+          let index = selectionNumbers?[entity.id]
+          EntitySelectionRow(
+            entity: entity,
+            isSelected: isSelected,
+            isDisabled: !isSelected && !canSelectMore,
+            selectionIndex: index,
+            selectionColor: selectionColor
+          )
+          .contentShape(.rect)
+          .onTapGesture {
+            if isSelected || canSelectMore {
+              onToggleSelection(entity)
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 @MainActor
 struct SetupView: View {
     let gameType: GameType
@@ -15,15 +189,16 @@ struct SetupView: View {
     @State private var selectedPlayerOrder: [UUID: Int] = [:]
     @State private var selectedTeam1: TeamProfile?
     @State private var selectedTeam2: TeamProfile?
+    
     @State private var isCreatingGame = false
     @State private var showingError = false
     @State private var errorMessage = ""
+    
+    @State private var showingLiveGameConfirm = false
+    @State private var pendingVariation: GameVariation?
+    @State private var pendingMatchup: MatchupSelection?
+    
     @Environment(\.dismiss) private var dismiss
-
-    // Active-game conflict handling
-    @State private var showingActiveGameConfirm: Bool = false
-    @State private var pendingVariation: GameVariation? = nil
-    @State private var pendingMatchup: MatchupSelection? = nil
 
     private var activePlayers: [PlayerProfile] {
         allPlayers.filter { !$0.isArchived }
@@ -39,9 +214,20 @@ struct SetupView: View {
         if let t2 = selectedTeam2 { teams.append(t2) }
         return teams
     }
+    
+    private var selectedTeamIds: Set<UUID> {
+        var ids = Set<UUID>()
+        if let t1 = selectedTeam1 { ids.insert(t1.id) }
+        if let t2 = selectedTeam2 { ids.insert(t2.id) }
+        return ids
+    }
 
     private var playerSelectionNumbers: [UUID: Int] {
         selectedPlayerOrder
+    }
+    
+    private var selectedPlayerIds: Set<UUID> {
+        Set(selectedPlayerOrder.keys)
     }
 
     private var selectedPlayers: [PlayerProfile] {
@@ -62,61 +248,10 @@ struct SetupView: View {
         self._selectedTeamSize = State(initialValue: gameType.defaultTeamSize)
     }
 
-    private var selectedPlayersText: String {
-        selectedPlayers.map { $0.name }.joined(separator: ", ")
-    }
-
-    private var selectedTeamsText: String {
-        let teamNames = [selectedTeam1, selectedTeam2].compactMap { $0?.name }
-        return teamNames.joined(separator: ", ")
-    }
 
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.md) {
-                        Text("Current Setup")
-                            .font(.headline)
-                            .foregroundStyle(.primary)
-
-                        HStack {
-                            Text("Game Type:")
-                                .foregroundStyle(.secondary)
-                            Text(gameType.displayName)
-                                .fontWeight(.semibold)
-                        }
-
-                        HStack {
-                            Text("Team Size:")
-                                .foregroundStyle(.secondary)
-                            Text("\(selectedTeamSize)")
-                                .fontWeight(.semibold)
-                        }
-
-                        if !selectedPlayers.isEmpty {
-                            HStack {
-                                Text("Players:")
-                                    .foregroundStyle(.secondary)
-                                Text(selectedPlayersText)
-                                    .fontWeight(.semibold)
-                            }
-                        }
-
-                        if selectedTeam1 != nil || selectedTeam2 != nil {
-                            HStack {
-                                Text("Teams:")
-                                    .foregroundStyle(.secondary)
-                                Text(selectedTeamsText)
-                                    .fontWeight(.semibold)
-                            }
-                        }
-                    }
-                    .padding(DesignSystem.Spacing.md)
-                    .background(Color.gray.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
-                }
-
                 TeamFormatSection(
                     gameType: gameType,
                     selectedTeamSize: $selectedTeamSize,
@@ -128,42 +263,34 @@ struct SetupView: View {
                     selectedTeam2 = nil
                 }
 
-                if selectedTeamSize == 1 {
-                    Section("Select Players") {
-                        ForEach(activePlayers) { player in
-                            Button {
-                                togglePlayerSelection(player)
-                            } label: {
-                                HStack {
-                                    Text(player.name)
-                                    Spacer()
-                                    if selectedPlayers.contains(player) {
-                                        Image(systemName: "checkmark")
-                                            .foregroundStyle(Color.accentColor)
-                                    }
-                                }
-                            }
-                            .disabled(selectedPlayers.count >= 2 && !selectedPlayers.contains(player))
+                EntitySelectionSection(
+                    title: "Select Players",
+                    entities: activePlayers,
+                    selectedEntityIds: selectedPlayerIds,
+                    maxSelections: selectedTeamSize == 1 ? 2 : 4,
+                    onToggleSelection: { entity in
+                        if let player = entity as? PlayerProfile {
+                            togglePlayerSelection(player)
                         }
-                    }
-                } else {
-                    Section("Select Teams") {
-                        ForEach(activeTeams) { team in
-                            Button {
+                    },
+                    selectionNumbers: playerSelectionNumbers,
+                    selectionColor: gameType.color
+                )
+
+                if selectedTeamSize > 1 {
+                    EntitySelectionSection(
+                        title: "Select Teams",
+                        entities: activeTeams,
+                        selectedEntityIds: selectedTeamIds,
+                        maxSelections: 2,
+                        onToggleSelection: { entity in
+                            if let team = entity as? TeamProfile {
                                 toggleTeamSelection(team)
-                            } label: {
-                                HStack {
-                                    Text(team.name)
-                                    Spacer()
-                                    if selectedTeams.contains(team) {
-                                        Image(systemName: "checkmark")
-                                            .foregroundStyle(Color.accentColor)
-                                    }
-                                }
                             }
-                            .disabled(selectedTeams.count >= 2 && !selectedTeams.contains(team))
-                        }
-                    }
+                        },
+                        selectionNumbers: nil,
+                        selectionColor: gameType.color
+                    )
                 }
             }
             .navigationTitle("Set Up Game")
@@ -174,17 +301,17 @@ struct SetupView: View {
                     Button(action: startGame) {
                         if isCreatingGame {
                             ProgressView()
-                                .tint(.accentColor)
+                                .tint(gameType.color)
                         } else {
                             Label("Start Game", systemImage: "play")
                         }
                     }
                     .buttonStyle(.glassProminent)
-                    .tint(.accentColor)
+                    .tint(gameType.color)
                     .disabled(!canStartGame || isCreatingGame)
                     .confirmationDialog(
                         "An active game is in progress",
-                        isPresented: $showingActiveGameConfirm,
+                        isPresented: $showingLiveGameConfirm,
                         titleVisibility: .visible
                     ) {
                         Button(
@@ -213,13 +340,8 @@ struct SetupView: View {
                             }
                         }
 
-                        Button("Keep current game (Resume)") {
+                        Button("Keep current game") {
                             dismiss()
-                            pendingVariation = nil
-                            pendingMatchup = nil
-                        }
-
-                        Button("Cancel", role: .cancel) {
                             pendingVariation = nil
                             pendingMatchup = nil
                         }
@@ -234,6 +356,7 @@ struct SetupView: View {
                         Image(systemName: "xmark")
                             .font(.system(size: 16, weight: .semibold))
                     }
+                    .tint(.secondary)
                     .accessibilityLabel("Close")
                     .accessibilityIdentifier("setup.close")
                 }
@@ -266,19 +389,25 @@ struct SetupView: View {
         if selectedTeamSize == 1 {
             return selectedPlayers.count == 2
         } else {
-            return selectedTeam1 != nil && selectedTeam2 != nil
+            let hasEnoughPlayers = selectedPlayers.count == 4
+            let hasEnoughTeams = selectedTeam1 != nil && selectedTeam2 != nil
+            return hasEnoughPlayers || hasEnoughTeams
         }
     }
 
     private func togglePlayerSelection(_ player: PlayerProfile) {
         if selectedPlayerOrder[player.id] != nil {
             selectedPlayerOrder[player.id] = nil
-        } else if selectedPlayerOrder.count < 2 {
-            let available =
-                [1, 2].first { slot in
-                    !selectedPlayerOrder.values.contains(slot)
-                } ?? 1
-            selectedPlayerOrder[player.id] = available
+        } else {
+            let maxPlayers = selectedTeamSize == 1 ? 2 : 4
+            if selectedPlayerOrder.count < maxPlayers {
+                let availableSlots = selectedTeamSize == 1 ? [1, 2] : [1, 2, 3, 4]
+                let available =
+                    availableSlots.first { slot in
+                        !selectedPlayerOrder.values.contains(slot)
+                    } ?? 1
+                selectedPlayerOrder[player.id] = available
+            }
         }
     }
 
@@ -302,30 +431,23 @@ struct SetupView: View {
             do {
                 let (variation, matchup) =
                     try await createGameVariationAndMatchup()
-                // If there is an active game, confirm with the user before starting
+                // If there is a live game, confirm with the user before starting
                 if activeGameStateManager.hasActiveGame {
                     pendingVariation = variation
                     pendingMatchup = matchup
-                    showingActiveGameConfirm = true
+                    showingLiveGameConfirm = true
                 } else {
                     onStartGame(variation, matchup)
-                    // Request the Live Game sheet to open
-                    NotificationCenter.default.post(
-                        name: Notification.Name("OpenLiveGameRequested"),
-                        object: nil
-                    )
                 }
             } catch let error as GameVariationError {
-                errorMessage = [
-                    error.localizedDescription,
-                    error.recoverySuggestion,
-                ]
-                .compactMap { $0 }
-                .joined(separator: "\n\n")
+                if let suggestion = error.recoverySuggestion {
+                    errorMessage = "\(error.localizedDescription)\n\n\(suggestion)"
+                } else {
+                    errorMessage = error.localizedDescription
+                }
                 showingError = true
             } catch {
-                errorMessage =
-                    "An unexpected error occurred: \(error.localizedDescription)"
+                errorMessage = "An unexpected error occurred: \(error.localizedDescription)"
                 showingError = true
             }
         }
@@ -344,23 +466,39 @@ struct SetupView: View {
                 )
             }
 
-            let variation = try GameVariation.createValidated(
+            let variation = try createGameVariation(
                 name: "\(player1.name) vs \(player2.name)",
-                gameType: gameType,
-                teamSize: 1,
-                winningScore: gameType.defaultWinningScore,
-                winByTwo: gameType.defaultWinByTwo,
-                kitchenRule: gameType.defaultKitchenRule,
-                doubleBounceRule: gameType.defaultDoubleBounceRule,
-                servingRotation: .standard,
-                sideSwitchingRule: gameType.defaultSideSwitchingRule,
-                isCustom: true
+                teamSize: 1
             )
             let matchup = MatchupSelection(
                 teamSize: 1,
                 mode: .players(
                     sideA: [player1.id],
                     sideB: [player2.id]
+                )
+            )
+            return (variation, matchup)
+        } else if selectedPlayers.count == 4 {
+            let team1Player1 = allPlayers.first { selectedPlayerOrder[$0.id] == 1 }
+            let team1Player2 = allPlayers.first { selectedPlayerOrder[$0.id] == 2 }
+            let team2Player1 = allPlayers.first { selectedPlayerOrder[$0.id] == 3 }
+            let team2Player2 = allPlayers.first { selectedPlayerOrder[$0.id] == 4 }
+
+            guard let p1 = team1Player1, let p2 = team1Player2, let p3 = team2Player1, let p4 = team2Player2 else {
+                throw GameVariationError.invalidConfiguration(
+                    "Please select exactly 4 players (2 per team)"
+                )
+            }
+
+            let variation = try createGameVariation(
+                name: "\(p1.name) & \(p2.name) vs \(p3.name) & \(p4.name)",
+                teamSize: 2
+            )
+            let matchup = MatchupSelection(
+                teamSize: 2,
+                mode: .players(
+                    sideA: [p1.id, p2.id],
+                    sideB: [p3.id, p4.id]
                 )
             )
             return (variation, matchup)
@@ -371,17 +509,9 @@ struct SetupView: View {
                 )
             }
 
-            let variation = try GameVariation.createValidated(
+            let variation = try createGameVariation(
                 name: "\(team1.name) vs \(team2.name)",
-                gameType: gameType,
-                teamSize: selectedTeamSize,
-                winningScore: gameType.defaultWinningScore,
-                winByTwo: gameType.defaultWinByTwo,
-                kitchenRule: gameType.defaultKitchenRule,
-                doubleBounceRule: gameType.defaultDoubleBounceRule,
-                servingRotation: .standard,
-                sideSwitchingRule: gameType.defaultSideSwitchingRule,
-                isCustom: true
+                teamSize: selectedTeamSize
             )
             let matchup = MatchupSelection(
                 teamSize: selectedTeamSize,
@@ -389,6 +519,21 @@ struct SetupView: View {
             )
             return (variation, matchup)
         }
+    }
+    
+    private func createGameVariation(name: String, teamSize: Int) throws(GameVariationError) -> GameVariation {
+        try GameVariation.createValidated(
+            name: name,
+            gameType: gameType,
+            teamSize: teamSize,
+            winningScore: gameType.defaultWinningScore,
+            winByTwo: gameType.defaultWinByTwo,
+            kitchenRule: gameType.defaultKitchenRule,
+            doubleBounceRule: gameType.defaultDoubleBounceRule,
+            servingRotation: .standard,
+            sideSwitchingRule: gameType.defaultSideSwitchingRule,
+            isCustom: true
+        )
     }
 }
 

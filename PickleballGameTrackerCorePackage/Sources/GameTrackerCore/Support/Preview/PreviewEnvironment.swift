@@ -18,7 +18,7 @@ public enum PreviewEnvironment {
 
   public struct Configuration: Sendable {
     public let scenario: Scenario
-    public let withActiveGame: Bool
+    public let withLiveGame: Bool
     public let withPlayerAssignments: Bool
     public let gameState: GameState?
     public let randomizeTimer: Bool
@@ -27,7 +27,7 @@ public enum PreviewEnvironment {
 
     public init(
       scenario: Scenario,
-      withActiveGame: Bool = false,
+      withLiveGame: Bool = false,
       withPlayerAssignments: Bool = false,
       gameState: GameState? = nil,
       randomizeTimer: Bool = false,
@@ -35,7 +35,7 @@ public enum PreviewEnvironment {
       startTimer: Bool = true
     ) {
       self.scenario = scenario
-      self.withActiveGame = withActiveGame
+      self.withLiveGame = withLiveGame
       self.withPlayerAssignments = withPlayerAssignments
       self.gameState = gameState
       self.randomizeTimer = randomizeTimer
@@ -43,17 +43,17 @@ public enum PreviewEnvironment {
       self.startTimer = startTimer
     }
 
-    public static let app: Configuration = Configuration(scenario: .app, withActiveGame: true, withPlayerAssignments: true, gameState: nil)
-    public static let liveGame: Configuration = Configuration(scenario: .liveGame, withActiveGame: true, withPlayerAssignments: true, gameState: .playing)
-    public static let catalog: Configuration = Configuration(scenario: .catalog, withActiveGame: false, withPlayerAssignments: false, gameState: nil)
-    public static let history: Configuration = Configuration(scenario: .history, withActiveGame: false, withPlayerAssignments: false, gameState: nil)
-    public static let statistics: Configuration = Configuration(scenario: .statistics, withActiveGame: false, withPlayerAssignments: true, gameState: nil)
-    public static let search: Configuration = Configuration(scenario: .search, withActiveGame: false, withPlayerAssignments: true, gameState: nil)
-    public static let roster: Configuration = Configuration(scenario: .roster, withActiveGame: false, withPlayerAssignments: true, gameState: nil)
-    public static let empty: Configuration = Configuration(scenario: .empty, withActiveGame: false, withPlayerAssignments: false, gameState: nil)
+    public static let app: Configuration = Configuration(scenario: .app, withLiveGame: true, withPlayerAssignments: true, gameState: nil)
+    public static let liveGame: Configuration = Configuration(scenario: .liveGame, withLiveGame: true, withPlayerAssignments: true, gameState: .playing)
+    public static let catalog: Configuration = Configuration(scenario: .catalog, withLiveGame: false, withPlayerAssignments: false, gameState: nil)
+    public static let history: Configuration = Configuration(scenario: .history, withLiveGame: false, withPlayerAssignments: false, gameState: nil)
+    public static let statistics: Configuration = Configuration(scenario: .statistics, withLiveGame: false, withPlayerAssignments: true, gameState: nil)
+    public static let search: Configuration = Configuration(scenario: .search, withLiveGame: false, withPlayerAssignments: true, gameState: nil)
+    public static let roster: Configuration = Configuration(scenario: .roster, withLiveGame: false, withPlayerAssignments: true, gameState: nil)
+    public static let empty: Configuration = Configuration(scenario: .empty, withLiveGame: false, withPlayerAssignments: false, gameState: nil)
 
     public static func custom(_ container: ModelContainer) -> Configuration {
-      Configuration(scenario: .custom(container), withActiveGame: false, withPlayerAssignments: false, gameState: nil)
+      Configuration(scenario: .custom(container), withLiveGame: false, withPlayerAssignments: false, gameState: nil)
     }
   }
 
@@ -97,22 +97,19 @@ public enum PreviewEnvironment {
       }
     }()
 
-    // Configure active game state if needed
-    if configuration.withActiveGame {
+    // Configure live game state if needed
+    if configuration.withLiveGame {
       Task { @MainActor in
         active.configure(gameManager: gameManager)
         do {
           var allGames = try container.mainContext.fetch(FetchDescriptor<Game>())
           if allGames.isEmpty {
-            // Create a random active game with participants if none exist
-            let _ = try await PreviewGameData.createRandomActiveGame(using: gameManager)
+            _ = try await PreviewGameData.createRandomLiveGame(using: gameManager)
             allGames = try container.mainContext.fetch(FetchDescriptor<Game>())
           }
-          // Prefer a non-completed game for the active preview experience
           var candidate = allGames.first(where: { !$0.isCompleted })
           if candidate == nil {
-            // If none available, create one and try again
-            let _ = try await PreviewGameData.createRandomActiveGame(using: gameManager)
+            _ = try await PreviewGameData.createRandomLiveGame(using: gameManager)
             allGames = try container.mainContext.fetch(FetchDescriptor<Game>())
             candidate = allGames.first(where: { !$0.isCompleted }) ?? allGames.first
           }
@@ -359,21 +356,21 @@ extension PreviewEnvironment.Context {
   }
 
   @MainActor
-  public func configureActiveGame() async throws {
+  public func configureLiveGame() async throws {
     guard let rosterManager else { return }
 
     // Refresh roster to ensure we have players
     rosterManager.refreshAll()
 
-    // Ensure there's an active game in the container; if none, create a simple one
+    // Ensure there's a live game in the container; if none, create a simple one
     let allGames = try container.mainContext.fetch(FetchDescriptor<Game>())
-    if let activeGame = allGames.first(where: { $0.gameState == .playing }) {
-      activeGameStateManager.setCurrentGame(activeGame)
-      if activeGame.gameState == .initial {
+    if let liveGame = allGames.first(where: { $0.gameState == .playing }) {
+      activeGameStateManager.setCurrentGame(liveGame)
+      if liveGame.gameState == .initial {
         try await activeGameStateManager.startGame()
       }
     } else {
-      // Create a basic active game for preview context
+      // Create a basic live game for preview context
       let game = Game(gameType: .recreational)
       game.gameState = .playing
       container.mainContext.insert(game)
@@ -382,9 +379,9 @@ extension PreviewEnvironment.Context {
     }
   }
 
-  /// Configures an active game with optional state and timer parameters
+  /// Configures a live game with optional state and timer parameters
   @MainActor
-  public func configureActiveGame(
+  public func configureLiveGame(
     gameState: GameState = .playing,
     initialElapsedTime: TimeInterval? = nil,
     randomizeElapsedTime: Bool = false
@@ -392,7 +389,7 @@ extension PreviewEnvironment.Context {
     // Ensure we have at least one game to work with
     var allGames = try container.mainContext.fetch(FetchDescriptor<Game>())
     if allGames.isEmpty {
-      _ = try await PreviewGameData.createRandomActiveGame(using: gameManager)
+      _ = try await PreviewGameData.createRandomLiveGame(using: gameManager)
       allGames = try container.mainContext.fetch(FetchDescriptor<Game>())
     }
 

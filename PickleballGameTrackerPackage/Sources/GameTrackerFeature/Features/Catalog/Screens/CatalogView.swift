@@ -28,8 +28,7 @@ struct CatalogView: View {
                                                 .gameDetail(gameType)
                                         ) {
                                             GameTypeCard(
-                                                gameType: gameType,
-                                                isEnabled: true
+                                                gameType: gameType
                                             )
                                         }
                                         .accessibilityIdentifier(

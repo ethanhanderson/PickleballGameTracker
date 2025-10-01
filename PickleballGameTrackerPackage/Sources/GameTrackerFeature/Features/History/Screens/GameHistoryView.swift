@@ -81,50 +81,62 @@ struct GameHistoryView: View {
             ScrollView {
                 VStack(spacing: DesignSystem.Spacing.md) {
                     if completedGames.isEmpty {
-                        VStack {
-                            EmptyStateView(
-                                icon: "clock.badge.questionmark",
-                                title: "No Game History",
-                                description:
-                                    "Start playing games to see your history here"
-                            )
-                        }
+                        EmptyStateView(
+                            icon: "clock.badge.questionmark",
+                            title: "No Game History",
+                            description:
+                                "Start playing games to see your history here"
+                        )
                         .padding(.top, DesignSystem.Spacing.sm)
                     } else if filteredGames.isEmpty && selectedFilter != .all {
-                        VStack {
-                            EmptyStateView(
-                                icon: "line.3.horizontal.decrease.circle",
-                                title: "No Games Found",
-                                description:
-                                    "Try adjusting your filter to see more games"
-                            )
-                        }
+                        EmptyStateView(
+                            icon: "line.3.horizontal.decrease.circle",
+                            title: "No Games Found",
+                            description:
+                                "Try adjusting your filter to see more games"
+                        )
                         .padding(.top, DesignSystem.Spacing.sm)
                     } else {
-                        GameHistoryContent(
-                            completedGames: completedGames,
-                            filteredGames: filteredGames,
-                            groupedGames: groupedGames,
-                            selectedGrouping: selectedGrouping,
-                            onGameTapped: { game in
-                                Log.event(
-                                    .actionTapped,
-                                    level: .info,
-                                    message: "history → completed",
-                                    context: .current(gameId: game.id)
-                                )
-                                path.append(
-                                    GameHistoryDestination.gameDetail(game.id)
-                                )
+                        if selectedGrouping == .none {
+                            VStack(spacing: DesignSystem.Spacing.md) {
+                                ForEach(filteredGames.indices, id: \.self) { index in
+                                    GameHistoryCard(
+                                        game: filteredGames[index],
+                                        onTapped: {
+                                            let game = filteredGames[index]
+                                            Log.event(
+                                                .actionTapped,
+                                                level: .info,
+                                                message: "history → completed",
+                                                context: .current(gameId: game.id)
+                                            )
+                                            path.append(GameHistoryDestination.gameDetail(game.id))
+                                        }
+                                    )
+                                }
                             }
-                        )
+                            .padding(.top, DesignSystem.Spacing.md)
+                        } else {
+                            GameHistoryGroupedList(
+                                groupedGames: groupedGames,
+                                selectedGrouping: selectedGrouping,
+                                onGameTapped: { game in
+                                    Log.event(
+                                        .actionTapped,
+                                        level: .info,
+                                        message: "history → completed",
+                                        context: .current(gameId: game.id)
+                                    )
+                                    path.append(GameHistoryDestination.gameDetail(game.id))
+                                }
+                            )
+                        }
                     }
                 }
                 .scrollClipDisabled()
                 .padding(.horizontal, DesignSystem.Spacing.md)
             }
             .navigationTitle("History")
-            .toolbarTitleDisplayMode(.inlineLarge)
             .viewContainerBackground()
             .toolbar {
                 ToolbarItem {
@@ -228,19 +240,126 @@ struct GameHistoryView: View {
     }
 }
 
+// MARK: - Local Components (History)
+
+@MainActor
+private struct HistoryFilterMenu: View {
+    @Binding var selectedFilter: GameFilter
+
+    var body: some View {
+        Menu {
+            Section("General") {
+                filterButton(for: .all)
+            }
+
+            Section("Game Types") {
+                ForEach(GameCatalog.allGameTypes, id: \.self) { gameType in
+                    filterButton(for: .gameType(gameType))
+                }
+            }
+
+            Section("Results") {
+                filterButton(for: .wins)
+                filterButton(for: .losses)
+            }
+        } label: {
+            Image(
+                systemName: selectedFilter == .all
+                    ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill"
+            )
+        }
+    }
+
+    private func filterButton(for filter: GameFilter) -> some View {
+        Button {
+            selectedFilter = filter
+        } label: {
+            HStack {
+                if selectedFilter == filter {
+                    Image(systemName: "checkmark")
+                }
+                Text(filter.displayName)
+            }
+        }
+    }
+}
+
+@MainActor
+private struct HistoryGroupingMenu: View {
+    @Binding var selectedGrouping: GroupingOption
+
+    var body: some View {
+        Menu {
+            ForEach(GroupingOption.allCases) { option in
+                groupingButton(for: option)
+            }
+        } label: {
+            Image(
+                systemName: selectedGrouping == .none ? "square.grid.2x2" : "square.grid.2x2.fill"
+            )
+        }
+    }
+
+    private func groupingButton(for option: GroupingOption) -> some View {
+        Button {
+            selectedGrouping = option
+        } label: {
+            Label(
+                option.displayName,
+                systemImage: selectedGrouping == option ? "checkmark.circle.fill" : option.systemImage
+            )
+        }
+    }
+}
+
+@MainActor
+private struct GameHistoryGroupedList: View {
+    let groupedGames: [GroupedGames]
+    let selectedGrouping: GroupingOption
+    let onGameTapped: (Game) -> Void
+
+    var body: some View {
+        VStack(spacing: DesignSystem.Spacing.md) {
+            ForEach(groupedGames.indices, id: \.self) { groupIndex in
+                let group = groupedGames[groupIndex]
+
+                Section {
+                    ForEach(group.games.indices, id: \.self) { gameIndex in
+                        GameHistoryCard(
+                            game: group.games[gameIndex],
+                            onTapped: { onGameTapped(group.games[gameIndex]) }
+                        )
+                    }
+                } header: {
+                    if shouldShowHeader(for: group) {
+                        HStack {
+                            Text(group.title)
+                                .font(.title3)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.primary)
+                            Spacer()
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.top, DesignSystem.Spacing.lg)
+    }
+
+    private func shouldShowHeader(for group: GroupedGames) -> Bool {
+        selectedGrouping != .none && !group.title.isEmpty
+    }
+}
+
+
 // MARK: - Previews
 
-#Preview("With Games") {
+#Preview("History") {
     GameHistoryView()
         .minimalPreview(environment: PreviewEnvironment.history())
 }
 
-#Preview("Empty State") {
+#Preview("Empty") {
     GameHistoryView()
         .minimalPreview(environment: PreviewEnvironment.emptyComponent())
-}
-
-#Preview("Rich History") {
-    GameHistoryView()
-        .minimalPreview(environment: PreviewEnvironment.history())
 }
