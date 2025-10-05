@@ -75,8 +75,6 @@ struct ArchivedGamesView: View {
         VStack(spacing: DesignSystem.Spacing.md) {
           gameCards
         }
-        .padding(.horizontal, DesignSystem.Spacing.md)
-        .padding(.vertical, DesignSystem.Spacing.md)
       )
     }
   }
@@ -85,6 +83,8 @@ struct ArchivedGamesView: View {
     ScrollView {
       content
     }
+    .contentMargins(.horizontal, DesignSystem.Spacing.md, for: .scrollContent)
+    .contentMargins(.vertical, DesignSystem.Spacing.md, for: .scrollContent)
     .navigationTitle("Archive")
     .background(Color(UIColor.systemGroupedBackground))
   }

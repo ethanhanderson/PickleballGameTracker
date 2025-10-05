@@ -16,6 +16,7 @@ public final class PlayerProfile: Hashable {
   public var name: String
   public var notes: String?
   public var isArchived: Bool
+  public var isGuest: Bool
   public var avatarImageData: Data?
   public var iconSymbolName: String?
   public var accentColorStored: StoredRGBAColor?
@@ -34,6 +35,7 @@ public final class PlayerProfile: Hashable {
     name: String,
     notes: String? = nil,
     isArchived: Bool = false,
+    isGuest: Bool = false,
     avatarImageData: Data? = nil,
     iconSymbolName: String? = nil,
     accentColor: StoredRGBAColor? = nil,
@@ -46,6 +48,7 @@ public final class PlayerProfile: Hashable {
     self.name = name
     self.notes = notes
     self.isArchived = isArchived
+    self.isGuest = isGuest
     self.avatarImageData = avatarImageData
     self.iconSymbolName = iconSymbolName
     self.accentColorStored = accentColor

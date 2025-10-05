@@ -22,9 +22,9 @@ struct TrendsDetailView: View {
         StatChartPlaceholder(title: "30‑day point differential (avg)", points: diff30)
         StatFilterSummary(filters: filters)
       }
-      .padding()
       .task(id: filters) { await compute() }
     }
+    .contentMargins(.all, 16, for: .scrollContent)
     .navigationTitle("Trends")
     .navigationBarTitleDisplayMode(.inline)
   }
@@ -51,14 +51,14 @@ struct TrendsDetailView: View {
   NavigationStack {
     TrendsDetailView(filters: .init(gameId: nil, gameTypeId: nil))
   }
-  .minimalPreview(environment: PreviewEnvironment.componentWithGame())
+  .modelContainer(PreviewContainers.standard())
 }
 
 #Preview("With Basic Data") {
   NavigationStack {
     TrendsDetailView(filters: .init(gameId: nil, gameTypeId: nil))
   }
-  .minimalPreview(environment: PreviewEnvironment.component())
+  .modelContainer(PreviewContainers.minimal())
 }
 
 // Components referenced: `StatChartPlaceholder`, `StatFilterSummary`

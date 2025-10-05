@@ -18,9 +18,9 @@ struct ServeWinDetailView: View {
         StatChartPlaceholder(title: "Serve win % over time")
         StatFilterSummary(filters: filters)
       }
-      .padding()
       .task(id: filters) { await compute() }
     }
+    .contentMargins(.all, 16, for: .scrollContent)
     .navigationTitle("Serve Win %")
     .navigationBarTitleDisplayMode(.inline)
   }
@@ -43,12 +43,12 @@ struct ServeWinDetailView: View {
   NavigationStack {
     ServeWinDetailView(filters: .init(gameId: nil, gameTypeId: GameType.recreational.rawValue))
   }
-  .minimalPreview(environment: PreviewEnvironment.componentWithGame())
+  .modelContainer(PreviewContainers.standard())
 }
 
 #Preview("With Basic Data") {
   NavigationStack {
     ServeWinDetailView(filters: .init(gameId: nil, gameTypeId: GameType.recreational.rawValue))
   }
-  .minimalPreview(environment: PreviewEnvironment.component())
+  .modelContainer(PreviewContainers.minimal())
 }

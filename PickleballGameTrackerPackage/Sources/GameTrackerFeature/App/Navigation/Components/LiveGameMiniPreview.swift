@@ -20,7 +20,7 @@ struct InlineMiniPreview: View {
                             .fontWeight(.semibold)
 
                         if let game = activeGameStateManager.currentGame {
-                            let names = game.teamsWithLabels.map { $0.teamName }.joined(separator: " vs ")
+                            let names = game.teamsWithLabels(context: modelContext).map { $0.teamName }.joined(separator: " vs ")
                             if names.isEmpty == false {
                                 Text(names)
                                     .font(.caption)
@@ -82,9 +82,9 @@ private extension InlineMiniPreview {
 
         let teamName: String? = {
             if index == 1 {
-                return game.teamsWithLabels.first?.teamName
+                return game.teamsWithLabels(context: modelContext).first?.teamName
             } else {
-                return game.teamsWithLabels.dropFirst().first?.teamName
+                return game.teamsWithLabels(context: modelContext).dropFirst().first?.teamName
             }
         }()
 
@@ -136,7 +136,7 @@ struct ExpandedMiniPreview: View {
                             .font(.headline)
 
                         if let game = activeGameStateManager.currentGame {
-                            let names = game.teamsWithLabels.map { $0.teamName }.joined(separator: " vs ")
+                            let names = game.teamsWithLabels(context: modelContext).map { $0.teamName }.joined(separator: " vs ")
                             if names.isEmpty == false {
                                 Text(names)
                                     .font(.caption)
@@ -218,9 +218,9 @@ private extension ExpandedMiniPreview {
 
         let teamName: String? = {
             if index == 1 {
-                return game.teamsWithLabels.first?.teamName
+                return game.teamsWithLabels(context: modelContext).first?.teamName
             } else {
-                return game.teamsWithLabels.dropFirst().first?.teamName
+                return game.teamsWithLabels(context: modelContext).dropFirst().first?.teamName
             }
         }()
 

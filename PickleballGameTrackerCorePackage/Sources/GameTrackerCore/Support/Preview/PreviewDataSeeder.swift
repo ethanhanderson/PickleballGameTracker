@@ -1,13 +1,269 @@
 import Foundation
 import SwiftData
 
+/// Centralized preview data seeding with configurable data quantities.
+///
+/// ## Overview
+///
+/// `PreviewDataSeeder` provides a composable architecture for generating preview data
+/// with centralized configuration of data quantities. All seeding methods use the shared
+/// `quantities` configuration, making it easy to adjust preview data density globally.
+///
+/// ## Basic Usage
+///
+/// ```swift
+/// // Use default quantities (standard preset)
+/// let container = PreviewDataSeeder.appContainer()
+///
+/// // Switch to minimal data for faster previews
+/// PreviewDataSeeder.quantities = .minimal
+/// let minimalContainer = PreviewDataSeeder.appContainer()
+///
+/// // Use extensive data for performance testing
+/// PreviewDataSeeder.quantities = .extensive
+/// let largeContainer = PreviewDataSeeder.appContainer()
+/// ```
+///
+/// ## Custom Quantities
+///
+/// ```swift
+/// // Create custom configuration
+/// PreviewDataSeeder.quantities = PreviewDataSeeder.DataQuantities(
+///   historyPlayerGamesCount: 20,
+///   historyTeamGamesCount: 10,
+///   historyTimeRangeDays: 45,
+///   searchGamesCount: 25,
+///   searchTimeRangeDays: 45,
+///   gameSetupHistoryCount: 15,
+///   gameSetupTimeRangeDays: 30,
+///   rosterPlayerCount: 16,
+///   rosterTeamSize: 2
+/// )
+///
+/// let customContainer = PreviewDataSeeder.appContainer()
+/// ```
+///
+/// ## Presets
+///
+/// Three predefined quantity presets are available:
+///
+/// - `.standard` - Default quantities, balanced for most previews
+///   - 12 player games, 6 team games in history
+///   - 12 players on roster
+///   - 30-day time range
+///
+/// - `.minimal` - Minimal data for fast preview loading
+///   - 3 player games, 2 team games in history
+///   - 4 players on roster
+///   - 7-day time range
+///
+/// - `.extensive` - Large dataset for stress testing
+///   - 25 player games, 15 team games in history
+///   - 20 players on roster
+///   - 90-day time range
+///
+/// ## Architecture
+///
+/// All container methods compose dedicated seeding methods that reference the shared
+/// `quantities` configuration. Changes to quantities automatically propagate to all
+/// environments that use those seeding methods.
 @MainActor
 public enum PreviewDataSeeder {
+  
+  // MARK: - Configuration
+  
+  public struct DataQuantities: Sendable {
+    public let historyPlayerGamesCount: Int
+    public let historyTeamGamesCount: Int
+    public let historyTimeRangeDays: Int
+    public let searchGamesCount: Int
+    public let searchTimeRangeDays: Int
+    public let gameSetupHistoryCount: Int
+    public let gameSetupTimeRangeDays: Int
+    public let rosterPlayerCount: Int
+    public let rosterTeamSize: Int
+    
+    public init(
+      historyPlayerGamesCount: Int = 12,
+      historyTeamGamesCount: Int = 6,
+      historyTimeRangeDays: Int = 30,
+      searchGamesCount: Int = 15,
+      searchTimeRangeDays: Int = 30,
+      gameSetupHistoryCount: Int = 12,
+      gameSetupTimeRangeDays: Int = 30,
+      rosterPlayerCount: Int = 12,
+      rosterTeamSize: Int = 2
+    ) {
+      self.historyPlayerGamesCount = historyPlayerGamesCount
+      self.historyTeamGamesCount = historyTeamGamesCount
+      self.historyTimeRangeDays = historyTimeRangeDays
+      self.searchGamesCount = searchGamesCount
+      self.searchTimeRangeDays = searchTimeRangeDays
+      self.gameSetupHistoryCount = gameSetupHistoryCount
+      self.gameSetupTimeRangeDays = gameSetupTimeRangeDays
+      self.rosterPlayerCount = rosterPlayerCount
+      self.rosterTeamSize = rosterTeamSize
+    }
+    
+    public static let standard = DataQuantities()
+    
+    public static let minimal = DataQuantities(
+      historyPlayerGamesCount: 3,
+      historyTeamGamesCount: 2,
+      historyTimeRangeDays: 7,
+      searchGamesCount: 5,
+      searchTimeRangeDays: 7,
+      gameSetupHistoryCount: 3,
+      gameSetupTimeRangeDays: 7,
+      rosterPlayerCount: 4,
+      rosterTeamSize: 2
+    )
+    
+    public static let extensive = DataQuantities(
+      historyPlayerGamesCount: 25,
+      historyTeamGamesCount: 15,
+      historyTimeRangeDays: 90,
+      searchGamesCount: 30,
+      searchTimeRangeDays: 90,
+      gameSetupHistoryCount: 20,
+      gameSetupTimeRangeDays: 60,
+      rosterPlayerCount: 20,
+      rosterTeamSize: 2
+    )
+  }
+  
+  public static var quantities: DataQuantities = .standard
+  
+  // MARK: - Dedicated Seeding Methods
+  
+  public static func seedRosterData(into context: ModelContext) {
+    SwiftDataSeeding.seedSampleRoster(
+      into: context,
+      playerCount: quantities.rosterPlayerCount,
+      teamSize: quantities.rosterTeamSize
+    )
+  }
+  
+  public static func seedCatalogData(into context: ModelContext) {
+    SwiftDataSeeding.seedCommonVariations(into: context)
+  }
+  
+  public static func seedHistoryData(into context: ModelContext, store: GameStore) {
+    let players = try? context.fetch(FetchDescriptor<PlayerProfile>()).filter { !$0.isArchived }
+    let teams = try? context.fetch(FetchDescriptor<TeamProfile>()).filter { !$0.isArchived }
+    
+    if let players, players.count >= 2 {
+      for _ in 0..<quantities.historyPlayerGamesCount {
+        let generated = CompletedGameFactory(context: context)
+          .withPlayers()
+          .gameType([.recreational, .tournament, .training].randomElement()!)
+          .timestamp(withinDays: quantities.historyTimeRangeDays)
+          .generateWithDate()
+        context.insert(generated.game)
+        try? store.complete(generated.game, at: generated.completionDate)
+      }
+    }
+    
+    if let teams, teams.count >= 2 {
+      for _ in 0..<quantities.historyTeamGamesCount {
+        let generated = CompletedGameFactory(context: context)
+          .withTeams()
+          .gameType([.recreational, .tournament].randomElement()!)
+          .timestamp(withinDays: quantities.historyTimeRangeDays)
+          .generateWithDate()
+        context.insert(generated.game)
+        try? store.complete(generated.game, at: generated.completionDate)
+      }
+    }
+  }
+  
+  public static func seedLiveGameData(into context: ModelContext) {
+    let activePlayers = try! context.fetch(FetchDescriptor<PlayerProfile>()).filter { !$0.isArchived }
+    let activeTeams = try! context.fetch(FetchDescriptor<TeamProfile>()).filter { !$0.isArchived }
+
+    let doSingles: Bool = {
+      switch (activePlayers.count >= 2, activeTeams.count >= 2) {
+      case (true, true): return Bool.random()
+      case (true, false): return true
+      case (false, true): return false
+      default: return true
+      }
+    }()
+
+    if doSingles, activePlayers.count >= 2 {
+      let shuffled = activePlayers.shuffled()
+      let p1 = shuffled[0]
+      let p2 = shuffled[1]
+
+      let variation: GameVariation
+      if let existing = try! context.fetch(FetchDescriptor<GameVariation>()).first(where: { $0.name == "\(p1.name) vs \(p2.name)" }) {
+        variation = existing
+      } else {
+        variation = GameVariationFactory.forMatchup(players: [p1, p2], gameType: .recreational)
+      }
+
+      let game = ActiveGameFactory(context: context)
+        .variation(variation)
+        .midGame()
+        .state(.playing)
+        .server(team: [1, 2].randomElement()!, player: 1)
+        .generate()
+      context.insert(game)
+    } else if activeTeams.count >= 2 {
+      let shuffled = activeTeams.shuffled()
+      let t1 = shuffled[0]
+      let t2 = shuffled[1]
+
+      let variation: GameVariation
+      let allVariations = try! context.fetch(FetchDescriptor<GameVariation>())
+      if let existing = allVariations.first(where: { $0.name == "\(t1.name) vs \(t2.name)" }) {
+        variation = existing
+      } else {
+        variation = GameVariationFactory.forMatchup(teams: [t1, t2], gameType: .recreational)
+      }
+
+      let game = ActiveGameFactory(context: context)
+        .variation(variation)
+        .midGame()
+        .state(.playing)
+        .server(team: [1, 2].randomElement()!, player: [1, 2].randomElement()!)
+        .generate()
+      context.insert(game)
+    }
+  }
+  
+  public static func seedSearchData(into context: ModelContext, store: GameStore) {
+    let generatedGames = CompletedGameFactory.realisticHistory(
+      count: quantities.searchGamesCount,
+      withinDays: quantities.searchTimeRangeDays
+    )
+    for generated in generatedGames {
+      context.insert(generated.game)
+      try? store.complete(generated.game, at: generated.completionDate)
+    }
+  }
+  
+  public static func seedGameSetupData(into context: ModelContext, store: GameStore) {
+    let generatedGames = CompletedGameFactory.realisticHistory(
+      count: quantities.gameSetupHistoryCount,
+      withinDays: quantities.gameSetupTimeRangeDays
+    )
+    for generated in generatedGames {
+      context.insert(generated.game)
+      try? store.complete(generated.game, at: generated.completionDate)
+    }
+  }
+  
+  public static func seedStatisticsData(into context: ModelContext, store: GameStore) {
+    // TODO: Add comprehensive seeding when compilation issues are resolved
+  }
+  
+  // MARK: - Container Methods
+  
   public static func containerWithSampleData() -> ModelContainer {
     SwiftDataContainer.createPreviewContainer { context in
       SwiftDataSeeding.seedCommonVariations(into: context)
 
-      // Fetch a seeded variation for the sample game
       if let variation = try? context.fetch(
         FetchDescriptor<GameVariation>(predicate: #Predicate { $0.name == "Recreational Doubles" })
       ).first {
@@ -19,10 +275,8 @@ public enum PreviewDataSeeder {
     }
   }
 
-  // New: standard API used by previews/tests per Phase 3
   public static func container() -> ModelContainer {
     SwiftDataContainer.createPreviewContainer { context in
-      // Seed: a few common scenarios to keep previews consistent
       SwiftDataSeeding.seedCommonVariations(into: context)
 
       let rec = try? context.fetch(
@@ -54,228 +308,78 @@ public enum PreviewDataSeeder {
     }
   }
 
-  // New: empty container for empty-state previews/tests
   public static func emptyContainer() -> ModelContainer {
     SwiftDataContainer.createPreviewContainer()
   }
 
-  // New: catalog-focused container (alias to container for now)
   public static func catalogContainer() -> ModelContainer {
-    container()
+    SwiftDataContainer.createPreviewContainer { context in
+      seedCatalogData(into: context)
+    }
   }
 
-  // New: history-focused container that ensures GameSummary records are created
   public static func historyContainer() -> ModelContainer {
     SwiftDataContainer.createPreviewContainer { context in
-      SwiftDataSeeding.seedCommonVariations(into: context)
-
+      seedRosterData(into: context)
+      seedCatalogData(into: context)
       let store = GameStore(context: context)
-      let generatedGames = CompletedGameFactory.realisticHistory(count: 18, withinDays: 30)
-
-      for generated in generatedGames {
-        context.insert(generated.game)
-        try? store.complete(generated.game, at: generated.completionDate)
-      }
+      seedHistoryData(into: context, store: store)
     }
   }
 
-  // New: app-wide container with roster, variations, history, and one active game
   public static func appContainer() -> ModelContainer {
     SwiftDataContainer.createPreviewContainer { context in
-      // Seed sample roster via new system
-      SwiftDataSeeding.seedSampleRoster(into: context)
-
-      // Seed common variations
-      SwiftDataSeeding.seedCommonVariations(into: context)
-
       let store = GameStore(context: context)
-      let generatedGames = CompletedGameFactory.realisticHistory(count: 18, withinDays: 30)
       
-      for generated in generatedGames {
-        context.insert(generated.game)
-        try? store.complete(generated.game, at: generated.completionDate)
-      }
-
-      // Add one active in-progress game for the preview bar
-      let players = try? context.fetch(FetchDescriptor<PlayerProfile>()).filter { !$0.isArchived }
-      let teams = try? context.fetch(FetchDescriptor<TeamProfile>()).filter { !$0.isArchived }
-      let useSingles: Bool = {
-        switch ((players?.count ?? 0) >= 2, (teams?.count ?? 0) >= 2) {
-        case (true, true): return Bool.random()
-        case (true, false): return true
-        case (false, true): return false
-        default: return true
-        }
-      }()
-
-      if useSingles, let players, players.count >= 2 {
-        let p = players.shuffled()
-        let p1 = p[0], p2 = p[1]
-        let variation = GameVariationFactory.forMatchup(players: [p1, p2], gameType: .recreational)
-        let activeGame = ActiveGameFactory(context: context)
-          .variation(variation)
-          .midGame()
-          .state(.playing)
-          .server(team: [1, 2].randomElement()!)
-          .generate()
-        context.insert(activeGame)
-        try? store.save(activeGame)
-      } else if let teams, teams.count >= 2 {
-        let t = teams.shuffled()
-        let t1 = t[0], t2 = t[1]
-        let variation = GameVariationFactory.forMatchup(teams: [t1, t2], gameType: .recreational)
-        let activeGame = ActiveGameFactory(context: context)
-          .variation(variation)
-          .midGame()
-          .state(.playing)
-          .server(team: [1, 2].randomElement()!, player: [1, 2].randomElement()!)
-          .generate()
-        context.insert(activeGame)
-        try? store.save(activeGame)
-      } else {
-        let activeGame = ActiveGameFactory(context: context)
-          .midGame()
-          .state(.playing)
-          .generate()
-        context.insert(activeGame)
-        try? store.save(activeGame)
-      }
+      seedRosterData(into: context)
+      seedCatalogData(into: context)
+      seedHistoryData(into: context, store: store)
+      seedSearchData(into: context, store: store)
+      seedGameSetupData(into: context, store: store)
+      seedStatisticsData(into: context, store: store)
+      seedLiveGameData(into: context)
     }
   }
 
-  // New: live game container with roster and active game for LiveView-style previews
   public static func liveGameContainer() -> ModelContainer {
     SwiftDataContainer.createPreviewContainer { context in
-      // Seed sample roster
-      SwiftDataSeeding.seedSampleRoster(into: context)
-
-      // Seed common variations
-      SwiftDataSeeding.seedCommonVariations(into: context)
-
-      // Create a random active game (similar to LiveView helper logic)
-      let activePlayers = try! context.fetch(FetchDescriptor<PlayerProfile>()).filter { !$0.isArchived }
-      let activeTeams = try! context.fetch(FetchDescriptor<TeamProfile>()).filter { !$0.isArchived }
-
-      let doSingles: Bool = {
-        switch (activePlayers.count >= 2, activeTeams.count >= 2) {
-        case (true, true): return Bool.random()
-        case (true, false): return true
-        case (false, true): return false
-        default: return true
-        }
-      }()
-
-      if doSingles, activePlayers.count >= 2 {
-        let shuffled = activePlayers.shuffled()
-        let p1 = shuffled[0]
-        let p2 = shuffled[1]
-
-        let variation: GameVariation
-        if let existing = try! context.fetch(FetchDescriptor<GameVariation>()).first(where: { $0.name == "\(p1.name) vs \(p2.name)" }) {
-          variation = existing
-        } else {
-          variation = GameVariationFactory.forMatchup(players: [p1, p2], gameType: .recreational)
-        }
-
-        let game = ActiveGameFactory(context: context)
-          .variation(variation)
-          .midGame()
-          .state(.playing)
-          .server(team: [1, 2].randomElement()!, player: 1)
-          .generate()
-        context.insert(game)
-      } else if activeTeams.count >= 2 {
-        let shuffled = activeTeams.shuffled()
-        let t1 = shuffled[0]
-        let t2 = shuffled[1]
-
-        let variation: GameVariation
-        let allVariations = try! context.fetch(FetchDescriptor<GameVariation>())
-        if let existing = allVariations.first(where: { $0.name == "\(t1.name) vs \(t2.name)" }) {
-          variation = existing
-        } else {
-          variation = GameVariationFactory.forMatchup(teams: [t1, t2], gameType: .recreational)
-        }
-
-        let game = ActiveGameFactory(context: context)
-          .variation(variation)
-          .midGame()
-          .state(.playing)
-          .server(team: [1, 2].randomElement()!, player: [1, 2].randomElement()!)
-          .generate()
-        context.insert(game)
-      }
+      seedRosterData(into: context)
+      seedCatalogData(into: context)
+      seedLiveGameData(into: context)
     }
   }
 
-  // New: statistics-focused container with rich game history for statistics calculations
   public static func statisticsContainer() -> ModelContainer {
     SwiftDataContainer.createPreviewContainer { context in
-      // Seed sample roster for player statistics
-      // SwiftDataSeeding.seedSampleRoster(into: context)
-
-      // Seed common variations
-      // SwiftDataSeeding.seedCommonVariations(into: context)
-
-      // Create diverse game history for meaningful statistics
-      // TODO: Add comprehensive seeding when compilation issues are resolved
-      // let store = GameStore(context: context)
-      // let historyTemplates: [Game] = PreviewGameData.competitivePlayerGames +
-      //   PreviewGameData.recreationalPlayerGames +
-      //   PreviewGameData.newPlayerGames +
-      //   PreviewGameData.tournamentGames +
-      //   PreviewGameData.casualGames
-
-      // for template in historyTemplates {
-      //   let g = Game(gameVariation: template.gameVariation)
-      //   g.score1 = template.score1
-      //   g.score2 = template.score2
-      //   g.currentServer = template.currentServer
-      //   g.serverNumber = template.serverNumber
-      //   g.totalRallies = template.totalRallies
-      //   g.createdDate = template.createdDate
-      //   g.lastModified = template.lastModified
-      //   g.isArchived = template.isArchived
-      //   if template.isCompleted {
-      //     g.duration = template.duration
-      //   }
-      //   context.insert(g)
-      //   if template.isCompleted {
-      //     try? store.complete(g, at: template.completedDate ?? .now)
-      //   } else {
-      //     try? store.save(g)
-      //   }
-      // }
+      seedRosterData(into: context)
+      seedCatalogData(into: context)
+      let store = GameStore(context: context)
+      seedStatisticsData(into: context, store: store)
     }
   }
 
-  // New: search-focused container with searchable content
   public static func searchContainer() -> ModelContainer {
     SwiftDataContainer.createPreviewContainer { context in
-      // Seed sample roster with varied names for search testing
-      SwiftDataSeeding.seedSampleRoster(into: context)
-
-      // Seed common variations
-      SwiftDataSeeding.seedCommonVariations(into: context)
-
+      seedRosterData(into: context)
+      seedCatalogData(into: context)
       let store = GameStore(context: context)
-      let generatedGames = CompletedGameFactory.realisticHistory(count: 15, withinDays: 30)
-
-      for generated in generatedGames {
-        context.insert(generated.game)
-        try? store.complete(generated.game, at: generated.completionDate)
-      }
+      seedSearchData(into: context, store: store)
     }
   }
 
-  // New: roster-focused container for player/team management views
   public static func rosterContainer() -> ModelContainer {
     SwiftDataContainer.createPreviewContainer { context in
-      // Seed comprehensive roster for management testing
-      SwiftDataSeeding.seedSampleRoster(into: context)
+      seedRosterData(into: context)
+      seedCatalogData(into: context)
+    }
+  }
 
-      // Add some variations for context
-      SwiftDataSeeding.seedCommonVariations(into: context)
+  public static func gameSetupContainer() -> ModelContainer {
+    SwiftDataContainer.createPreviewContainer { context in
+      seedRosterData(into: context)
+      seedCatalogData(into: context)
+      let store = GameStore(context: context)
+      seedGameSetupData(into: context, store: store)
     }
   }
 
@@ -315,6 +419,8 @@ public enum PreviewDataSeeder {
       return PreviewEnvironment.make(configuration: .search)
     case .roster:
       return PreviewEnvironment.make(configuration: .roster)
+    case .gameSetup:
+      return PreviewEnvironment.make(configuration: .gameSetup)
     case .empty:
       return PreviewEnvironment.make(configuration: .empty)
     case .custom(let container):

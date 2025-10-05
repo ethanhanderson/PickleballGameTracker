@@ -115,8 +115,8 @@ public enum SwiftDataSeeding {
     }
   }
 
-  public static func seedSampleRoster(into context: ModelContext) {
-    let (players, teams) = TeamProfileFactory.realisticTeams(playerCount: 12, teamSize: 2)
+  public static func seedSampleRoster(into context: ModelContext, playerCount: Int = 12, teamSize: Int = 2) {
+    let (players, teams) = TeamProfileFactory.realisticTeams(playerCount: playerCount, teamSize: teamSize)
 
     for player in players {
       context.insert(player)

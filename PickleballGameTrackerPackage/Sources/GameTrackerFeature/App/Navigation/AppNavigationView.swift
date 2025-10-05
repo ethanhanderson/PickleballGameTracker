@@ -6,11 +6,10 @@ import SwiftUI
 public struct AppNavigationView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(LiveGameStateManager.self) private var activeGameStateManager
+    @Environment(SwiftDataGameManager.self) private var gameManager
 
     @Namespace var animation
 
-    @State private var rosterManager: PlayerTeamManager
-    @State private var gameManager = SwiftDataGameManager()
     @State private var selectedTab: AppTab = .games
     @State private var showingLiveGameSheet = false
     @State private var deepLinkDestination: DeepLinkDestination?
@@ -21,13 +20,7 @@ public struct AppNavigationView: View {
     @State private var showPersistenceResetPrompt: Bool = false
     @State private var liveOpenObserver: (any NSObjectProtocol)? = nil
 
-    public init(
-        rosterManager: PlayerTeamManager = PlayerTeamManager(),
-        gameManager: SwiftDataGameManager? = nil
-    ) {
-        _rosterManager = State(initialValue: rosterManager)
-        if let gameManager { _gameManager = State(initialValue: gameManager) }
-    }
+    public init() {}
 
     private func applyDeepLink(_ destination: DeepLinkDestination) {
         switch destination {
@@ -55,7 +48,7 @@ public struct AppNavigationView: View {
             }
 
             Tab("History", systemImage: "clock", value: AppTab.history) {
-                GameHistoryView()
+                HistoryView()
                     .accessibilityIdentifier("Tab.History")
                     .tint(.accentColor)
             }
@@ -65,7 +58,7 @@ public struct AppNavigationView: View {
                 systemImage: "person.2",
                 value: AppTab.roster
             ) {
-                RosterView(manager: rosterManager)
+                RosterView()
                     .accessibilityIdentifier("Tab.Roster")
                     .tint(.accentColor)
             }
@@ -96,7 +89,6 @@ public struct AppNavigationView: View {
                 .tint(.accentColor)
             }
         }
-        .environment(gameManager)
         .if(activeGameStateManager.hasActiveGame) { view in
             view.tabViewBottomAccessory {
                 LiveGameMiniPreview(
@@ -107,8 +99,6 @@ public struct AppNavigationView: View {
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .task {
-            activeGameStateManager.configure(gameManager: gameManager)
-
             Task.detached(priority: .background) {
                 do {
                     let isHealthy = try await SwiftDataContainer.shared
@@ -195,7 +185,6 @@ public struct AppNavigationView: View {
                 NavigationStack {
                     LiveView(
                         game: currentGame,
-                        gameManager: gameManager,
                         onDismiss: {
                             Task { @MainActor in
                                 showingLiveGameSheet = false
@@ -204,6 +193,7 @@ public struct AppNavigationView: View {
                         animation: animation
                     )
                 }
+                .environment(gameManager)
                 .navigationTransition(.zoom(sourceID: "sheet", in: animation))
                 .tint(.accentColor)
             }
@@ -211,11 +201,11 @@ public struct AppNavigationView: View {
         .sheet(isPresented: $showDeepLink) {
             NavigationStack {
                 DeepLinkDestinationView(
-                    destination: deepLinkDestination,
-                    gameManager: gameManager,
-                    activeGameStateManager: activeGameStateManager
+                    destination: deepLinkDestination
                 )
             }
+            .environment(gameManager)
+            .environment(activeGameStateManager)
             .tint(.accentColor)
         }
         .sheet(isPresented: $showPersistenceResetPrompt) {
@@ -229,32 +219,23 @@ public struct AppNavigationView: View {
 // MARK: - Previews
 
 #Preview("Main") {
-    let env = PreviewEnvironment.make(
-        configuration: .init(
-            scenario: .app,
-            withLiveGame: true,
-            withPlayerAssignments: true,
-            gameState: .playing,
-            randomizeTimer: true,
-            startTimer: false
-        )
-    )
-    AppNavigationView(
-        rosterManager: env.rosterManager ?? PlayerTeamManager(storage: env.storage),
-        gameManager: env.gameManager
-    )
-    .tint(.green)
-    .modelContainer(env.container)
-    .environment(env.activeGameStateManager)
+    let setup = PreviewContainers.liveGameSetup()
+    
+    AppNavigationView()
+        .tint(.green)
+        .modelContainer(setup.container)
+        .environment(setup.liveGameManager)
+        .environment(setup.gameManager)
+        .environment(setup.rosterManager)
 }
 
 #Preview("Blank") {
-    let env = PreviewEnvironment.empty()
-    AppNavigationView(
-        rosterManager: PlayerTeamManager(storage: env.storage),
-        gameManager: SwiftDataGameManager(storage: env.storage)
-    )
-    .tint(.green)
-    .modelContainer(env.container)
-    .environment(env.activeGameStateManager)
+    let setup = PreviewContainers.emptySetup()
+    
+    AppNavigationView()
+        .tint(.green)
+        .modelContainer(setup.container)
+        .environment(setup.liveGameManager)
+        .environment(setup.gameManager)
+        .environment(setup.rosterManager)
 }

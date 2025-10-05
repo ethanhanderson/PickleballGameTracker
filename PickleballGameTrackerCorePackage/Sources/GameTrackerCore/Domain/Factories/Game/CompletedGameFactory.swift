@@ -59,15 +59,27 @@ import SwiftData
 ///
 /// When a ModelContext is provided, the factory can assign games to real players/teams:
 /// ```swift
+/// // Auto-assign random players for singles
 /// let game = CompletedGameFactory(context: modelContext)
-///     .withPlayers()  // Assigns random players from roster
+///     .withPlayers()
+///     .generate()
+///
+/// // Auto-assign random teams for doubles
+/// let game = CompletedGameFactory(context: modelContext)
+///     .withTeams()
 ///     .generate()
 /// ```
 ///
 /// Or assign specific entities:
 /// ```swift
+/// // Assign specific players
 /// let game = CompletedGameFactory(context: modelContext)
 ///     .assignPlayers(player1, player2)
+///     .generate()
+///
+/// // Assign specific teams
+/// let game = CompletedGameFactory(context: modelContext)
+///     .assignTeams(team1, team2)
 ///     .generate()
 /// ```
 @MainActor
@@ -89,6 +101,7 @@ public struct CompletedGameFactory {
     private var _notes: String?
     private var _context: ModelContext?
     private var _assignPlayersFromRoster: Bool = false
+    private var _assignTeamsFromRoster: Bool = false
     private var _player1: PlayerProfile?
     private var _player2: PlayerProfile?
     private var _team1: TeamProfile?
@@ -271,6 +284,21 @@ public struct CompletedGameFactory {
         return copy
     }
     
+    /// Sets the game duration with both minutes and seconds for precise timing.
+    ///
+    /// This allows for more realistic game durations like "25 minutes and 30 seconds"
+    /// which better reflects actual game timing.
+    ///
+    /// - Parameters:
+    ///   - minutes: Duration in minutes
+    ///   - seconds: Additional seconds (0-59)
+    /// - Returns: Self for method chaining
+    public func duration(minutes: Int, seconds: Int) -> Self {
+        var copy = self
+        copy._duration = TimeInterval(minutes * 60 + seconds)
+        return copy
+    }
+    
     /// Sets the total rally count for the game.
     ///
     /// If not specified, rally count will be estimated based on scores.
@@ -298,12 +326,24 @@ public struct CompletedGameFactory {
     /// Assigns the game to random players from the roster.
     ///
     /// Requires a ModelContext to be provided during initialization. The factory will
-    /// select appropriate players based on the game's team size requirements.
+    /// select two random players for a singles game and create a variation with their names.
     ///
     /// - Returns: Self for method chaining
     public func withPlayers() -> Self {
         var copy = self
         copy._assignPlayersFromRoster = true
+        return copy
+    }
+    
+    /// Assigns the game to random teams from the roster.
+    ///
+    /// Requires a ModelContext to be provided during initialization. The factory will
+    /// select two random teams and create a variation with their names.
+    ///
+    /// - Returns: Self for method chaining
+    public func withTeams() -> Self {
+        var copy = self
+        copy._assignTeamsFromRoster = true
         return copy
     }
     
@@ -518,21 +558,79 @@ public struct CompletedGameFactory {
     }
     
     private func assignRosterEntities(to game: Game) {
-        guard _context != nil else { return }
+        guard let context = _context else { return }
         
-        if _player1 != nil && _player2 != nil {
-            // TODO: Assign specific players when GameVariation supports player assignment
+        if let p1 = _player1, let p2 = _player2 {
+            let variation = GameVariationFactory.forMatchup(
+                players: [p1, p2],
+                gameType: _gameType ?? game.gameType
+            )
+            game.gameVariation = variation
+            game.participantMode = .players
+            game.side1PlayerIds = [p1.id]
+            game.side2PlayerIds = [p2.id]
             return
         }
         
-        if _team1 != nil && _team2 != nil {
-            // TODO: Assign specific teams when GameVariation supports team assignment
+        if let t1 = _team1, let t2 = _team2 {
+            let variation = GameVariationFactory.forMatchup(
+                teams: [t1, t2],
+                gameType: _gameType ?? game.gameType
+            )
+            game.gameVariation = variation
+            game.participantMode = .teams
+            game.side1TeamId = t1.id
+            game.side2TeamId = t2.id
             return
         }
         
         if _assignPlayersFromRoster {
-            // TODO: Fetch and assign random players/teams from roster when variation supports it
+            let fetchDescriptor = FetchDescriptor<PlayerProfile>(
+                predicate: #Predicate { !$0.isArchived }
+            )
+            
+            guard let players = try? context.fetch(fetchDescriptor),
+                  players.count >= 2 else {
+                return
+            }
+            
+            let shuffled = players.shuffled()
+            let p1 = shuffled[0]
+            let p2 = shuffled[1]
+            
+            let variation = GameVariationFactory.forMatchup(
+                players: [p1, p2],
+                gameType: _gameType ?? game.gameType
+            )
+            game.gameVariation = variation
+            game.participantMode = .players
+            game.side1PlayerIds = [p1.id]
+            game.side2PlayerIds = [p2.id]
             return
+        }
+        
+        if _assignTeamsFromRoster {
+            let fetchDescriptor = FetchDescriptor<TeamProfile>(
+                predicate: #Predicate { !$0.isArchived }
+            )
+            
+            guard let teams = try? context.fetch(fetchDescriptor),
+                  teams.count >= 2 else {
+                return
+            }
+            
+            let shuffled = teams.shuffled()
+            let t1 = shuffled[0]
+            let t2 = shuffled[1]
+            
+            let variation = GameVariationFactory.forMatchup(
+                teams: [t1, t2],
+                gameType: _gameType ?? game.gameType
+            )
+            game.gameVariation = variation
+            game.participantMode = .teams
+            game.side1TeamId = t1.id
+            game.side2TeamId = t2.id
         }
     }
 }
@@ -689,5 +787,248 @@ extension CompletedGameFactory {
                 .timestamp(daysAgo: count - index)
                 .generateWithDate()
         }
+    }
+}
+
+// MARK: - Advanced Composition Methods
+
+extension CompletedGameFactory {
+    
+    /// Generates a matchup history between two specific players.
+    ///
+    /// Creates a series of games between the same two players with controlled win ratios,
+    /// realistic temporal distribution, and competitive score patterns.
+    ///
+    /// ## Use Cases
+    /// - Testing player statistics and head-to-head records
+    /// - Previewing rivalry/matchup views
+    /// - Generating realistic player relationship data
+    ///
+    /// - Parameters:
+    ///   - player1: First player
+    ///   - player2: Second player
+    ///   - gameCount: Number of games to generate
+    ///   - player1WinRatio: Ratio of games player1 wins (0.0-1.0)
+    ///   - withinDays: Days to distribute games across
+    ///   - context: Optional ModelContext for game creation
+    /// - Returns: Array of GeneratedGame instances with proper completion dates
+    public static func matchupHistory(
+        player1: PlayerProfile,
+        player2: PlayerProfile,
+        gameCount: Int,
+        player1WinRatio: Double = 0.5,
+        withinDays: Int = 60,
+        context: ModelContext? = nil
+    ) -> [GeneratedGame] {
+        let player1Wins = Int(Double(gameCount) * player1WinRatio)
+        
+        var results: [Bool] = Array(repeating: true, count: player1Wins)
+        results += Array(repeating: false, count: gameCount - player1Wins)
+        results.shuffle()
+        
+        return (0..<gameCount).map { index in
+            let player1Won = results[index]
+            let isClose = Double.random(in: 0...1) < 0.6
+            let winnerScore = 11
+            let loserScore = isClose ? Int.random(in: 8...10) : Int.random(in: 4...7)
+            
+            return CompletedGameFactory(context: context)
+                .assignPlayers(player1, player2)
+                .scores(
+                    player1Won ? winnerScore : loserScore,
+                    player1Won ? loserScore : winnerScore
+                )
+                .gameType([.recreational, .tournament].randomElement()!)
+                .timestamp(withinDays: withinDays)
+                .generateWithDate()
+        }
+    }
+    
+    /// Generates a player journey showing improvement over time.
+    ///
+    /// Creates games that demonstrate gradual player improvement through:
+    /// - Increasing win rate over time
+    /// - Better scores in later games
+    /// - Shorter game durations (more decisive wins)
+    ///
+    /// ## Use Cases
+    /// - Testing progression tracking features
+    /// - Demonstrating statistical trends
+    /// - Creating engaging demo data
+    ///
+    /// - Parameters:
+    ///   - player: Player showing improvement
+    ///   - opponent: Consistent opponent
+    ///   - gameCount: Number of games in journey
+    ///   - withinDays: Days to distribute across
+    ///   - context: Optional ModelContext
+    /// - Returns: Array of games showing improvement trend
+    public static func playerJourney(
+        player: PlayerProfile,
+        opponent: PlayerProfile,
+        gameCount: Int,
+        withinDays: Int = 90,
+        trend: ImprovementTrend = .improving,
+        context: ModelContext? = nil
+    ) -> [GeneratedGame] {
+        (0..<gameCount).map { index in
+            let progress = Double(index) / Double(gameCount)
+            let winProbability: Double
+            
+            switch trend {
+            case .improving:
+                winProbability = 0.2 + (progress * 0.6)
+            case .declining:
+                winProbability = 0.8 - (progress * 0.6)
+            case .stable:
+                winProbability = 0.5
+            }
+            
+            let playerWins = Double.random(in: 0...1) < winProbability
+            let competitiveness = 1.0 - (progress * 0.3)
+            let isClose = Double.random(in: 0...1) < competitiveness
+            
+            let winnerScore = 11
+            let loserScore = isClose ? Int.random(in: 8...10) : Int.random(in: 5...7)
+            
+            let daysAgo = withinDays - Int(Double(withinDays) * progress)
+            
+            return CompletedGameFactory(context: context)
+                .assignPlayers(player, opponent)
+                .scores(
+                    playerWins ? winnerScore : loserScore,
+                    playerWins ? loserScore : winnerScore
+                )
+                .timestamp(daysAgo: daysAgo)
+                .generateWithDate()
+        }
+    }
+    
+    /// Generates a winning or losing streak.
+    ///
+    /// Creates a series of consecutive wins or losses for statistical testing.
+    ///
+    /// - Parameters:
+    ///   - player: Player on the streak
+    ///   - opponent: Opponent(s) - can be same or different
+    ///   - length: Number of games in streak
+    ///   - streakType: .winning or .losing
+    ///   - withinDays: Days to distribute across
+    ///   - context: Optional ModelContext
+    /// - Returns: Array of games forming a streak
+    public static func streak(
+        player: PlayerProfile,
+        opponent: PlayerProfile,
+        length: Int,
+        streakType: StreakType,
+        withinDays: Int = 14,
+        context: ModelContext? = nil
+    ) -> [GeneratedGame] {
+        let playerWins = streakType == .winning
+        
+        return (0..<length).map { index in
+            let winnerScore = 11
+            let loserScore = Int.random(in: 6...9)
+            let daysAgo = withinDays - (index * (withinDays / length))
+            
+            return CompletedGameFactory(context: context)
+                .assignPlayers(player, opponent)
+                .scores(
+                    playerWins ? winnerScore : loserScore,
+                    playerWins ? loserScore : winnerScore
+                )
+                .timestamp(daysAgo: daysAgo)
+                .generateWithDate()
+        }
+    }
+    
+    /// Generates alternating win/loss pattern.
+    ///
+    /// Useful for testing statistical edge cases and patterns.
+    ///
+    /// - Parameters:
+    ///   - player: Player in the pattern
+    ///   - opponent: Opponent
+    ///   - count: Number of games
+    ///   - startsWithWin: Whether player wins first game
+    ///   - context: Optional ModelContext
+    /// - Returns: Array of games with alternating outcomes
+    public static func alternatingPattern(
+        player: PlayerProfile,
+        opponent: PlayerProfile,
+        count: Int,
+        startsWithWin: Bool = true,
+        withinDays: Int = 30,
+        context: ModelContext? = nil
+    ) -> [GeneratedGame] {
+        (0..<count).map { index in
+            let playerWins = (index % 2 == 0) == startsWithWin
+            let winnerScore = 11
+            let loserScore = Int.random(in: 7...9)
+            
+            return CompletedGameFactory(context: context)
+                .assignPlayers(player, opponent)
+                .scores(
+                    playerWins ? winnerScore : loserScore,
+                    playerWins ? loserScore : winnerScore
+                )
+                .timestamp(withinDays: withinDays)
+                .generateWithDate()
+        }
+    }
+    
+    /// Generates games with realistic time-of-day distribution.
+    ///
+    /// Most games in evenings (6-9 PM) and weekends, mimicking real pickleball patterns.
+    ///
+    /// - Parameters:
+    ///   - count: Number of games
+    ///   - days: Days to distribute across
+    ///   - context: Optional ModelContext
+    /// - Returns: Array of games with realistic temporal distribution
+    public static func realisticSchedule(
+        count: Int,
+        days: Int = 30,
+        context: ModelContext? = nil
+    ) -> [GeneratedGame] {
+        (0..<count).map { _ in
+            let daysAgo = Int.random(in: 0..<days)
+            let isWeekend = Double.random(in: 0...1) < 0.4
+            
+            let hour: Int
+            if isWeekend {
+                hour = Int.random(in: 9...20)
+            } else {
+                hour = Double.random(in: 0...1) < 0.7 ? Int.random(in: 17...21) : Int.random(in: 6...9)
+            }
+            
+            let baseDate = Date().addingTimeInterval(-Double(daysAgo * 24 * 3600))
+            var components = Calendar.current.dateComponents([.year, .month, .day], from: baseDate)
+            components.hour = hour
+            components.minute = Int.random(in: 0...59)
+            let completionDate = Calendar.current.date(from: components) ?? baseDate
+            
+            let generated = CompletedGameFactory(context: context)
+                .generate()
+            
+            return GeneratedGame(game: generated, completionDate: completionDate)
+        }
+    }
+}
+
+// MARK: - Supporting Types
+
+extension CompletedGameFactory {
+    /// Trend direction for player journey generation
+    public enum ImprovementTrend {
+        case improving
+        case declining
+        case stable
+    }
+    
+    /// Streak type for streak generation
+    public enum StreakType {
+        case winning
+        case losing
     }
 }

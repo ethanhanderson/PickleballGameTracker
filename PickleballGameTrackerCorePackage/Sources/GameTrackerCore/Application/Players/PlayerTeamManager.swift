@@ -8,65 +8,46 @@
 import Foundation
 import SwiftData
 
+/// Business logic service for player and team roster management
+/// Handles all CRUD operations, validation, and duplicate detection
+///
+/// Views should use @Query for data access, and this manager for operations only.
 @MainActor
 @Observable
 public final class PlayerTeamManager {
   public let storage: any SwiftDataStorageProtocol
   private let rosterStore: RosterStore
-  public var players: [PlayerProfile] = []
-  public var teams: [TeamProfile] = []
-  public var presets: [GameTypePreset] = []
 
-  public init(
-    storage: any SwiftDataStorageProtocol = SwiftDataStorage.shared, autoRefresh: Bool = true
-  ) {
+  public init(storage: any SwiftDataStorageProtocol = SwiftDataStorage.shared) {
     self.storage = storage
     self.rosterStore = RosterStore(context: storage.modelContainer.mainContext)
-    if autoRefresh {
-      Task { refreshAll() }
-    }
-  }
-
-  // MARK: - Loaders
-  public func refreshAll() {
-    refreshPlayers()
-    refreshTeams()
-    refreshPresets()
-  }
-
-  public func refreshPlayers() {
-    players = (try? rosterStore.players()) ?? []
-  }
-
-  public func refreshTeams() {
-    teams = (try? rosterStore.teams()) ?? []
-  }
-
-  public func refreshPresets() {
-    presets = (try? rosterStore.presets()) ?? []
-  }
-
-  // MARK: - Archive Loaders
-  public func loadArchivedPlayers() -> [PlayerProfile] {
-    (try? rosterStore.players(includeArchived: true).filter { $0.isArchived }) ?? []
-  }
-
-  public func loadArchivedTeams() -> [TeamProfile] {
-    (try? rosterStore.teams(includeArchived: true).filter { $0.isArchived }) ?? []
   }
 
   // MARK: - Player CRUD
   public func createPlayer(
     name: String,
     configure: ((PlayerProfile) -> Void)? = nil
-  ) throws
-    -> PlayerProfile
-  {
+  ) throws -> PlayerProfile {
     let player = try rosterStore.createPlayer(name: name) { pl in
       configure?(pl)
     }
-    players.insert(player, at: 0)
     return player
+  }
+
+  public func createGuestPlayer(name: String) throws -> PlayerProfile {
+    let player = try rosterStore.createPlayer(name: name) { pl in
+      pl.isGuest = true
+      pl.skillLevel = .unknown
+      pl.preferredHand = .unknown
+    }
+    return player
+  }
+
+  public func convertGuestToPlayer(_ guest: PlayerProfile) throws {
+    guard guest.isGuest else { return }
+    try updatePlayer(guest) { player in
+      player.isGuest = false
+    }
   }
 
   public func updatePlayer(
@@ -74,47 +55,36 @@ public final class PlayerTeamManager {
     mutate: (PlayerProfile) -> Void
   ) throws {
     try rosterStore.updatePlayer(player, mutate: mutate)
-    try awaitRefreshAfterMutation()
   }
 
   public func archivePlayer(_ player: PlayerProfile) throws {
     try rosterStore.archivePlayer(player)
-    players.removeAll { $0.id == player.id }
   }
 
   public func restorePlayer(_ player: PlayerProfile) throws {
     player.isArchived = false
     player.lastModified = Date()
     try rosterStore.updatePlayer(player) { _ in }
-    refreshPlayers()
   }
 
   // MARK: - Team CRUD
-  public func createTeam(name: String, players: [PlayerProfile]) throws
-    -> TeamProfile
-  {
+  public func createTeam(name: String, players: [PlayerProfile]) throws -> TeamProfile {
     let team = try rosterStore.createTeam(name: name, players: players)
-    teams.insert(team, at: 0)
     return team
   }
 
-  public func updateTeam(_ team: TeamProfile, mutate: (TeamProfile) -> Void)
-    throws
-  {
+  public func updateTeam(_ team: TeamProfile, mutate: (TeamProfile) -> Void) throws {
     try rosterStore.updateTeam(team, mutate: mutate)
-    try awaitRefreshAfterMutation()
   }
 
   public func archiveTeam(_ team: TeamProfile) throws {
     try rosterStore.archiveTeam(team)
-    teams.removeAll { $0.id == team.id }
   }
 
   public func restoreTeam(_ team: TeamProfile) throws {
     team.isArchived = false
     team.lastModified = Date()
     try rosterStore.updateTeam(team) { _ in }
-    refreshTeams()
   }
 
   // MARK: - Preset CRUD
@@ -125,7 +95,6 @@ public final class PlayerTeamManager {
     team2: TeamProfile?
   ) throws -> GameTypePreset {
     let preset = try rosterStore.createPreset(name: name, gameType: gameType, team1: team1, team2: team2)
-    presets.insert(preset, at: 0)
     return preset
   }
 
@@ -138,7 +107,6 @@ public final class PlayerTeamManager {
 
   public func archivePreset(_ preset: GameTypePreset) throws {
     try rosterStore.archivePreset(preset)
-    presets.removeAll { $0.id == preset.id }
   }
 
   // MARK: - Duplicate detection
@@ -153,7 +121,14 @@ public final class PlayerTeamManager {
 
   public func findDuplicatePlayers(for name: String) -> [PlayerProfile] {
     let key = normalizedName(name)
-    return players.filter { normalizedName($0.name) == key }
+    let predicate = #Predicate<PlayerProfile> { !$0.isArchived && !$0.isGuest }
+    let descriptor = FetchDescriptor(predicate: predicate)
+    
+    guard let allPlayers = try? storage.modelContainer.mainContext.fetch(descriptor) else {
+      return []
+    }
+    
+    return allPlayers.filter { normalizedName($0.name) == key }
   }
 
   public func findDuplicateTeams(
@@ -162,7 +137,15 @@ public final class PlayerTeamManager {
   ) -> [TeamProfile] {
     let candidateIds = Set(candidates.map { $0.id })
     let normalized: String? = name.map { normalizedName($0) }
-    return teams.filter { team in
+    
+    let predicate = #Predicate<TeamProfile> { !$0.isArchived }
+    let descriptor = FetchDescriptor(predicate: predicate)
+    
+    guard let allTeams = try? storage.modelContainer.mainContext.fetch(descriptor) else {
+      return []
+    }
+    
+    return allTeams.filter { team in
       let ids = Set(team.players.map { $0.id })
       let sameRoster = ids == candidateIds
       if let normalized {
@@ -180,9 +163,7 @@ public final class PlayerTeamManager {
   }
 
   /// Merge `source` player into `target`. Updates all teams to reference `target`, archives `source`.
-  public func mergePlayer(source: PlayerProfile, into target: PlayerProfile)
-    throws
-  {
+  public func mergePlayer(source: PlayerProfile, into target: PlayerProfile) throws {
     guard source.id != target.id else { throw RosterError.sameEntity }
     // Update team memberships using storage context
     let context = storage.modelContainer.mainContext
@@ -202,7 +183,6 @@ public final class PlayerTeamManager {
     }
     try storage.archivePlayer(source)
     try context.save()
-    try awaitRefreshAfterMutation()
   }
 
   /// Merge `source` team into `target`. Updates presets to reference `target`, archives `source`.
@@ -227,14 +207,6 @@ public final class PlayerTeamManager {
     }
     try storage.archiveTeam(source)
     try context.save()
-    try awaitRefreshAfterMutation()
-  }
-
-  // Ensures lists reflect latest persisted state after a merge/archive
-  private func awaitRefreshAfterMutation() throws {
-    Task { @MainActor in
-      refreshAll()
-    }
   }
 
 }

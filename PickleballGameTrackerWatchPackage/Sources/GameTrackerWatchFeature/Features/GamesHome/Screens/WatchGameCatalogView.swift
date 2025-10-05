@@ -165,10 +165,11 @@ public struct WatchGameCatalogView: View {
 // MARK: - Previews
 
 #Preview("Game Catalog") {
-  let container = PreviewDataSeeder.container()
-  let env = LiveGameStateManager.preview(container: container)
+  let container = PreviewContainers.standard()
+  let (gameManager, liveGameManager) = PreviewContainers.managers(for: container)
+  
   WatchGameCatalogView()
     .modelContainer(container)
-    .environment(env)
-    .environment(env.gameManager!)
+    .environment(liveGameManager)
+    .environment(gameManager)
 }

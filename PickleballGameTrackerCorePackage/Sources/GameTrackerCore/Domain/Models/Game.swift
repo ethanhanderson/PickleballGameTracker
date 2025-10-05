@@ -8,15 +8,19 @@
 import Foundation
 import SwiftData
 
+public enum ParticipantMode: String, Codable, Sendable {
+  case players
+  case teams
+  case anonymous
+}
+
 @Model
 public final class Game: Hashable {
   @Attribute(.unique) public var id: UUID
   public var gameType: GameType
 
-  // Game Variation - new property for customization
   public var gameVariation: GameVariation?
 
-  // Basic Score Tracking
   public var score1: Int
   public var score2: Int
   public var isCompleted: Bool
@@ -26,30 +30,30 @@ public final class Game: Hashable {
   public var lastModified: Date
   public var duration: TimeInterval?
 
-  // Essential Game State
-  public var currentServer: Int  // 1 or 2 (which team is serving)
-  public var serverNumber: Int  // 1 or 2 (which player on the serving team is serving)
-  public var serverPosition: ServerPosition  // left or right
-  public var sideOfCourt: SideOfCourt  // side1 or side2
-  public var gameState: GameState  // serving, playing, completed, paused
-  public var isFirstServiceSequence: Bool  // true if this is the first service sequence of the game
+  public var currentServer: Int
+  public var serverNumber: Int
+  public var serverPosition: ServerPosition
+  public var sideOfCourt: SideOfCourt
+  public var gameState: GameState
+  public var isFirstServiceSequence: Bool
 
-  // Basic Game Settings (with variation support)
   public var winningScore: Int
   public var winByTwo: Bool
 
-  // Essential Rule Settings (with variation support)
   public var kitchenRule: Bool
   public var doubleBounceRule: Bool
 
-  // Optional Context
   public var notes: String?
 
-  // Game statistics
   public var totalRallies: Int = 0
 
-  // Game events history
   public var events: [GameEvent] = []
+
+  public var participantMode: ParticipantMode = ParticipantMode.anonymous
+  public var side1PlayerIds: [UUID] = []
+  public var side2PlayerIds: [UUID] = []
+  public var side1TeamId: UUID?
+  public var side2TeamId: UUID?
 
   public init(
     id: UUID = UUID(),
@@ -91,7 +95,6 @@ public final class Game: Hashable {
     self.gameState = gameState
     self.isFirstServiceSequence = isFirstServiceSequence
 
-    // Use variation settings if available, otherwise use defaults
     self.winningScore = winningScore ?? gameVariation?.winningScore ?? 11
     self.winByTwo = winByTwo ?? gameVariation?.winByTwo ?? true
     self.kitchenRule = kitchenRule ?? gameVariation?.kitchenRule ?? true
@@ -99,7 +102,6 @@ public final class Game: Hashable {
     self.notes = notes
   }
 
-  // Convenience initializer for creating games with variations
   public convenience init(gameVariation: GameVariation) {
     self.init(
       gameType: gameVariation.gameType,
@@ -122,9 +124,37 @@ extension Game {
 
   /// Formatted date string
   public var formattedDate: String {
+    let calendar = Calendar.current
+    let now = Date()
+
+    if calendar.isDateInToday(createdDate) {
+      let formatter = DateFormatter()
+      formatter.dateFormat = "'Today at' h:mm a"
+      return formatter.string(from: createdDate)
+    }
+
+    let daysSinceGame = calendar.dateComponents([.day], from: createdDate, to: now).day ?? 0
+    if daysSinceGame < 7 && daysSinceGame > 0 {
+      let formatter = DateFormatter()
+      formatter.dateFormat = "EEEE 'at' h:mm a"
+      return formatter.string(from: createdDate)
+    }
+
+    if daysSinceGame >= 7 && daysSinceGame < 14 {
+      let formatter = DateFormatter()
+      formatter.dateFormat = "'Last' EEE 'at' h:mm a"
+      return formatter.string(from: createdDate)
+    }
+
+    let currentYear = calendar.component(.year, from: now)
+    let gameYear = calendar.component(.year, from: createdDate)
+
     let formatter = DateFormatter()
-    formatter.dateStyle = .short
-    formatter.timeStyle = .short
+    if gameYear == currentYear {
+      formatter.dateFormat = "EEE, MMM d 'at' h:mm a"
+    } else {
+      formatter.dateFormat = "EEE, MMM d, yyyy 'at' h:mm a"
+    }
     return formatter.string(from: createdDate)
   }
 
@@ -205,7 +235,6 @@ extension Game {
     let standardWin = (score1 >= winningScore || score2 >= winningScore)
     let winByTwoSatisfied = !winByTwo || abs(score1 - score2) >= 2
 
-    // Check if time limit is reached (if set in variation)
     let timeLimitReached: Bool
     if let timeLimit = gameVariation?.timeLimit,
       let duration = duration
@@ -215,7 +244,6 @@ extension Game {
       timeLimitReached = false
     }
 
-    // Check if max rallies reached (if set in variation)
     let maxRalliesReached: Bool
     if let maxRallies = gameVariation?.maxRallies {
       maxRalliesReached = totalRallies >= maxRallies
@@ -231,11 +259,9 @@ extension Game {
     guard !isCompleted else { return false }
     guard team == 1 || team == 2 else { return false }
 
-    // Simulate scoring one more point for this team
     let simulatedScore1 = team == 1 ? score1 + 1 : score1
     let simulatedScore2 = team == 2 ? score2 + 1 : score2
 
-    // Check if this would result in a win
     let standardWin = (simulatedScore1 >= winningScore || simulatedScore2 >= winningScore)
     let winByTwoSatisfied = !winByTwo || abs(simulatedScore1 - simulatedScore2) >= 2
 
@@ -249,7 +275,6 @@ extension Game {
       side: SideOfCourt
     )
   {
-    // Check if side switching should occur based on variation rules
     let shouldSwitchSide: Bool
     if let variation = gameVariation {
       shouldSwitchSide = variation.sideSwitchingRule.shouldSwitchSides(
@@ -258,25 +283,19 @@ extension Game {
         winningScore: winningScore
       )
     } else {
-      // Default side switching logic - official pickleball rule
       shouldSwitchSide = (score1 + score2) == 6
     }
 
     let newSide: SideOfCourt =
       shouldSwitchSide ? (sideOfCourt == .side1 ? .side2 : .side1) : sideOfCourt
 
-    // For singles, simple alternation by server position based on score
+    // For singles, server stays the same when scoring (only changes via manual tap)
     if effectiveTeamSize == 1 {
-      let newServer = currentServer == 1 ? 2 : 1
       let newPosition: ServerPosition = (score1 + score2) % 2 == 0 ? .right : .left
-      return (server: newServer, serverNumber: 1, position: newPosition, side: newSide)
+      return (server: currentServer, serverNumber: 1, position: newPosition, side: newSide)
     }
 
-    // For doubles, follow official pickleball service sequence rules
-    // When serving team scores: server switches positions but stays serving
-    // When serving team faults: serve passes to partner (if first server) or to other team
-
-    // The serving team scored a point - same server switches sides
+    // For doubles, serving team retains serve when scoring; position changes
     let totalScore = score1 + score2
     let newPosition: ServerPosition = totalScore % 2 == 0 ? .right : .left
 
@@ -328,19 +347,16 @@ extension Game {
     totalRallies += 1
     lastModified = Date()
 
-    // Update server state based on pickleball rules
     let nextServerInfo = nextServer
     currentServer = nextServerInfo.server
     serverNumber = nextServerInfo.serverNumber
     serverPosition = nextServerInfo.position
     sideOfCourt = nextServerInfo.side
 
-    // Update game state to playing if needed
     if gameState == .initial || gameState == .serving {
       gameState = .playing
     }
 
-    // Check if game should complete
     if shouldComplete {
       completeGame()
     }
@@ -353,19 +369,16 @@ extension Game {
     totalRallies += 1
     lastModified = Date()
 
-    // Update server state based on pickleball rules
     let nextServerInfo = nextServer
     currentServer = nextServerInfo.server
     serverNumber = nextServerInfo.serverNumber
     serverPosition = nextServerInfo.position
     sideOfCourt = nextServerInfo.side
 
-    // Update game state to playing if needed
     if gameState == .initial || gameState == .serving {
       gameState = .playing
     }
 
-    // Check if game should complete
     if shouldComplete {
       completeGame()
     }
@@ -375,23 +388,17 @@ extension Game {
   public func undoLastPoint() {
     guard totalRallies > 0 else { return }
 
-    // Simple undo - reduce the higher score
     if score1 > score2 {
       score1 = max(0, score1 - 1)
     } else if score2 > score1 {
       score2 = max(0, score2 - 1)
     } else if score1 > 0 && score2 > 0 {
-      // If tied, reduce score2 (most recent)
       score2 = max(0, score2 - 1)
     }
 
     totalRallies = max(0, totalRallies - 1)
 
-    // Recalculate server state based on new score
-    // Note: This is a simplified approach. A more robust solution would track
-    // the actual serving history, but this works for basic undo functionality.
     if totalRallies == 0 {
-      // Reset to initial serving state
       currentServer = 1
       serverNumber = 1
       serverPosition = .right
@@ -399,29 +406,23 @@ extension Game {
       gameState = .initial
       isFirstServiceSequence = true
     } else {
-      // Recalculate based on current scores (simplified approach)
       let totalScore = score1 + score2
 
-      // For singles
+      // For singles - keep current server since we don't track serve change history
+      // For doubles - simplified approach that may not be perfect after undo
       if effectiveTeamSize == 1 {
-        currentServer = (totalScore % 2 == 0) ? 1 : 2
         serverNumber = 1
       } else {
-        // For doubles - simplified approach that may not be perfect after undo
-        // but provides reasonable behavior
         currentServer = (totalScore % 2 == 0) ? 1 : 2
-        serverNumber = 1  // Reset to first server for simplicity
+        serverNumber = 1
       }
 
       serverPosition = (totalScore % 2 == 0) ? .right : .left
-
-      // Side switching logic (simplified) - official pickleball rule
       sideOfCourt = (score1 + score2) >= 6 ? .side2 : .side1
       gameState = .serving
-      isFirstServiceSequence = (totalScore <= 2)  // Approximate first sequence tracking
+      isFirstServiceSequence = (totalScore <= 2)
     }
 
-    // Reset completion state if needed
     isCompleted = false
     completedDate = nil
     lastModified = Date()
@@ -445,7 +446,7 @@ extension Game {
   /// Switch the serving player within the current serving team (for doubles)
   public func switchServingPlayer() {
     guard !isCompleted else { return }
-    guard effectiveTeamSize > 1 else { return }  // Only applicable to doubles/multi-player teams
+    guard effectiveTeamSize > 1 else { return }
     serverNumber = serverNumber == 1 ? 2 : 1
     lastModified = Date()
   }
@@ -454,7 +455,7 @@ extension Game {
   public func setServingPlayer(to player: Int) {
     guard !isCompleted else { return }
     guard player == 1 || player == 2 else { return }
-    guard effectiveTeamSize > 1 else { return }  // Only applicable to doubles/multi-player teams
+    guard effectiveTeamSize > 1 else { return }
     serverNumber = player
     lastModified = Date()
   }
@@ -463,24 +464,18 @@ extension Game {
   public func handleServiceFault() {
     guard !isCompleted else { return }
     guard effectiveTeamSize > 1 else {
-      // Singles - just switch teams
       switchServer()
       return
     }
 
-    // Doubles service fault handling
     if isFirstServiceSequence {
-      // First service sequence - only one player serves, then switch teams
       currentServer = currentServer == 1 ? 2 : 1
       serverNumber = 1
       isFirstServiceSequence = false
     } else {
-      // Regular service sequence
       if serverNumber == 1 {
-        // First server faulted, switch to second server on same team
         serverNumber = 2
       } else {
-        // Second server faulted, switch teams and reset to first server
         currentServer = currentServer == 1 ? 2 : 1
         serverNumber = 1
       }
@@ -535,5 +530,48 @@ extension Game {
   /// Get recent events (last N events)
   public func recentEvents(count: Int = 10) -> [GameEvent] {
     Array(eventsByTimestamp.prefix(count))
+  }
+}
+
+// MARK: - Participant Resolution
+
+extension Game {
+  /// Resolves side 1 players from stored UUIDs
+  /// Returns players even if archived; returns nil if deleted
+  public func resolveSide1Players(context: ModelContext) -> [PlayerProfile]? {
+    guard !side1PlayerIds.isEmpty else { return nil }
+    return resolvePlayerProfiles(ids: side1PlayerIds, context: context)
+  }
+  
+  /// Resolves side 2 players from stored UUIDs
+  public func resolveSide2Players(context: ModelContext) -> [PlayerProfile]? {
+    guard !side2PlayerIds.isEmpty else { return nil }
+    return resolvePlayerProfiles(ids: side2PlayerIds, context: context)
+  }
+  
+  /// Resolves side 1 team from stored UUID
+  public func resolveSide1Team(context: ModelContext) -> TeamProfile? {
+    guard let teamId = side1TeamId else { return nil }
+    return resolveTeamProfile(id: teamId, context: context)
+  }
+  
+  /// Resolves side 2 team from stored UUID
+  public func resolveSide2Team(context: ModelContext) -> TeamProfile? {
+    guard let teamId = side2TeamId else { return nil }
+    return resolveTeamProfile(id: teamId, context: context)
+  }
+  
+  private func resolvePlayerProfiles(ids: [UUID], context: ModelContext) -> [PlayerProfile] {
+    let descriptor = FetchDescriptor<PlayerProfile>(
+      predicate: #Predicate { player in ids.contains(player.id) }
+    )
+    return (try? context.fetch(descriptor)) ?? []
+  }
+  
+  private func resolveTeamProfile(id: UUID, context: ModelContext) -> TeamProfile? {
+    let descriptor = FetchDescriptor<TeamProfile>(
+      predicate: #Predicate { $0.id == id }
+    )
+    return try? context.fetch(descriptor).first
   }
 }

@@ -5,19 +5,24 @@ import SwiftUI
 @MainActor
 struct RosterView: View {
     @Namespace var animation
-    @State private var manager = PlayerTeamManager()
+    @State private var navigationState = AppNavigationState()
+    @Environment(PlayerTeamManager.self) private var manager
     @State private var showPlayerSheet = false
     @State private var showTeamSheet = false
     @State private var showArchiveSheet = false
+    
+    @Query(filter: #Predicate<PlayerProfile> { !$0.isArchived && !$0.isGuest })
+    private var players: [PlayerProfile]
+    
+    @Query(filter: #Predicate<TeamProfile> { !$0.isArchived })
+    private var teams: [TeamProfile]
 
-    init(manager: PlayerTeamManager = PlayerTeamManager()) {
-        _manager = State(initialValue: manager)
-    }
+    init() {}
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationState.navigationPath) {
             Group {
-                if manager.players.isEmpty && manager.teams.isEmpty {
+                if players.isEmpty && teams.isEmpty {
                     ScrollView {
                         VStack {
                             EmptyStateView(
@@ -27,17 +32,17 @@ struct RosterView: View {
                                     "Add players and create teams to get started."
                             )
                         }
-                        .padding(.top, DesignSystem.Spacing.sm)
-                        .padding(.horizontal, DesignSystem.Spacing.md)
                     }
+                    .contentMargins(.horizontal, DesignSystem.Spacing.md, for: .scrollContent)
+                    .contentMargins(.top, DesignSystem.Spacing.sm, for: .scrollContent)
                     .scrollClipDisabled()
                 } else {
                     ScrollView {
                         VStack(spacing: DesignSystem.Spacing.lg) {
-                            if !manager.players.isEmpty {
+                            if !players.isEmpty {
                                 SectionContainer(title: "Players") {
                                     VStack(spacing: DesignSystem.Spacing.lg) {
-                                        ForEach(manager.players, id: \.id) {
+                                        ForEach(players, id: \.id) {
                                             player in
                                             let identity:
                                                 IdentityCard.Identity =
@@ -48,32 +53,34 @@ struct RosterView: View {
                                                         )
                                                     )
                                             IdentityNavigationRow(
-                                                identity: identity
+                                                identity: identity,
+                                                navigationState: navigationState
                                             )
                                         }
                                     }
                                 }
                             }
 
-                            if !manager.teams.isEmpty {
+                            if !teams.isEmpty {
                                 SectionContainer(title: "Teams") {
                                     VStack(spacing: DesignSystem.Spacing.lg) {
-                                        ForEach(manager.teams, id: \.id) {
+                                        ForEach(teams, id: \.id) {
                                             team in
                                             let identity:
                                                 IdentityCard.Identity =
                                                     .team(team)
                                             IdentityNavigationRow(
-                                                identity: identity
+                                                identity: identity,
+                                                navigationState: navigationState
                                             )
                                         }
                                     }
                                 }
                             }
                         }
-                        .padding(.horizontal, DesignSystem.Spacing.md)
-                        .padding(.vertical, DesignSystem.Spacing.sm)
                     }
+                    .contentMargins(.horizontal, DesignSystem.Spacing.md, for: .scrollContent)
+                    .contentMargins(.vertical, DesignSystem.Spacing.sm, for: .scrollContent)
                 }
             }
             .navigationTitle("Roster")
@@ -122,39 +129,27 @@ struct RosterView: View {
             .navigationDestination(for: RosterDestination.self) { destination in
                 switch destination {
                 case .identity(let identity):
-                    IdentityDetailView(
-                        identity: identity,
-                        manager: manager
-                    )
+                    IdentityDetailView(identity: identity)
                 }
             }
         }
         .sheet(isPresented: $showPlayerSheet) {
-            IdentityEditorView(
-                identity: .player(nil),
-                manager: manager
-            )
+            IdentityEditorView(identity: .player(nil))
             .navigationTransition(.zoom(sourceID: "sheet", in: animation))
         }
         .sheet(isPresented: $showTeamSheet) {
-            IdentityEditorView(
-                identity: .team(nil),
-                manager: manager
-            )
+            IdentityEditorView(identity: .team(nil))
             .navigationTransition(.zoom(sourceID: "sheet", in: animation))
         }
         .sheet(isPresented: $showArchiveSheet) {
-            ArchiveView(manager: manager)
+            ArchiveView()
                 .navigationTransition(.zoom(sourceID: "archive", in: animation))
-        }
-        .task { @MainActor in
-            manager.refreshAll()
         }
         .tint(.accentColor)
     }
 
     private func teamCount(for player: PlayerProfile) -> Int? {
-        let count = manager.teams.filter { team in
+        let count = teams.filter { team in
             team.players.contains(where: { $0.id == player.id })
         }.count
         return count
@@ -189,6 +184,7 @@ enum RosterDestination: Hashable {
 @MainActor
 private struct IdentityNavigationRow: View {
     let identity: IdentityCard.Identity
+    let navigationState: AppNavigationState
 
     var body: some View {
         NavigationLink(value: RosterDestination.identity(identity)) {
@@ -196,18 +192,29 @@ private struct IdentityNavigationRow: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                navigationState.trackRosterNavigation(.identity(identity))
+            }
+        )
         .accessibilityIdentifier("roster.row.\(identity.id.uuidString)")
     }
 }
 
 #Preview("With Players and Teams") {
-    let setup = PreviewEnvironmentSetup.createMinimal()
-    RosterView(manager: setup.rosterManager!)
-        .minimalPreview(environment: setup.environment)
+    let container = PreviewContainers.roster()
+    let rosterManager = PreviewContainers.rosterManager(for: container)
+    
+    RosterView()
+        .modelContainer(container)
+        .environment(rosterManager)
 }
 
 #Preview("Empty") {
-    let setup = PreviewEnvironmentSetup.createMinimal()
-    RosterView(manager: setup.rosterManager!)
-        .minimalPreview(environment: setup.environment)
+    let container = PreviewContainers.empty()
+    let rosterManager = PreviewContainers.rosterManager(for: container)
+    
+    RosterView()
+        .modelContainer(container)
+        .environment(rosterManager)
 }

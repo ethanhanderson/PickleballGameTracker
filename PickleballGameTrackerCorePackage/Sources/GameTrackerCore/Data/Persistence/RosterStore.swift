@@ -39,7 +39,7 @@ public struct RosterStore: Sendable {
   }
 
   public func players(includeArchived: Bool = false) throws -> [PlayerProfile] {
-    let predicate: Predicate<PlayerProfile> = includeArchived ? #Predicate { _ in true } : #Predicate { $0.isArchived == false }
+    let predicate: Predicate<PlayerProfile> = includeArchived ? #Predicate { $0.isGuest == false } : #Predicate { $0.isArchived == false && $0.isGuest == false }
     let fd = FetchDescriptor<PlayerProfile>(predicate: predicate, sortBy: [SortDescriptor(\.lastModified, order: .reverse)])
     return try playerRepo.fetch(fd)
   }
@@ -56,9 +56,9 @@ public struct RosterStore: Sendable {
   public func players(skillLevel: PlayerSkillLevel, includeArchived: Bool = false) throws -> [PlayerProfile] {
     let predicate: Predicate<PlayerProfile> = {
       if includeArchived {
-        return #Predicate { $0.skillLevel == skillLevel }
+        return #Predicate { $0.skillLevel == skillLevel && $0.isGuest == false }
       } else {
-        return #Predicate { $0.skillLevel == skillLevel && $0.isArchived == false }
+        return #Predicate { $0.skillLevel == skillLevel && $0.isArchived == false && $0.isGuest == false }
       }
     }()
 

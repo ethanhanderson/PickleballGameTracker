@@ -27,7 +27,14 @@ struct IdentityEditorView: View {
 
     var title: String {
       switch self {
-      case .player: return isCreate ? "New Player" : "Edit Player"
+      case .player(let player):
+        if isCreate {
+          return "New Player"
+        } else if let player, player.isGuest {
+          return "Convert Guest"
+        } else {
+          return "Edit Player"
+        }
       case .team: return isCreate ? "New Team" : "Edit Team"
       }
     }
@@ -53,9 +60,12 @@ struct IdentityEditorView: View {
   }
 
   @Environment(\.dismiss) private var dismiss
+  @Environment(PlayerTeamManager.self) private var manager
+  
+  @Query(filter: #Predicate<PlayerProfile> { !$0.isArchived && !$0.isGuest })
+  private var players: [PlayerProfile]
 
   let identity: Identity
-  let manager: PlayerTeamManager
 
   // Curated list of SF symbols for players/teams
   private let iconOptions: [String] = [
@@ -118,9 +128,8 @@ struct IdentityEditorView: View {
   @State private var showValidationError: Bool = false
   @FocusState private var nameFocused: Bool
 
-  init(identity: Identity, manager: PlayerTeamManager) {
+  init(identity: Identity) {
     self.identity = identity
-    self.manager = manager
   }
 
   private var saveDisabled: Bool {
@@ -234,7 +243,10 @@ struct IdentityEditorView: View {
           colorSelectionButton(for: color)
         }
       }
+      .scrollTargetLayout()
     }
+    .scrollTargetBehavior(.viewAligned)
+    .scrollClipDisabled()
   }
 
   @ViewBuilder
@@ -279,11 +291,11 @@ struct IdentityEditorView: View {
   @ViewBuilder
   private var teamMembersSection: some View {
     Section("Members") {
-      if manager.players.isEmpty {
+      if players.isEmpty {
         Text("No players yet — add players first from the Roster")
           .foregroundStyle(.secondary)
       } else {
-        ForEach(manager.players, id: \.id) { player in
+        ForEach(players, id: \.id) { player in
           SelectablePlayerRow(
             name: player.name,
             isSelected: selectedPlayerIds.contains(player.id),
@@ -440,17 +452,22 @@ struct IdentityEditorView: View {
   func handlePlayerSave(name: String, existingPlayer: PlayerProfile?) {
     if let player = existingPlayer {
       do {
+        let wasGuest = player.isGuest
         Log.event(
           .saveStarted,
           level: .info,
-          message: "player.edit.start",
-          metadata: ["playerId": player.id.uuidString]
+          message: wasGuest ? "guest.convert.start" : "player.edit.start",
+          metadata: ["playerId": player.id.uuidString, "wasGuest": String(wasGuest)]
         )
         try manager.updatePlayer(player) { p in
           p.name = name
           p.notes = notes.isEmpty ? nil : notes
           p.skillLevel = skillLevel
           p.preferredHand = preferredHand
+          
+          if wasGuest {
+            p.isGuest = false
+          }
 
           switch avatarType {
           case .photo:
@@ -466,8 +483,8 @@ struct IdentityEditorView: View {
         Log.event(
           .saveSucceeded,
           level: .info,
-          message: "player.edit.succeeded",
-          metadata: ["playerId": player.id.uuidString]
+          message: wasGuest ? "guest.convert.succeeded" : "player.edit.succeeded",
+          metadata: ["playerId": player.id.uuidString, "wasGuest": String(wasGuest)]
         )
         dismiss()
       } catch {
@@ -522,7 +539,7 @@ struct IdentityEditorView: View {
   }
 
   func handleTeamSave(name: String, existingTeam: TeamProfile?) {
-    let selectedPlayers: [PlayerProfile] = manager.players.filter {
+    let selectedPlayers: [PlayerProfile] = players.filter {
       selectedPlayerIds.contains($0.id)
     }
 
@@ -617,34 +634,34 @@ struct IdentityEditorView: View {
 // MARK: - Previews
 
 #Preview("Create Player") {
-  let setup = PreviewEnvironmentSetup.createMinimal()
+  let container = PreviewContainers.minimal()
+  let rosterManager = PreviewContainers.rosterManager(for: container)
+  
   NavigationStack {
-    IdentityEditorView(
-      identity: .player(nil),
-      manager: setup.rosterManager!
-    )
+    IdentityEditorView(identity: .player(nil))
   }
-  .minimalPreview(environment: setup.environment)
+  .modelContainer(container)
+  .environment(rosterManager)
 }
 
 #Preview("Create Team") {
-  let setup = PreviewEnvironmentSetup.createMinimal()
+  let container = PreviewContainers.minimal()
+  let rosterManager = PreviewContainers.rosterManager(for: container)
+  
   NavigationStack {
-    IdentityEditorView(
-      identity: .team(nil),
-      manager: setup.rosterManager!
-    )
+    IdentityEditorView(identity: .team(nil))
   }
-  .minimalPreview(environment: setup.environment)
+  .modelContainer(container)
+  .environment(rosterManager)
 }
 
 #Preview("Edit Team") {
-  let setup = PreviewEnvironmentSetup.createMinimal()
+  let container = PreviewContainers.minimal()
+  let rosterManager = PreviewContainers.rosterManager(for: container)
+  
   NavigationStack {
-    IdentityEditorView(
-      identity: .team(nil), // Will be populated with actual team from roster
-      manager: setup.rosterManager!
-    )
+    IdentityEditorView(identity: .team(nil)) // Will be populated with actual team from roster
   }
-  .minimalPreview(environment: setup.environment)
+  .modelContainer(container)
+  .environment(rosterManager)
 }

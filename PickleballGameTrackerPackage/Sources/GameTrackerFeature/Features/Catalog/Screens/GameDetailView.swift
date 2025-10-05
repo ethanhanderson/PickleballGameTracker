@@ -13,6 +13,10 @@ struct GameDetailView: View {
   let gameType: GameType
   let onStartGame: (GameVariation, MatchupSelection) -> Void
   @Environment(LiveGameStateManager.self) private var activeGameStateManager
+  
+  // Query all completed games for finding recent games of this type
+  @Query(filter: #Predicate<Game> { $0.isCompleted })
+  private var allCompletedGames: [Game]
 
   @State private var winningScore: Int = 11
   @State private var winByTwo: Bool = true
@@ -32,8 +36,10 @@ struct GameDetailView: View {
 
   @State private var showingLiveGameConflict = false
   @State private var pendingGameVariation: GameVariation?
-  @State private var conflictingLiveGame: Game?
+  @State private var pendingMatchup: MatchupSelection?
   @State private var showingSetupSheet = false
+  @State private var showingLastGamePreview = false
+  @State private var lastGame: Game?
 
   init(
     gameType: GameType,
@@ -84,7 +90,7 @@ struct GameDetailView: View {
           .foregroundStyle(gameType.color)
           .disabled(isCreatingGame)
 
-          Button(action: startRecentGame) {
+          Button(action: loadLastGame) {
             Label {
               Text("Last Game")
             } icon: {
@@ -128,13 +134,13 @@ struct GameDetailView: View {
             hasTimeLimit: $hasTimeLimit
           )
         }
-        .padding(.bottom, DesignSystem.Spacing.lg)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(.top, DesignSystem.Spacing.lg)
     }
     .coordinateSpace(name: "scroll")
-    .padding(.horizontal, DesignSystem.Spacing.lg)
+    .contentMargins(.horizontal, DesignSystem.Spacing.lg, for: .scrollContent)
+    .contentMargins(.top, DesignSystem.Spacing.lg, for: .scrollContent)
+    .contentMargins(.bottom, DesignSystem.Spacing.lg, for: .scrollContent)
     .navigationBarTitleDisplayMode(.inline)
     .viewContainerBackground(color: gameType.color)
     .scrollClipDisabled()
@@ -151,8 +157,7 @@ struct GameDetailView: View {
               let matchup = MatchupSelection(teamSize: variation.teamSize, mode: .players(sideA: [], sideB: []))
               if activeGameStateManager.hasActiveGame {
                 pendingGameVariation = variation
-                conflictingLiveGame =
-                  activeGameStateManager.currentGame
+                pendingMatchup = matchup
                 showingLiveGameConflict = true
               } else {
                 onStartGame(variation, matchup)
@@ -176,6 +181,50 @@ struct GameDetailView: View {
           handleGameStart(variation, matchup: matchup)
         }
       )
+    }
+    .sheet(isPresented: $showingLastGamePreview) {
+      if let lastGame {
+        LastGamePreview(
+          game: lastGame,
+          gameType: gameType,
+          onStartGame: { startRecentGame() }
+        )
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+      }
+    }
+    .confirmationDialog(
+      "An active game is in progress",
+      isPresented: $showingLiveGameConflict,
+      titleVisibility: .visible
+    ) {
+      Button("End current game and start new", role: .destructive) {
+        guard let variation = pendingGameVariation,
+              let matchup = pendingMatchup
+        else { return }
+        
+        Task { @MainActor in
+          do {
+            try await activeGameStateManager.completeCurrentGame()
+          } catch {
+            Log.error(
+              error,
+              event: .saveFailed,
+              metadata: ["phase": "completeBeforeStart"]
+            )
+          }
+          onStartGame(variation, matchup)
+          pendingGameVariation = nil
+          pendingMatchup = nil
+        }
+      }
+      
+      Button("Keep current game", role: .cancel) {
+        pendingGameVariation = nil
+        pendingMatchup = nil
+      }
+    } message: {
+      Text("You already have a game running. What would you like to do?")
     }
     .toolbar {
       ToolbarItem(placement: .principal) {
@@ -204,7 +253,7 @@ struct GameDetailView: View {
 
       if activeGameStateManager.hasActiveGame {
         pendingGameVariation = variation
-        conflictingLiveGame = activeGameStateManager.currentGame
+        pendingMatchup = matchup
         showingLiveGameConflict = true
       } else {
         onStartGame(variation, matchup)
@@ -212,31 +261,31 @@ struct GameDetailView: View {
     }
   }
 
+  private func loadLastGame() {
+    let recentGames = allCompletedGames
+      .filter { $0.gameType == gameType }
+      .sorted {
+        ($0.completedDate ?? $0.lastModified)
+          > ($1.completedDate ?? $1.lastModified)
+      }
+
+    guard let foundGame = recentGames.first else {
+      errorMessage = "No recent games found for this game type"
+      showingError = true
+      return
+    }
+
+    lastGame = foundGame
+    showingLastGamePreview = true
+  }
+
   private func startRecentGame() {
+    guard let lastGame else { return }
+    
     isCreatingGame = true
 
     Task { @MainActor in
       do {
-        guard let gameManager = activeGameStateManager.gameManager
-        else {
-          throw GameVariationError.invalidConfiguration(
-            "Game manager not available"
-          )
-        }
-
-        let recentGames = gameManager.gameHistory
-          .filter { $0.isCompleted && $0.gameType == gameType }
-          .sorted {
-            ($0.completedDate ?? $0.lastModified)
-              > ($1.completedDate ?? $1.lastModified)
-          }
-
-        guard let lastGame = recentGames.first else {
-          throw GameVariationError.invalidConfiguration(
-            "No recent games found for this game type"
-          )
-        }
-
         Log.event(
           .actionTapped,
           level: .info,
@@ -269,7 +318,7 @@ struct GameDetailView: View {
 
         if activeGameStateManager.hasActiveGame {
           pendingGameVariation = variation
-          conflictingLiveGame = activeGameStateManager.currentGame
+          pendingMatchup = matchup
           showingLiveGameConflict = true
         } else {
           onStartGame(variation, matchup)
@@ -340,8 +389,11 @@ struct GameDetailView: View {
 }
 
 #Preview("Recreational Game Setup") {
-  let env = PreviewEnvironment.app()
-  NavigationStack {
+  let container = PreviewContainers.standard()
+  let (gameManager, liveGameManager) = PreviewContainers.managers(for: container)
+  liveGameManager.configure(gameManager: gameManager)
+  
+  return NavigationStack {
     GameDetailView(
       gameType: .recreational,
       onStartGame: { variation, matchup in
@@ -354,8 +406,8 @@ struct GameDetailView: View {
       }
     )
   }
-  .modelContainer(env.container)
-  .environment(env.activeGameStateManager)
-  .environment(env.gameManager)
+  .modelContainer(container)
+  .environment(liveGameManager)
+  .environment(gameManager)
   .accentColor(.green)
 }

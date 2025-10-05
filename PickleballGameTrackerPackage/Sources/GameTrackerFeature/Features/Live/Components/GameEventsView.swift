@@ -9,7 +9,7 @@ import GameTrackerCore
 import SwiftUI
 
 @MainActor
-struct GameEventsHistoryView: View {
+struct GameEventsView: View {
     @Bindable var game: Game
 
     var body: some View {
@@ -52,17 +52,17 @@ struct GameEventsHistoryView: View {
                         .transition(.slide.combined(with: .opacity))
                 }
             }
-            .padding(.horizontal, DesignSystem.Spacing.lg)
         }
+        .contentMargins(.horizontal, DesignSystem.Spacing.lg, for: .scrollContent)
     }
 
 }
 
 // MARK: - Preview
 
-#Preview("Game Events History - Randomized") {
-    GameEventsHistoryView(game: PreviewGameData.createGameWithRealisticEvents(rallyCount: 28))
-        .minimalPreview(environment: PreviewEnvironment.liveGame())
+#Preview("Game Events - Randomized") {
+    GameEventsView(game: PreviewGameData.createGameWithRealisticEvents(rallyCount: 28))
+        .modelContainer(PreviewContainers.liveGame())
 }
 
 @MainActor

@@ -5,11 +5,15 @@ import SwiftUI
 @MainActor
 struct ArchiveView: View {
   @Environment(\.dismiss) private var dismiss
-  @State private var manager = PlayerTeamManager()
+  @Environment(PlayerTeamManager.self) private var manager
+  
+  @Query(filter: #Predicate<PlayerProfile> { $0.isArchived && !$0.isGuest })
+  private var archivedPlayers: [PlayerProfile]
+  
+  @Query(filter: #Predicate<TeamProfile> { $0.isArchived })
+  private var archivedTeams: [TeamProfile]
 
-  init(manager: PlayerTeamManager = PlayerTeamManager()) {
-    _manager = State(initialValue: manager)
-  }
+  init() {}
 
   var body: some View {
     NavigationStack {
@@ -24,9 +28,9 @@ struct ArchiveView: View {
                   "Archived players and teams will appear here."
               )
             }
-            .padding(.top, DesignSystem.Spacing.sm)
-            .padding(.horizontal, DesignSystem.Spacing.md)
           }
+          .contentMargins(.horizontal, DesignSystem.Spacing.md, for: .scrollContent)
+          .contentMargins(.top, DesignSystem.Spacing.sm, for: .scrollContent)
           .scrollClipDisabled()
         } else {
           ScrollView {
@@ -37,8 +41,7 @@ struct ArchiveView: View {
                   items: archivedPlayers
                 ) { player in
                   let teamCount =
-                    manager
-                    .loadArchivedTeams()
+                    archivedTeams
                     .filter { team in
                       team.players.contains(where: {
                         $0.id == player.id
@@ -50,10 +53,7 @@ struct ArchiveView: View {
                       player,
                       teamCount: teamCount
                     )
-                  ArchivedIdentityCard(
-                    identity: identity,
-                    manager: manager
-                  )
+                  ArchivedIdentityCard(identity: identity)
                 }
               }
 
@@ -64,16 +64,13 @@ struct ArchiveView: View {
                 ) { team in
                   let identity: IdentityCard.Identity =
                     .team(team)
-                  ArchivedIdentityCard(
-                    identity: identity,
-                    manager: manager
-                  )
+                  ArchivedIdentityCard(identity: identity)
                 }
               }
             }
-            .padding(.horizontal, DesignSystem.Spacing.md)
-            .padding(.vertical, DesignSystem.Spacing.sm)
           }
+          .contentMargins(.horizontal, DesignSystem.Spacing.md, for: .scrollContent)
+          .contentMargins(.vertical, DesignSystem.Spacing.sm, for: .scrollContent)
         }
       }
       .navigationTitle("Archive")
@@ -90,24 +87,22 @@ struct ArchiveView: View {
       }
     }
   }
-
-  private var archivedPlayers: [PlayerProfile] {
-    manager.loadArchivedPlayers()
-  }
-
-  private var archivedTeams: [TeamProfile] {
-    manager.loadArchivedTeams()
-  }
 }
 
 #Preview("Empty Archive") {
-  let setup = PreviewEnvironmentSetup.createMinimal()
-  ArchiveView(manager: setup.rosterManager!)
-    .minimalPreview(environment: setup.environment)
+  let container = PreviewContainers.empty()
+  let rosterManager = PreviewContainers.rosterManager(for: container)
+  
+  ArchiveView()
+    .modelContainer(container)
+    .environment(rosterManager)
 }
 
 #Preview("With Archived Items") {
-  let setup = PreviewEnvironmentSetup.createMinimal()
-  ArchiveView(manager: setup.rosterManager!)
-    .minimalPreview(environment: setup.environment)
+  let container = PreviewContainers.roster()
+  let rosterManager = PreviewContainers.rosterManager(for: container)
+  
+  ArchiveView()
+    .modelContainer(container)
+    .environment(rosterManager)
 }

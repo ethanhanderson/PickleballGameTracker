@@ -45,7 +45,8 @@ public struct PreviewEnvironmentSetup {
         let storage = environment.storage
         let gameManager = SwiftDataGameManager(storage: storage)
         let activeGameStateManager = environment.activeGameStateManager
-        let rosterManager = environment.rosterManager ?? PlayerTeamManager(storage: storage)
+        let rosterManager =
+            environment.rosterManager ?? PlayerTeamManager(storage: storage)
 
         // Configure active game state manager
         activeGameStateManager.configure(gameManager: gameManager)
@@ -75,8 +76,11 @@ public struct PreviewEnvironmentSetup {
 
         let storage = environment.storage
         let gameManager = SwiftDataGameManager(storage: storage)
-        let activeGameStateManager = LiveGameStateManager.production(storage: storage)
-        let rosterManager = environment.rosterManager ?? PlayerTeamManager(storage: storage)
+        let activeGameStateManager = LiveGameStateManager.production(
+            storage: storage
+        )
+        let rosterManager =
+            environment.rosterManager ?? PlayerTeamManager(storage: storage)
 
         // Configure minimal setup
         activeGameStateManager.configure(gameManager: gameManager)
@@ -93,9 +97,11 @@ public struct PreviewEnvironmentSetup {
 // MARK: - Standard Preview View Modifiers
 
 /// Standard modifiers for preview views
-public extension View {
+extension View {
     /// Applies standard preview container and environment setup
-    func previewContainer(_ environment: PreviewEnvironment.Context) -> some View {
+    public func previewContainer(_ environment: PreviewEnvironment.Context)
+        -> some View
+    {
         self
             .modelContainer(environment.container)
             .environment(environment.activeGameStateManager)
@@ -103,25 +109,27 @@ public extension View {
     }
 
     /// Applies preview configuration with accent color
-    func previewConfiguration() -> some View {
+    public func previewConfiguration() -> some View {
         self
             .accentColor(PreviewConfig.previewAccentColor)
             .tint(PreviewConfig.previewAccentColor)
     }
 
     /// Standard preview setup for views that need full environment
-    func standardPreview(
+    public func standardPreview(
         environment: PreviewEnvironment.Context,
         configureLiveGame: Bool = false
     ) -> some View {
         self
             .previewContainer(environment)
             .previewConfiguration()
-            // Note: configureLiveGame removed due to async issues in preview context
+        // Note: configureLiveGame removed due to async issues in preview context
     }
 
     /// Minimal preview setup for component-level previews
-    func minimalPreview(environment: PreviewEnvironment.Context) -> some View {
+    public func minimalPreview(environment: PreviewEnvironment.Context)
+        -> some View
+    {
         self
             .previewContainer(environment)
             .previewConfiguration()
@@ -147,22 +155,25 @@ public enum PreviewDataHelpers {
             case .statistics: return PreviewEnvironment.statistics()
             case .search: return PreviewEnvironment.search()
             case .roster: return PreviewEnvironment.roster()
+            case .gameSetup: return PreviewEnvironment.gameSetup()
             case .empty: return PreviewEnvironment.empty()
-            case .custom(let container): return PreviewEnvironment.custom(container)
+            case .custom(let container):
+                return PreviewEnvironment.custom(container)
             }
         }()
 
-        let setup = try await PreviewEnvironmentSetup.create(container: env.container, configureLiveGame: true)
+        let setup = try await PreviewEnvironmentSetup.create(
+            container: env.container,
+            configureLiveGame: true
+        )
 
         return AnyView(
             NavigationStack {
-                LiveView(
-                    game: game,
-                    gameManager: setup.gameManager
-                )
+                LiveView(game: game)
             }
             .previewContainer(setup.environment)
             .environment(setup.activeGameStateManager)
+            .environment(setup.gameManager)
             .previewConfiguration()
         )
     }
@@ -175,9 +186,10 @@ public enum PreviewDataHelpers {
         let environment = PreviewEnvironment.custom(ctx)
 
         return AnyView(
-            RosterView(manager: environment.rosterManager ?? PlayerTeamManager(storage: environment.storage))
-                .previewContainer(environment)
-                .previewConfiguration()
+            RosterView()
+            .previewContainer(environment)
+            .environment(environment.rosterManager ?? PlayerTeamManager(storage: environment.storage))
+            .previewConfiguration()
         )
     }
 
@@ -186,7 +198,11 @@ public enum PreviewDataHelpers {
         initialSearchText: String = "",
         hasResults: Bool = true
     ) -> some View {
-        let environment = PreviewEnvironment.custom(hasResults ? PreviewEnvironment.search().container : PreviewEnvironment.empty().container)
+        let environment = PreviewEnvironment.custom(
+            hasResults
+                ? PreviewEnvironment.search().container
+                : PreviewEnvironment.empty().container
+        )
 
         return AnyView(
             GameSearchView(
@@ -216,7 +232,9 @@ public enum PreviewMigrationHelper {
     }
 
     /// Creates a PreviewEnvironment equivalent for common PreviewDataSeeder usage patterns
-    public static func equivalentEnvironment(for seederMethod: String) -> PreviewEnvironment.Scenario {
+    public static func equivalentEnvironment(for seederMethod: String)
+        -> PreviewEnvironment.Scenario
+    {
         switch seederMethod {
         case "emptyContainer":
             return .empty
@@ -265,7 +283,14 @@ public enum PreviewStateHelpers {
     public static func errorState(
         message: String = "Something went wrong"
     ) -> some View {
-        ErrorView(error: NSError(domain: "PreviewError", code: 0, userInfo: [NSLocalizedDescriptionKey: message]), retry: nil)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ErrorView(
+            error: NSError(
+                domain: "PreviewError",
+                code: 0,
+                userInfo: [NSLocalizedDescriptionKey: message]
+            ),
+            retry: nil
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

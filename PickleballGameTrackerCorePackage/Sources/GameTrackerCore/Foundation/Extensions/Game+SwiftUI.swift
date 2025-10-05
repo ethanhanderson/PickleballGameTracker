@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import SwiftData
 import CoreGraphics
 #if canImport(UIKit)
 import UIKit
@@ -23,14 +24,63 @@ extension Game {
   }
 
   /// Array of team configurations for dynamic UI rendering
-  public var teamsWithLabels: [TeamConfig] {
-    // Prefer deriving names from variation name in format "A vs B"
+  /// Requires ModelContext to resolve participant names from roster
+  public func teamsWithLabels(context: ModelContext) -> [TeamConfig] {
+    // Try to resolve from stored participant data
+    switch participantMode {
+    case .players:
+      if let side1Players = resolveSide1Players(context: context),
+         let side2Players = resolveSide2Players(context: context) {
+        let side1Name = side1Players.map { $0.name }.joined(separator: " & ")
+        let side2Name = side2Players.map { $0.name }.joined(separator: " & ")
+        return [
+          TeamConfig(teamNumber: 1, teamName: side1Name),
+          TeamConfig(teamNumber: 2, teamName: side2Name)
+        ]
+      }
+    case .teams:
+      if let team1 = resolveSide1Team(context: context),
+         let team2 = resolveSide2Team(context: context) {
+        return [
+          TeamConfig(teamNumber: 1, teamName: team1.name),
+          TeamConfig(teamNumber: 2, teamName: team2.name)
+        ]
+      }
+    case .anonymous:
+      break
+    }
+    
+    // Fallback: parse from variation name (for legacy games)
     if let name = gameVariation?.name {
       let parts = name.split(separator: " vs ")
       if parts.count == 2 {
         let a = String(parts[0]).trimmingCharacters(in: .whitespacesAndNewlines)
         let b = String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
-        if a.isEmpty == false && b.isEmpty == false {
+        if !a.isEmpty && !b.isEmpty {
+          return [
+            TeamConfig(teamNumber: 1, teamName: a),
+            TeamConfig(teamNumber: 2, teamName: b)
+          ]
+        }
+      }
+    }
+    
+    // Final fallback
+    return [
+      TeamConfig(teamNumber: 1, teamName: "Team 1"),
+      TeamConfig(teamNumber: 2, teamName: "Team 2")
+    ]
+  }
+
+  /// Convenience property for views without ModelContext (uses parsing fallback)
+  public var teamsWithLabels: [TeamConfig] {
+    // Legacy behavior - parse from variation name
+    if let name = gameVariation?.name {
+      let parts = name.split(separator: " vs ")
+      if parts.count == 2 {
+        let a = String(parts[0]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let b = String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
+        if !a.isEmpty && !b.isEmpty {
           return [
             TeamConfig(teamNumber: 1, teamName: a),
             TeamConfig(teamNumber: 2, teamName: b)
@@ -99,7 +149,10 @@ extension Game {
 extension PlayerProfile {
   /// The tint color for the player's icon
   public var iconTintColorValue: Color? {
-    accentColor
+    if isGuest {
+      return .green
+    }
+    return accentColor
   }
 
   /// The accent color for the player
@@ -136,6 +189,9 @@ extension PlayerProfile {
 
   /// A default color for the player based on their skill level
   public var defaultColor: Color {
+    if isGuest {
+      return .green
+    }
     switch skillLevel {
     case .beginner:
       return .green

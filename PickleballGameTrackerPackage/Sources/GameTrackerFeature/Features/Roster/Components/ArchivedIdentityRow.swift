@@ -4,14 +4,10 @@ import SwiftUI
 @MainActor
 struct ArchivedIdentityRow: View {
   let identity: IdentityCard.Identity
-  let manager: PlayerTeamManager
 
   var body: some View {
     NavigationLink {
-      IdentityDetailView(
-        identity: identity,
-        manager: manager
-      )
+      IdentityDetailView(identity: identity)
     } label: {
       IdentityCard(identity: identity)
         .contentShape(Rectangle())

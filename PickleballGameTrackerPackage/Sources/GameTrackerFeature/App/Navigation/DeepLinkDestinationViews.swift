@@ -7,9 +7,9 @@ import SwiftUI
 @MainActor
 struct DeepLinkDestinationView: View {
   @Environment(\.modelContext) private var modelContext
+  @Environment(SwiftDataGameManager.self) private var gameManager
+  @Environment(LiveGameStateManager.self) private var activeGameStateManager
   let destination: DeepLinkDestination?
-  let gameManager: SwiftDataGameManager
-  let activeGameStateManager: LiveGameStateManager
 
   var body: some View {
     switch destination {

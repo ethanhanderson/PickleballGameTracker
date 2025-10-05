@@ -76,9 +76,9 @@ struct GameSearchView: View {
             .accessibilityIdentifier("Search.noResults")
           }
         }
-        .padding(.horizontal, DesignSystem.Spacing.md)
-        .padding(.top, DesignSystem.Spacing.sm)
       }
+      .contentMargins(.horizontal, DesignSystem.Spacing.md, for: .scrollContent)
+      .contentMargins(.top, DesignSystem.Spacing.sm, for: .scrollContent)
       .viewContainerBackground()
       .task {
         if shouldLoadHistoryOnAppear {
@@ -121,7 +121,7 @@ struct GameSearchView: View {
     initialSearchHistory: [],
     loadHistoryOnAppear: false
   )
-  .minimalPreview(environment: PreviewEnvironment.emptyComponent())
+  .modelContainer(PreviewContainers.empty())
 }
 
 #Preview("Search - With Recent Searches") {
@@ -131,7 +131,7 @@ struct GameSearchView: View {
     initialSearchHistory: [.training, .recreational, .tournament],
     loadHistoryOnAppear: false
   )
-  .minimalPreview(environment: PreviewEnvironment.emptyComponent())
+  .modelContainer(PreviewContainers.empty())
   .ignoresSafeArea(.keyboard, edges: .bottom)
 }
 
@@ -141,7 +141,7 @@ struct GameSearchView: View {
     initialSearchText: "quick",
     loadHistoryOnAppear: false
   )
-  .minimalPreview(environment: PreviewEnvironment.componentWithRoster())
+  .modelContainer(PreviewContainers.roster())
 }
 
 #Preview("Search - With Results") {
@@ -150,7 +150,7 @@ struct GameSearchView: View {
     initialSearchText: "quick",
     loadHistoryOnAppear: false
   )
-  .minimalPreview(environment: PreviewEnvironment.searchableData())
+  .modelContainer(PreviewContainers.standard())
 }
 
 #Preview("Search - No Results") {
@@ -159,7 +159,7 @@ struct GameSearchView: View {
     initialSearchText: "xyzzz",
     loadHistoryOnAppear: false
   )
-  .minimalPreview(environment: PreviewEnvironment.emptyComponent())
+  .modelContainer(PreviewContainers.empty())
 }
 
 #Preview("Search - Rich Data") {
@@ -168,5 +168,5 @@ struct GameSearchView: View {
     initialSearchText: "",
     loadHistoryOnAppear: false
   )
-  .minimalPreview(environment: PreviewEnvironment.searchableData())
+  .modelContainer(PreviewContainers.standard())
 }

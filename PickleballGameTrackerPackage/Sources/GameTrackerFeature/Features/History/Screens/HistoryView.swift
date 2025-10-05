@@ -11,7 +11,7 @@ import SwiftData
 import SwiftUI
 
 @MainActor
-struct GameHistoryView: View {
+struct HistoryView: View {
     @Environment(\.modelContext) private var modelContext
     private static let completedSort: [SortDescriptor<GameSummary>] = [
         SortDescriptor(\.completedDate, order: .reverse)
@@ -20,9 +20,9 @@ struct GameHistoryView: View {
         sort: Self.completedSort
     ) private var completedSummaries: [GameSummary]
 
+    @State private var navigationState = AppNavigationState()
     @State private var selectedFilter: GameFilter = .all  // Logical default: show all games
     @State private var selectedGrouping: GroupingOption = .none  // Logical default: chronological order
-    @State private var path: [GameHistoryDestination] = []
 
     // MARK: - Computed Properties
 
@@ -77,7 +77,7 @@ struct GameHistoryView: View {
     // MARK: - Body
 
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack(path: $navigationState.navigationPath) {
             ScrollView {
                 VStack(spacing: DesignSystem.Spacing.md) {
                     if completedGames.isEmpty {
@@ -87,7 +87,6 @@ struct GameHistoryView: View {
                             description:
                                 "Start playing games to see your history here"
                         )
-                        .padding(.top, DesignSystem.Spacing.sm)
                     } else if filteredGames.isEmpty && selectedFilter != .all {
                         EmptyStateView(
                             icon: "line.3.horizontal.decrease.circle",
@@ -95,47 +94,36 @@ struct GameHistoryView: View {
                             description:
                                 "Try adjusting your filter to see more games"
                         )
-                        .padding(.top, DesignSystem.Spacing.sm)
                     } else {
                         if selectedGrouping == .none {
                             VStack(spacing: DesignSystem.Spacing.md) {
                                 ForEach(filteredGames.indices, id: \.self) { index in
-                                    GameHistoryCard(
-                                        game: filteredGames[index],
-                                        onTapped: {
-                                            let game = filteredGames[index]
-                                            Log.event(
-                                                .actionTapped,
-                                                level: .info,
-                                                message: "history → completed",
-                                                context: .current(gameId: game.id)
-                                            )
-                                            path.append(GameHistoryDestination.gameDetail(game.id))
+                                        NavigationLink(
+                                            value: GameHistoryDestination.gameDetail(filteredGames[index].id)
+                                        ) {
+                                            CompletedGameCard(game: filteredGames[index])
+                                        }
+                                    .buttonStyle(.plain)
+                                    .simultaneousGesture(
+                                        TapGesture().onEnded {
+                                            navigationState.trackHistoryNavigation(filteredGames[index].id)
                                         }
                                     )
                                 }
                             }
-                            .padding(.top, DesignSystem.Spacing.md)
                         } else {
                             GameHistoryGroupedList(
                                 groupedGames: groupedGames,
                                 selectedGrouping: selectedGrouping,
-                                onGameTapped: { game in
-                                    Log.event(
-                                        .actionTapped,
-                                        level: .info,
-                                        message: "history → completed",
-                                        context: .current(gameId: game.id)
-                                    )
-                                    path.append(GameHistoryDestination.gameDetail(game.id))
-                                }
+                                navigationState: navigationState
                             )
                         }
                     }
                 }
                 .scrollClipDisabled()
-                .padding(.horizontal, DesignSystem.Spacing.md)
             }
+            .contentMargins(.horizontal, DesignSystem.Spacing.md, for: .scrollContent)
+            .contentMargins(.top, DesignSystem.Spacing.sm, for: .scrollContent)
             .navigationTitle("History")
             .viewContainerBackground()
             .toolbar {
@@ -156,27 +144,26 @@ struct GameHistoryView: View {
                     .accessibilityIdentifier("NavLink.History.archiveList")
                 }
             }
-            .tint(.accentColor)
-        }
-        .navigationDestination(for: GameHistoryDestination.self) {
-            destination in
-            switch destination {
-            case .gameDetail(let gameId):
-                if let game = try? modelContext.fetch(
-                    FetchDescriptor<Game>(
-                        predicate: #Predicate { $0.id == gameId }
-                    )
-                ).first {
-                    CompletedGameDetailView(game: game)
-                } else {
-                    EmptyStateView(
-                        icon: "exclamationmark.triangle.fill",
-                        title: "Game Not Found",
-                        description: "This game could not be loaded."
-                    )
+            .navigationDestination(for: GameHistoryDestination.self) {
+                destination in
+                switch destination {
+                case .gameDetail(let gameId):
+                    if let game = try? modelContext.fetch(
+                        FetchDescriptor<Game>(
+                            predicate: #Predicate { $0.id == gameId }
+                        )
+                    ).first {
+                        CompletedGameDetailView(game: game)
+                    } else {
+                        EmptyStateView(
+                            icon: "exclamationmark.triangle.fill",
+                            title: "Game Not Found",
+                            description: "This game could not be loaded."
+                        )
+                    }
+                case .archiveList:
+                    ArchivedGamesView()
                 }
-            case .archiveList:
-                ArchivedGamesView()
             }
         }
     }
@@ -316,7 +303,7 @@ private struct HistoryGroupingMenu: View {
 private struct GameHistoryGroupedList: View {
     let groupedGames: [GroupedGames]
     let selectedGrouping: GroupingOption
-    let onGameTapped: (Game) -> Void
+    let navigationState: AppNavigationState
 
     var body: some View {
         VStack(spacing: DesignSystem.Spacing.md) {
@@ -325,9 +312,16 @@ private struct GameHistoryGroupedList: View {
 
                 Section {
                     ForEach(group.games.indices, id: \.self) { gameIndex in
-                        GameHistoryCard(
-                            game: group.games[gameIndex],
-                            onTapped: { onGameTapped(group.games[gameIndex]) }
+                        NavigationLink(
+                            value: GameHistoryDestination.gameDetail(group.games[gameIndex].id)
+                        ) {
+                            CompletedGameCard(game: group.games[gameIndex])
+                        }
+                        .buttonStyle(.plain)
+                        .simultaneousGesture(
+                            TapGesture().onEnded {
+                                navigationState.trackHistoryNavigation(group.games[gameIndex].id)
+                            }
                         )
                     }
                 } header: {
@@ -354,12 +348,14 @@ private struct GameHistoryGroupedList: View {
 
 // MARK: - Previews
 
-#Preview("History") {
-    GameHistoryView()
-        .minimalPreview(environment: PreviewEnvironment.history())
+#Preview("Main") {
+    HistoryView()
+        .tint(.green)
+        .modelContainer(PreviewContainers.history())
 }
 
 #Preview("Empty") {
-    GameHistoryView()
-        .minimalPreview(environment: PreviewEnvironment.emptyComponent())
+    HistoryView()
+        .tint(.green)
+        .modelContainer(PreviewContainers.empty())
 }

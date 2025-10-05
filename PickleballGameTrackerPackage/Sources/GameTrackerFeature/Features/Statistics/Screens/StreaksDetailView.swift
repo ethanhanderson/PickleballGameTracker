@@ -15,11 +15,11 @@ struct StreaksDetailView: View {
         KPIRow(title: "Longest win streak", value: longestText)
         StatFilterSummary(filters: filters)
       }
-      .padding()
       .task(id: filters) {
         await compute()
       }
     }
+    .contentMargins(.all, 16, for: .scrollContent)
     .navigationTitle("Streaks")
     .navigationBarTitleDisplayMode(.inline)
   }
@@ -46,14 +46,14 @@ struct StreaksDetailView: View {
   NavigationStack {
     StreaksDetailView(filters: .init(gameId: nil, gameTypeId: GameType.recreational.rawValue))
   }
-  .minimalPreview(environment: PreviewEnvironment.componentWithGame())
+  .modelContainer(PreviewContainers.standard())
 }
 
 #Preview("With Basic Data") {
   NavigationStack {
     StreaksDetailView(filters: .init(gameId: nil, gameTypeId: GameType.recreational.rawValue))
   }
-  .minimalPreview(environment: PreviewEnvironment.component())
+  .modelContainer(PreviewContainers.minimal())
 }
 
 // Components referenced: `KPIRow`, `StatFilterSummary`

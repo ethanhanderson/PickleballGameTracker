@@ -1,11 +1,15 @@
 import GameTrackerCore
+import SwiftData
 import SwiftUI
 
 @MainActor
 struct AddPlayerToTeamView: View {
   let player: PlayerProfile
-  let manager: PlayerTeamManager
   @Environment(\.dismiss) private var dismiss
+  @Environment(PlayerTeamManager.self) private var manager
+  
+  @Query(filter: #Predicate<TeamProfile> { !$0.isArchived })
+  private var teams: [TeamProfile]
 
   @State private var selectedTeams: Set<UUID> = []
   @State private var showCreateTeamSheet = false
@@ -14,11 +18,11 @@ struct AddPlayerToTeamView: View {
     NavigationStack {
       List {
         Section("Add \(player.name) to existing teams") {
-          if manager.teams.isEmpty {
+          if teams.isEmpty {
             Text("No teams available")
               .foregroundStyle(.secondary)
           } else {
-            ForEach(manager.teams) { team in
+            ForEach(teams) { team in
               TeamRowView(
                 team: team,
                 player: player,
@@ -68,10 +72,7 @@ struct AddPlayerToTeamView: View {
         }
       }
       .sheet(isPresented: $showCreateTeamSheet) {
-        IdentityEditorView(
-          identity: .team(nil),
-          manager: manager
-        )
+        IdentityEditorView(identity: .team(nil))
       }
     }
   }
@@ -86,7 +87,7 @@ struct AddPlayerToTeamView: View {
 
   private func addPlayerToSelectedTeams() {
     for teamId in selectedTeams {
-      if let team = manager.teams.first(where: { $0.id == teamId }) {
+      if let team = teams.first(where: { $0.id == teamId }) {
         if !team.players.contains(where: { $0.id == player.id }) {
           team.players.append(player)
           team.lastModified = Date()

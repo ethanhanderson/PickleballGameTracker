@@ -3,177 +3,369 @@ import SwiftData
 import SwiftUI
 
 struct TeamSizeOption: Identifiable {
-  let id: Int
-  let size: Int
-  let displayName: String
-  let description: String
+    let id: Int
+    let size: Int
+    let displayName: String
+    let description: String
 
-  init(size: Int, displayName: String, description: String) {
-    self.id = size
-    self.size = size
-    self.displayName = displayName
-    self.description = description
-  }
+    init(size: Int, displayName: String, description: String) {
+        self.id = size
+        self.size = size
+        self.displayName = displayName
+        self.description = description
+    }
 }
 
 protocol GameEntity: Identifiable, Hashable {
-  var id: UUID { get }
-  var name: String { get }
-  var displayName: String { get }
-  var skillLevelDisplay: String? { get }
+    var id: UUID { get }
+    var name: String { get }
+    var displayName: String { get }
+    var skillLevelDisplay: String? { get }
 }
 
 extension PlayerProfile: GameEntity {
-  var displayName: String { name }
-  var skillLevelDisplay: String? {
-    skillLevel.displayName != "Unknown" ? skillLevel.displayName : nil
-  }
+    var displayName: String { name }
+    var skillLevelDisplay: String? {
+        if isGuest {
+            return "Guest player"
+        }
+        return skillLevel.displayName != "Unknown"
+            ? skillLevel.displayName : nil
+    }
 }
 
 extension TeamProfile: GameEntity {
-  var displayName: String { name }
-  var skillLevelDisplay: String? { nil }
+    var displayName: String { name }
+    var skillLevelDisplay: String? { nil }
 }
 
 @MainActor
 struct TeamFormatSection: View {
-  let gameType: GameType
-  @Binding var selectedTeamSize: Int
-  let teamSizeOptions: [TeamSizeOption]
+    let gameType: GameType
+    @Binding var selectedTeamSize: Int
+    let teamSizeOptions: [TeamSizeOption]
 
-  var body: some View {
-    Section("Team Format") {
-      Picker("Team Size", selection: $selectedTeamSize) {
-        ForEach(teamSizeOptions, id: \.size) { option in
-          Text(option.displayName).tag(option.size)
+    var body: some View {
+        Section("Team Format") {
+            Picker("Team Size", selection: $selectedTeamSize) {
+                ForEach(teamSizeOptions, id: \.size) { option in
+                    Text(option.displayName).tag(option.size)
+                }
+            }
+            .pickerStyle(.menu)
+            .tint(gameType.color)
         }
-      }
-      .pickerStyle(.menu)
-      .tint(gameType.color)
     }
-  }
 }
 
 @MainActor
 struct EntitySelectionRow: View {
-  let entity: any GameEntity
-  let isSelected: Bool
-  let isDisabled: Bool
-  let selectionIndex: Int?
-  let selectionColor: Color
+    let entity: any GameEntity
+    let isSelected: Bool
+    let isDisabled: Bool
+    let selectionIndex: Int?
+    let selectionColor: Color
+    let showRemoveButton: Bool
+    let onRemove: (() -> Void)?
 
-  var body: some View {
-    HStack(spacing: DesignSystem.Spacing.md) {
-      if let player = entity as? PlayerProfile {
-        AvatarView(player: player, style: .small)
-      } else if let team = entity as? TeamProfile {
-        AvatarView(team: team, style: .small)
-      }
-
-      VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
-        Text(entity.displayName)
-          .font(.title3)
-          .fontWeight(isSelected ? .semibold : .regular)
-          .foregroundStyle(
-            isSelected
-              ? .black
-              : (isDisabled
-                ? .gray
-                : .primary)
-          )
-
-        if let skillLevelDisplay = entity.skillLevelDisplay {
-          Text(skillLevelDisplay)
-            .font(.subheadline)
-            .foregroundStyle(
-              isDisabled
-                ? .gray
-                : .secondary
-            )
-        }
-
-        if let team = entity as? TeamProfile, !team.players.isEmpty {
-          Text(team.players.map { $0.name }.joined(separator: ", "))
-            .font(.subheadline)
-            .foregroundStyle(
-              isDisabled
-                ? .gray
-                : .secondary
-            )
-            .lineLimit(1)
-            .truncationMode(.tail)
-        }
-      }
-
-      Spacer()
-
-      ZStack {
-        if isSelected {
-          Circle()
-            .fill(selectionColor)
-            .frame(width: 26, height: 26)
-          if let selectionIndex {
-            Text("\(selectionIndex)")
-              .font(.system(size: 20, weight: .bold, design: .rounded))
-              .foregroundStyle(.white)
-          }
-        } else {
-          Circle()
-            .strokeBorder(
-              isDisabled ? .gray.opacity(0.5) : .gray,
-              lineWidth: 2
-            )
-            .frame(width: 26, height: 26)
-        }
-      }
+    init(
+        entity: any GameEntity,
+        isSelected: Bool,
+        isDisabled: Bool,
+        selectionIndex: Int?,
+        selectionColor: Color,
+        showRemoveButton: Bool = false,
+        onRemove: (() -> Void)? = nil
+    ) {
+        self.entity = entity
+        self.isSelected = isSelected
+        self.isDisabled = isDisabled
+        self.selectionIndex = selectionIndex
+        self.selectionColor = selectionColor
+        self.showRemoveButton = showRemoveButton
+        self.onRemove = onRemove
     }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .contentShape(.rect)
-    .opacity(isDisabled ? 0.5 : 1.0)
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel("\(entity.displayName)\(selectionIndex != nil && isSelected ? ", selected number \(selectionIndex!)" : "")")
-    .accessibilityIdentifier("entity.selection.\(entity.id.uuidString)")
-  }
+
+    var body: some View {
+        HStack(spacing: DesignSystem.Spacing.md) {
+            if let player = entity as? PlayerProfile {
+                AvatarView(player: player, style: .small)
+            } else if let team = entity as? TeamProfile {
+                AvatarView(team: team, style: .small)
+            }
+
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
+                Text(entity.displayName)
+                    .font(.title3)
+                    .fontWeight(.regular)
+                    .foregroundStyle(
+                        isDisabled
+                            ? .gray
+                            : .primary
+                    )
+
+                if let skillLevelDisplay = entity.skillLevelDisplay {
+                    Text(skillLevelDisplay)
+                        .font(.subheadline)
+                        .foregroundStyle(
+                            isDisabled
+                                ? .gray
+                                : .secondary
+                        )
+                }
+
+                if let team = entity as? TeamProfile, !team.players.isEmpty {
+                    Text(team.players.map { $0.name }.joined(separator: ", "))
+                        .font(.subheadline)
+                        .foregroundStyle(
+                            isDisabled
+                                ? .gray
+                                : .secondary
+                        )
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+
+            Spacer()
+
+            if showRemoveButton {
+                Button(action: { onRemove?() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.gray)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Remove \(entity.displayName)")
+            } else {
+                ZStack {
+                    if isSelected {
+                        Circle()
+                            .fill(selectionColor)
+                            .frame(width: 26, height: 26)
+                        if let selectionIndex {
+                            Text("\(selectionIndex)")
+                                .font(
+                                    .system(
+                                        size: 20,
+                                        weight: .bold,
+                                        design: .rounded
+                                    )
+                                )
+                                .foregroundStyle(.white)
+                        }
+                    } else {
+                        Circle()
+                            .strokeBorder(
+                                isDisabled ? .gray.opacity(0.5) : .gray,
+                                lineWidth: 2
+                            )
+                            .frame(width: 26, height: 26)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(.rect)
+        .opacity(isDisabled ? 0.5 : 1.0)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "\(entity.displayName)\(selectionIndex != nil && isSelected ? ", selected number \(selectionIndex!)" : "")"
+        )
+        .accessibilityIdentifier("entity.selection.\(entity.id.uuidString)")
+    }
 }
 
 @MainActor
 struct EntitySelectionSection: View {
-  let title: String
-  let entities: [any GameEntity]
-  let selectedEntityIds: Set<UUID>
-  let maxSelections: Int
-  let onToggleSelection: (any GameEntity) -> Void
-  let selectionNumbers: [UUID: Int]?
-  let selectionColor: Color
+    let title: String
+    let entities: [any GameEntity]
+    let selectedEntityIds: Set<UUID>
+    let isEntityDisabled: (any GameEntity) -> Bool
+    let onToggleSelection: (any GameEntity) -> Void
+    let selectionNumbers: [UUID: Int]?
+    let selectionColor: Color
+    let createButtonLabel: String?
+    let createButtonIcon: String?
+    let onCreateNew: (() -> Void)?
+    let hideEmptyState: Bool
 
-  private var canSelectMore: Bool { selectedEntityIds.count < maxSelections }
-
-  var body: some View {
-    Section(title) {
-      if entities.isEmpty {
-        Text("No \(title.lowercased()) available")
-          .foregroundStyle(.secondary)
-      } else {
-        ForEach(entities, id: \.id) { entity in
-          let isSelected = selectedEntityIds.contains(entity.id)
-          let index = selectionNumbers?[entity.id]
-          EntitySelectionRow(
-            entity: entity,
-            isSelected: isSelected,
-            isDisabled: !isSelected && !canSelectMore,
-            selectionIndex: index,
-            selectionColor: selectionColor
-          )
-          .contentShape(.rect)
-          .onTapGesture {
-            if isSelected || canSelectMore {
-              onToggleSelection(entity)
-            }
-          }
-        }
-      }
+    init(
+        title: String,
+        entities: [any GameEntity],
+        selectedEntityIds: Set<UUID>,
+        isEntityDisabled: @escaping (any GameEntity) -> Bool,
+        onToggleSelection: @escaping (any GameEntity) -> Void,
+        selectionNumbers: [UUID: Int]?,
+        selectionColor: Color,
+        createButtonLabel: String?,
+        createButtonIcon: String?,
+        onCreateNew: (() -> Void)?,
+        hideEmptyState: Bool = false
+    ) {
+        self.title = title
+        self.entities = entities
+        self.selectedEntityIds = selectedEntityIds
+        self.isEntityDisabled = isEntityDisabled
+        self.onToggleSelection = onToggleSelection
+        self.selectionNumbers = selectionNumbers
+        self.selectionColor = selectionColor
+        self.createButtonLabel = createButtonLabel
+        self.createButtonIcon = createButtonIcon
+        self.onCreateNew = onCreateNew
+        self.hideEmptyState = hideEmptyState
     }
-  }
+
+    private var availableEntities: [any GameEntity] {
+        entities.filter { !selectedEntityIds.contains($0.id) }
+    }
+
+    var body: some View {
+        Section(title) {
+            if availableEntities.isEmpty && !hideEmptyState {
+                Text("No \(title.lowercased()) available")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(availableEntities, id: \.id) { entity in
+                    let isDisabled = isEntityDisabled(entity)
+                    EntitySelectionRow(
+                        entity: entity,
+                        isSelected: false,
+                        isDisabled: isDisabled,
+                        selectionIndex: nil,
+                        selectionColor: selectionColor
+                    )
+                    .contentShape(.rect)
+                    .onTapGesture {
+                        if !isDisabled {
+                            onToggleSelection(entity)
+                        }
+                    }
+                }
+            }
+
+            if let createButtonLabel, let createButtonIcon, let onCreateNew {
+                Button(action: onCreateNew) {
+                    HStack(spacing: DesignSystem.Spacing.md) {
+                        Image(systemName: createButtonIcon)
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(selectionColor)
+                            .frame(width: 38, height: 38)
+
+                        Text(createButtonLabel)
+                            .font(.title3)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(selectionColor)
+
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(
+                    "setup.\(createButtonLabel.replacingOccurrences(of: " ", with: "").lowercased())"
+                )
+            }
+        }
+    }
+}
+
+@MainActor
+struct MatchupEntityRow: View {
+    let entity: any GameEntity
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: DesignSystem.Spacing.md) {
+            if let player = entity as? PlayerProfile {
+                AvatarView(player: player, style: .small)
+            } else if let team = entity as? TeamProfile {
+                AvatarView(team: team, style: .small)
+            }
+
+            Text(entity.displayName)
+                .font(.title3)
+                .fontWeight(.regular)
+                .foregroundStyle(.primary)
+
+            Spacer()
+
+            Button(action: onRemove) {
+                Image(systemName: "xmark")
+            }
+            .buttonBorderShape(.circle)
+            .buttonStyle(.glassProminent)
+            .tint(.red)
+            .fontWeight(.semibold)
+            .accessibilityLabel("Remove \(entity.displayName)")
+        }
+        .padding(.vertical, DesignSystem.Spacing.xs)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(.rect)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(entity.displayName)
+        .accessibilityIdentifier("matchup.entity.\(entity.id.uuidString)")
+    }
+}
+
+@MainActor
+struct CurrentMatchupSection: View {
+    let teamSize: Int
+    let sideAEntities: [any GameEntity]
+    let sideBEntities: [any GameEntity]
+    let sideAHasTeam: Bool
+    let sideBHasTeam: Bool
+    let onRemove: (any GameEntity) -> Void
+
+    private var maxPlayersPerSide: Int {
+        teamSize == 1 ? 1 : 2
+    }
+
+    private var hasSelections: Bool {
+        !sideAEntities.isEmpty || !sideBEntities.isEmpty
+    }
+
+    private var allEntities: [any GameEntity] {
+        sideAEntities + sideBEntities
+    }
+
+    var body: some View {
+        if hasSelections {
+            Section {
+                VStack(spacing: DesignSystem.Spacing.md) {
+                    ForEach(Array(allEntities.enumerated()), id: \.element.id) {
+                        index,
+                        entity in
+                        MatchupEntityRow(
+                            entity: entity,
+                            onRemove: { onRemove(entity) }
+                        )
+
+                        if index == sideAEntities.count - 1
+                            && !sideBEntities.isEmpty
+                        {
+                            ZStack {
+                                Divider()
+                                Text("vs")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.secondary)
+                                    .padding(
+                                        .horizontal,
+                                        DesignSystem.Spacing.sm
+                                    )
+                                    .background(.background)
+                            }
+                        }
+                    }
+                }
+                .padding(.vertical, DesignSystem.Spacing.sm)
+            } header: {
+                Text("Current Matchup")
+            }
+        }
+    }
 }
 
 @MainActor
@@ -181,27 +373,39 @@ struct SetupView: View {
     let gameType: GameType
     let onStartGame: (GameVariation, MatchupSelection) -> Void
 
-    @Query private var allPlayers: [PlayerProfile]
+    @Query(filter: #Predicate<PlayerProfile> { !$0.isArchived && !$0.isGuest })
+    private var allPlayers: [PlayerProfile]
+    @Query(filter: #Predicate<PlayerProfile> { !$0.isArchived && $0.isGuest })
+    private var allGuests: [PlayerProfile]
     @Query private var allTeams: [TeamProfile]
     @Environment(LiveGameStateManager.self) private var activeGameStateManager
 
     @State private var selectedTeamSize: Int = 1
     @State private var selectedPlayerOrder: [UUID: Int] = [:]
+    @State private var selectedPlayers: [PlayerProfile] = []
     @State private var selectedTeam1: TeamProfile?
     @State private var selectedTeam2: TeamProfile?
-    
+
     @State private var isCreatingGame = false
     @State private var showingError = false
     @State private var errorMessage = ""
-    
+
     @State private var showingLiveGameConfirm = false
     @State private var pendingVariation: GameVariation?
     @State private var pendingMatchup: MatchupSelection?
-    
+
+    @State private var showPlayerSheet = false
+    @State private var showTeamSheet = false
+    @State private var showGuestSheet = false
+
     @Environment(\.dismiss) private var dismiss
 
     private var activePlayers: [PlayerProfile] {
-        allPlayers.filter { !$0.isArchived }
+        allPlayers
+    }
+
+    private var activeGuests: [PlayerProfile] {
+        allGuests
     }
 
     private var activeTeams: [TeamProfile] {
@@ -214,7 +418,7 @@ struct SetupView: View {
         if let t2 = selectedTeam2 { teams.append(t2) }
         return teams
     }
-    
+
     private var selectedTeamIds: Set<UUID> {
         var ids = Set<UUID>()
         if let t1 = selectedTeam1 { ids.insert(t1.id) }
@@ -225,18 +429,108 @@ struct SetupView: View {
     private var playerSelectionNumbers: [UUID: Int] {
         selectedPlayerOrder
     }
-    
+
     private var selectedPlayerIds: Set<UUID> {
-        Set(selectedPlayerOrder.keys)
+        Set(selectedPlayers.map { $0.id })
     }
 
-    private var selectedPlayers: [PlayerProfile] {
-        let orderedPairs = selectedPlayerOrder.sorted { lhs, rhs in
-            lhs.value < rhs.value
+    private var slotsPerSide: Int {
+        selectedTeamSize
+    }
+
+    private var totalSlots: Int {
+        slotsPerSide * 2
+    }
+
+    private var totalSlotsFilled: Int {
+        var count = 0
+
+        if selectedTeam1 != nil {
+            count += selectedTeamSize
+        } else {
+            count += min(sideAPlayers.count, slotsPerSide)
         }
-        return orderedPairs.compactMap { pair in
-            allPlayers.first(where: { $0.id == pair.key })
+
+        if selectedTeam2 != nil {
+            count += selectedTeamSize
+        } else {
+            count += min(sideBPlayers.count, slotsPerSide)
         }
+
+        return count
+    }
+
+    private var slotsRemaining: Int {
+        totalSlots - totalSlotsFilled
+    }
+
+    private var sideASlotsFilled: Int {
+        if selectedTeam1 != nil {
+            return selectedTeamSize
+        }
+        return min(selectedPlayers.count, slotsPerSide)
+    }
+
+    private var sideBSlotsFilled: Int {
+        if selectedTeam2 != nil {
+            return selectedTeamSize
+        }
+        let playersForSideB = max(0, selectedPlayers.count - sideASlotsFilled)
+        return min(playersForSideB, slotsPerSide)
+    }
+
+    private var sideAPlayers: [PlayerProfile] {
+        if selectedTeam1 != nil {
+            return []
+        }
+        return Array(
+            selectedPlayers.prefix(min(selectedPlayers.count, slotsPerSide))
+        )
+    }
+
+    private var sideBPlayers: [PlayerProfile] {
+        if selectedTeam2 != nil {
+            return []
+        }
+        let offset = selectedTeam1 != nil ? 0 : sideAPlayers.count
+        return Array(selectedPlayers.dropFirst(offset).prefix(slotsPerSide))
+    }
+
+    private var sideAEntities: [any GameEntity] {
+        if let team = selectedTeam1 {
+            return team.players.map { $0 as any GameEntity }
+        }
+        return sideAPlayers.map { $0 as any GameEntity }
+    }
+
+    private var sideBEntities: [any GameEntity] {
+        if let team = selectedTeam2 {
+            return team.players.map { $0 as any GameEntity }
+        }
+        return sideBPlayers.map { $0 as any GameEntity }
+    }
+
+    private func isEntityDisabled(_ entity: any GameEntity) -> Bool {
+        if selectedEntityIds.contains(entity.id) {
+            return false
+        }
+
+        if entity is TeamProfile {
+            return slotsRemaining < selectedTeamSize
+        } else {
+            return slotsRemaining < 1
+        }
+    }
+
+    private var selectedEntityIds: Set<UUID> {
+        var ids = selectedPlayerIds
+        if let team1 = selectedTeam1 {
+            ids.insert(team1.id)
+        }
+        if let team2 = selectedTeam2 {
+            ids.insert(team2.id)
+        }
+        return ids
     }
 
     init(
@@ -248,7 +542,6 @@ struct SetupView: View {
         self._selectedTeamSize = State(initialValue: gameType.defaultTeamSize)
     }
 
-
     var body: some View {
         NavigationStack {
             Form {
@@ -259,22 +552,36 @@ struct SetupView: View {
                 )
                 .onChange(of: selectedTeamSize) { _, _ in
                     selectedPlayerOrder = [:]
+                    selectedPlayers = []
                     selectedTeam1 = nil
                     selectedTeam2 = nil
                 }
 
+                CurrentMatchupSection(
+                    teamSize: selectedTeamSize,
+                    sideAEntities: sideAEntities,
+                    sideBEntities: sideBEntities,
+                    sideAHasTeam: selectedTeam1 != nil,
+                    sideBHasTeam: selectedTeam2 != nil,
+                    onRemove: removeEntity
+                )
+
                 EntitySelectionSection(
-                    title: "Select Players",
-                    entities: activePlayers,
+                    title: "Select Guests",
+                    entities: activeGuests,
                     selectedEntityIds: selectedPlayerIds,
-                    maxSelections: selectedTeamSize == 1 ? 2 : 4,
+                    isEntityDisabled: isEntityDisabled,
                     onToggleSelection: { entity in
                         if let player = entity as? PlayerProfile {
                             togglePlayerSelection(player)
                         }
                     },
                     selectionNumbers: playerSelectionNumbers,
-                    selectionColor: gameType.color
+                    selectionColor: gameType.color,
+                    createButtonLabel: "New Guest",
+                    createButtonIcon: "person.badge.plus",
+                    onCreateNew: { showGuestSheet = true },
+                    hideEmptyState: true
                 )
 
                 if selectedTeamSize > 1 {
@@ -282,20 +589,38 @@ struct SetupView: View {
                         title: "Select Teams",
                         entities: activeTeams,
                         selectedEntityIds: selectedTeamIds,
-                        maxSelections: 2,
+                        isEntityDisabled: isEntityDisabled,
                         onToggleSelection: { entity in
                             if let team = entity as? TeamProfile {
                                 toggleTeamSelection(team)
                             }
                         },
                         selectionNumbers: nil,
-                        selectionColor: gameType.color
+                        selectionColor: gameType.color,
+                        createButtonLabel: "New Team",
+                        createButtonIcon: "person.2.badge.plus.fill",
+                        onCreateNew: { showTeamSheet = true }
                     )
                 }
+
+                EntitySelectionSection(
+                    title: "Select Players",
+                    entities: activePlayers,
+                    selectedEntityIds: selectedPlayerIds,
+                    isEntityDisabled: isEntityDisabled,
+                    onToggleSelection: { entity in
+                        if let player = entity as? PlayerProfile {
+                            togglePlayerSelection(player)
+                        }
+                    },
+                    selectionNumbers: playerSelectionNumbers,
+                    selectionColor: gameType.color,
+                    createButtonLabel: "New Player",
+                    createButtonIcon: "person.fill.badge.plus",
+                    onCreateNew: { showPlayerSheet = true }
+                )
             }
             .navigationTitle("Set Up Game")
-            .navigationBarTitleDisplayMode(.large)
-            .scrollClipDisabled()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(action: startGame) {
@@ -369,6 +694,16 @@ struct SetupView: View {
                 Text(errorMessage)
             }
         }
+        .sheet(isPresented: $showPlayerSheet) {
+            IdentityEditorView(identity: .player(nil))
+        }
+        .sheet(isPresented: $showTeamSheet) {
+            IdentityEditorView(identity: .team(nil))
+        }
+        .sheet(isPresented: $showGuestSheet) {
+            GuestPlayerEditorView(gameType: gameType)
+                .presentationDetents([.medium])
+        }
     }
 
     private var teamSizeOptions: [TeamSizeOption] {
@@ -386,28 +721,28 @@ struct SetupView: View {
     }
 
     private var canStartGame: Bool {
-        if selectedTeamSize == 1 {
-            return selectedPlayers.count == 2
-        } else {
-            let hasEnoughPlayers = selectedPlayers.count == 4
-            let hasEnoughTeams = selectedTeam1 != nil && selectedTeam2 != nil
-            return hasEnoughPlayers || hasEnoughTeams
-        }
+        let sideAFilled = sideASlotsFilled == slotsPerSide
+        let sideBFilled = sideBSlotsFilled == slotsPerSide
+        return sideAFilled && sideBFilled
     }
 
     private func togglePlayerSelection(_ player: PlayerProfile) {
-        if selectedPlayerOrder[player.id] != nil {
-            selectedPlayerOrder[player.id] = nil
+        if let index = selectedPlayers.firstIndex(where: { $0.id == player.id })
+        {
+            selectedPlayers.remove(at: index)
+            updatePlayerOrder()
         } else {
-            let maxPlayers = selectedTeamSize == 1 ? 2 : 4
-            if selectedPlayerOrder.count < maxPlayers {
-                let availableSlots = selectedTeamSize == 1 ? [1, 2] : [1, 2, 3, 4]
-                let available =
-                    availableSlots.first { slot in
-                        !selectedPlayerOrder.values.contains(slot)
-                    } ?? 1
-                selectedPlayerOrder[player.id] = available
+            if slotsRemaining >= 1 {
+                selectedPlayers.append(player)
+                updatePlayerOrder()
             }
+        }
+    }
+
+    private func updatePlayerOrder() {
+        selectedPlayerOrder = [:]
+        for (index, player) in selectedPlayers.enumerated() {
+            selectedPlayerOrder[player.id] = index + 1
         }
     }
 
@@ -416,10 +751,73 @@ struct SetupView: View {
             selectedTeam1 = nil
         } else if selectedTeam2?.id == team.id {
             selectedTeam2 = nil
-        } else if selectedTeam1 == nil {
-            selectedTeam1 = team
-        } else if selectedTeam2 == nil {
-            selectedTeam2 = team
+        } else {
+            if slotsRemaining >= selectedTeamSize {
+                let sideAAvailable = slotsPerSide - sideASlotsFilled
+                let sideBAvailable = slotsPerSide - sideBSlotsFilled
+
+                if sideAAvailable >= selectedTeamSize {
+                    selectedTeam1 = team
+                } else if sideBAvailable >= selectedTeamSize {
+                    selectedTeam2 = team
+                }
+            }
+        }
+    }
+
+    private func removeEntity(_ entity: any GameEntity) {
+        if let player = entity as? PlayerProfile {
+            if let team1 = selectedTeam1,
+                team1.players.contains(where: { $0.id == player.id })
+            {
+                let remainingPlayers = team1.players.filter {
+                    $0.id != player.id
+                }
+                selectedTeam1 = nil
+
+                let insertIndex = 0
+                for remainingPlayer in remainingPlayers.reversed() {
+                    if !selectedPlayers.contains(where: {
+                        $0.id == remainingPlayer.id
+                    }) {
+                        selectedPlayers.insert(remainingPlayer, at: insertIndex)
+                    }
+                }
+                updatePlayerOrder()
+            } else if let team2 = selectedTeam2,
+                team2.players.contains(where: { $0.id == player.id })
+            {
+                let remainingPlayers = team2.players.filter {
+                    $0.id != player.id
+                }
+                selectedTeam2 = nil
+
+                let insertIndex = sideAPlayers.count
+                for (offset, remainingPlayer) in remainingPlayers.enumerated() {
+                    if !selectedPlayers.contains(where: {
+                        $0.id == remainingPlayer.id
+                    }) {
+                        selectedPlayers.insert(
+                            remainingPlayer,
+                            at: insertIndex + offset
+                        )
+                    }
+                }
+                updatePlayerOrder()
+            } else {
+                if let index = selectedPlayers.firstIndex(where: {
+                    $0.id == player.id
+                }) {
+                    selectedPlayers.remove(at: index)
+                    updatePlayerOrder()
+                }
+            }
+        } else if let team = entity as? TeamProfile {
+            if selectedTeam1?.id == team.id {
+                selectedTeam1 = nil
+            } else if selectedTeam2?.id == team.id {
+                selectedTeam2 = nil
+            }
         }
     }
 
@@ -441,13 +839,15 @@ struct SetupView: View {
                 }
             } catch let error as GameVariationError {
                 if let suggestion = error.recoverySuggestion {
-                    errorMessage = "\(error.localizedDescription)\n\n\(suggestion)"
+                    errorMessage =
+                        "\(error.localizedDescription)\n\n\(suggestion)"
                 } else {
                     errorMessage = error.localizedDescription
                 }
                 showingError = true
             } catch {
-                errorMessage = "An unexpected error occurred: \(error.localizedDescription)"
+                errorMessage =
+                    "An unexpected error occurred: \(error.localizedDescription)"
                 showingError = true
             }
         }
@@ -457,14 +857,23 @@ struct SetupView: View {
         async throws(GameVariationError)
         -> (GameVariation, MatchupSelection)
     {
+        guard
+            sideASlotsFilled == slotsPerSide && sideBSlotsFilled == slotsPerSide
+        else {
+            throw GameVariationError.invalidConfiguration(
+                "Please fill all slots for both sides"
+            )
+        }
+
         if selectedTeamSize == 1 {
-            let p1 = allPlayers.first { selectedPlayerOrder[$0.id] == 1 }
-            let p2 = allPlayers.first { selectedPlayerOrder[$0.id] == 2 }
-            guard let player1 = p1, let player2 = p2 else {
+            guard sideAPlayers.count == 1 && sideBPlayers.count == 1 else {
                 throw GameVariationError.invalidConfiguration(
-                    "Please select exactly 2 players"
+                    "Please select exactly 1 player per side"
                 )
             }
+
+            let player1 = sideAPlayers[0]
+            let player2 = sideBPlayers[0]
 
             let variation = try createGameVariation(
                 name: "\(player1.name) vs \(player2.name)",
@@ -478,50 +887,70 @@ struct SetupView: View {
                 )
             )
             return (variation, matchup)
-        } else if selectedPlayers.count == 4 {
-            let team1Player1 = allPlayers.first { selectedPlayerOrder[$0.id] == 1 }
-            let team1Player2 = allPlayers.first { selectedPlayerOrder[$0.id] == 2 }
-            let team2Player1 = allPlayers.first { selectedPlayerOrder[$0.id] == 3 }
-            let team2Player2 = allPlayers.first { selectedPlayerOrder[$0.id] == 4 }
-
-            guard let p1 = team1Player1, let p2 = team1Player2, let p3 = team2Player1, let p4 = team2Player2 else {
-                throw GameVariationError.invalidConfiguration(
-                    "Please select exactly 4 players (2 per team)"
-                )
-            }
-
-            let variation = try createGameVariation(
-                name: "\(p1.name) & \(p2.name) vs \(p3.name) & \(p4.name)",
-                teamSize: 2
-            )
-            let matchup = MatchupSelection(
-                teamSize: 2,
-                mode: .players(
-                    sideA: [p1.id, p2.id],
-                    sideB: [p3.id, p4.id]
-                )
-            )
-            return (variation, matchup)
         } else {
-            guard let team1 = selectedTeam1, let team2 = selectedTeam2 else {
-                throw GameVariationError.invalidConfiguration(
-                    "Please select both teams"
+            if let team1 = selectedTeam1, let team2 = selectedTeam2 {
+                let variation = try createGameVariation(
+                    name: "\(team1.name) vs \(team2.name)",
+                    teamSize: selectedTeamSize
                 )
-            }
+                let matchup = MatchupSelection(
+                    teamSize: selectedTeamSize,
+                    mode: .teams(team1Id: team1.id, team2Id: team2.id)
+                )
+                return (variation, matchup)
+            } else {
+                let sideAPlayerIds: [UUID]
+                let sideBPlayerIds: [UUID]
+                let sideAName: String
+                let sideBName: String
 
-            let variation = try createGameVariation(
-                name: "\(team1.name) vs \(team2.name)",
-                teamSize: selectedTeamSize
-            )
-            let matchup = MatchupSelection(
-                teamSize: selectedTeamSize,
-                mode: .teams(team1Id: team1.id, team2Id: team2.id)
-            )
-            return (variation, matchup)
+                if let team1 = selectedTeam1 {
+                    sideAPlayerIds = team1.players.map { $0.id }
+                    sideAName = team1.name
+                } else {
+                    guard sideAPlayers.count == 2 else {
+                        throw GameVariationError.invalidConfiguration(
+                            "Please select 2 players for the first side"
+                        )
+                    }
+                    sideAPlayerIds = sideAPlayers.map { $0.id }
+                    sideAName =
+                        "\(sideAPlayers[0].name) & \(sideAPlayers[1].name)"
+                }
+
+                if let team2 = selectedTeam2 {
+                    sideBPlayerIds = team2.players.map { $0.id }
+                    sideBName = team2.name
+                } else {
+                    guard sideBPlayers.count == 2 else {
+                        throw GameVariationError.invalidConfiguration(
+                            "Please select 2 players for the second side"
+                        )
+                    }
+                    sideBPlayerIds = sideBPlayers.map { $0.id }
+                    sideBName =
+                        "\(sideBPlayers[0].name) & \(sideBPlayers[1].name)"
+                }
+
+                let variation = try createGameVariation(
+                    name: "\(sideAName) vs \(sideBName)",
+                    teamSize: 2
+                )
+                let matchup = MatchupSelection(
+                    teamSize: 2,
+                    mode: .players(
+                        sideA: sideAPlayerIds,
+                        sideB: sideBPlayerIds
+                    )
+                )
+                return (variation, matchup)
+            }
         }
     }
-    
-    private func createGameVariation(name: String, teamSize: Int) throws(GameVariationError) -> GameVariation {
+
+    private func createGameVariation(name: String, teamSize: Int)
+        throws(GameVariationError) -> GameVariation
+    {
         try GameVariation.createValidated(
             name: name,
             gameType: gameType,
@@ -539,7 +968,12 @@ struct SetupView: View {
 
 #Preview {
     let randomType = GameType.allTypes.randomElement() ?? .recreational
-    let setup = PreviewEnvironmentSetup.createMinimal(container: PreviewEnvironment.roster().container)
+    let container = PreviewContainers.roster()
+    let (_, liveGameManager) = PreviewContainers.managers(for: container)
+    let rosterManager = PreviewContainers.rosterManager(for: container)
+
     SetupView(gameType: randomType) { _, _ in }
-        .minimalPreview(environment: setup.environment)
+        .modelContainer(container)
+        .environment(liveGameManager)
+        .environment(rosterManager)
 }

@@ -348,15 +348,19 @@ struct WatchActiveGameView: View {
 // MARK: - Previews
 
 #Preview("Active Singles Game") {
-  let container = PreviewDataSeeder.container()
+  let container = PreviewContainers.liveGame()
+  let (_, liveGameManager) = PreviewContainers.managers(for: container)
+  
   WatchActiveGameView(game: PreviewGameData.midGame)
     .modelContainer(container)
-    .environment(LiveGameStateManager.preview(container: container))
+    .environment(liveGameManager)
 }
 
 #Preview("Completed Game") {
-  let container = PreviewDataSeeder.container()
+  let container = PreviewContainers.standard()
+  let (_, liveGameManager) = PreviewContainers.managers(for: container)
+  
   WatchActiveGameView(game: PreviewGameData.completedGame)
     .modelContainer(container)
-    .environment(LiveGameStateManager.preview(container: container))
+    .environment(liveGameManager)
 }

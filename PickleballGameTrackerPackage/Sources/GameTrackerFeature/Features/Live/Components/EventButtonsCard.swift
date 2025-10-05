@@ -9,7 +9,6 @@ struct EventButtonsCard: View {
     let game: Game
     let currentTimestamp: TimeInterval
     let tintColor: Color
-    let gameManager: SwiftDataGameManager
     let teamNumber: Int
     let onEventLogged: ((GameEvent) -> Void)?
 
@@ -19,19 +18,18 @@ struct EventButtonsCard: View {
     private let undoDuration: TimeInterval = 15.0
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(SwiftDataGameManager.self) private var gameManager
 
     init(
         game: Game,
         currentTimestamp: TimeInterval,
         tintColor: Color,
-        gameManager: SwiftDataGameManager,
         teamNumber: Int,
         onEventLogged: ((GameEvent) -> Void)? = nil
     ) {
         self.game = game
         self.currentTimestamp = currentTimestamp
         self.tintColor = tintColor
-        self.gameManager = gameManager
         self.teamNumber = teamNumber
         self.onEventLogged = onEventLogged
         self._showingUndoButtonAtIndex = State(initialValue: nil)
@@ -72,7 +70,7 @@ struct EventButtonsCard: View {
 
     private var teamDisplayName: String {
         // Use variation-derived team labels (e.g., "A vs B")
-        let configs = game.teamsWithLabels
+        let configs = game.teamsWithLabels(context: modelContext)
         if let cfg = configs.first(where: { $0.teamNumber == teamNumber }) {
             return cfg.teamName
         }
@@ -313,14 +311,16 @@ extension AnyTransition {
 }
 
 #Preview {
-    let env = PreviewEnvironment.liveGame()
+    let container = PreviewContainers.liveGame()
+    let (gameManager, _) = PreviewContainers.managers(for: container)
+    
     return EventButtonsCard(
-        game: (try? env.container.mainContext.fetch(FetchDescriptor<Game>()).first) ?? Game(gameType: .recreational),
+        game: (try? container.mainContext.fetch(FetchDescriptor<Game>()).first) ?? Game(gameType: .recreational),
         currentTimestamp: 123.4,
         tintColor: Color.green,
-        gameManager: env.gameManager,
         teamNumber: 1
     )
-    .modelContainer(env.container)
+    .modelContainer(container)
+    .environment(gameManager)
     .padding()
 }

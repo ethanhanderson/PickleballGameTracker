@@ -21,9 +21,9 @@ struct WinRateDetailView: View {
 
         StatFilterSummary(filters: filters)
       }
-      .padding()
       .task(id: filters, compute)
     }
+    .contentMargins(.all, 16, for: .scrollContent)
     .navigationTitle("Win Rate")
     .navigationBarTitleDisplayMode(.inline)
   }
@@ -55,12 +55,12 @@ struct WinRateDetailView: View {
   NavigationStack {
     WinRateDetailView(filters: .init(gameId: nil, gameTypeId: GameType.recreational.rawValue))
   }
-  .minimalPreview(environment: PreviewEnvironment.componentWithGame())
+  .modelContainer(PreviewContainers.standard())
 }
 
 #Preview("With Basic Data") {
   NavigationStack {
     WinRateDetailView(filters: .init(gameId: nil, gameTypeId: GameType.recreational.rawValue))
   }
-  .minimalPreview(environment: PreviewEnvironment.component())
+  .modelContainer(PreviewContainers.minimal())
 }

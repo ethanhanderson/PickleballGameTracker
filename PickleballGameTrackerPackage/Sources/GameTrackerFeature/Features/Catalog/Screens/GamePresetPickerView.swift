@@ -9,15 +9,19 @@ import SwiftUI
 struct GamePresetPickerView: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
+  @Environment(PlayerTeamManager.self) private var manager
   let gameType: GameType
   let onSelect: (GameTypePreset) -> Void
-
-  @State private var manager = PlayerTeamManager()
+  
+  @Query private var allPresets: [GameTypePreset]
+  
+  private var presets: [GameTypePreset] {
+    allPresets.filter { $0.gameType == gameType }
+  }
 
   var body: some View {
     List {
       Section(header: Text("Presets for \(gameType.displayName)")) {
-        let presets = manager.presets.filter { $0.gameType == gameType }
         if presets.isEmpty {
           Text("No presets yet")
             .foregroundStyle(.secondary)
@@ -51,7 +55,6 @@ struct GamePresetPickerView: View {
         Button("Close") { dismiss() }
       }
     }
-    .task { manager.refreshAll() }
   }
 }
 

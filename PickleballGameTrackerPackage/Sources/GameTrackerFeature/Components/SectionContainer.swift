@@ -11,6 +11,7 @@ struct SectionContainer<Content: View>: View {
       if let title {
         Text(title)
           .font(.title3)
+          .fontWeight(.semibold)
           .foregroundStyle(.primary)
       }
 

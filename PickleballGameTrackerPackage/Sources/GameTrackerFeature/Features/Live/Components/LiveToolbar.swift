@@ -20,7 +20,7 @@ struct LiveToolbar: ToolbarContent {
                 showEventsHistory = true
             }
             .sheet(isPresented: $showEventsHistory) {
-                GameEventsHistoryView(game: game)
+                GameEventsView(game: game)
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
             }

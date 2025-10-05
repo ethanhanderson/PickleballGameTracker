@@ -93,17 +93,14 @@ public struct PreviewGameData {
   }
 
   /// Completed game (Team 1 wins)
-  public static let completedGame: Game = {
-    let game = Game(gameType: .recreational)
-    game.score1 = 11
-    game.score2 = 7
-    game.isCompleted = true
-    game.completedDate = Date()
-    game.duration = 25 * 60  // 25 minutes
-    game.totalRallies = 20
-    game.lastModified = Date()
-    return game
-  }()
+  public static var completedGame: Game {
+    CompletedGameFactory()
+      .scores(11, 7)
+      .duration(minutes: 25)
+      .rallies(20)
+      .timestamp(hoursAgo: 0)
+      .generate()
+  }
 
   /// High-scoring tournament game
   public static var highScoreGame: Game {
@@ -309,6 +306,7 @@ public struct PreviewGameData {
 
 
   /// Creates an active game with specified scores
+  @available(*, deprecated, message: "Use ActiveGameFactory directly for more flexible configuration")
   public static func createActiveGame(
     _ gameType: GameType = .recreational,
     score1: Int,
@@ -317,15 +315,13 @@ public struct PreviewGameData {
     serverNumber: Int = 1,
     rallies: Int = 10
   ) -> Game {
-    let game = Game(gameType: gameType)
-    game.score1 = score1
-    game.score2 = score2
-    game.currentServer = currentServer
-    game.serverNumber = serverNumber
-    game.gameState = .playing
-    game.totalRallies = rallies
-    game.lastModified = Date()
-    return game
+    ActiveGameFactory()
+      .gameType(gameType)
+      .scores(score1, score2)
+      .server(team: currentServer, player: serverNumber)
+      .rallies(rallies)
+      .state(.playing)
+      .generate()
   }
 
   /// Count how many teams a player is a member of
@@ -472,6 +468,9 @@ public struct PreviewGameData {
         mode: .players(sideA: [p1.id], sideB: [p2.id])
       )
       let game = try await gameManager.createGame(variation: variation, matchup: matchup)
+      game.participantMode = .players
+      game.side1PlayerIds = [p1.id]
+      game.side2PlayerIds = [p2.id]
       game.gameState = .playing
       return game
     }
@@ -497,6 +496,9 @@ public struct PreviewGameData {
         mode: .teams(team1Id: t1.id, team2Id: t2.id)
       )
       let game = try await gameManager.createGame(variation: variation, matchup: matchup)
+      game.participantMode = .teams
+      game.side1TeamId = t1.id
+      game.side2TeamId = t2.id
       game.gameState = .playing
       return game
     }
@@ -552,18 +554,13 @@ extension PreviewGameData {
 
   /// Create an active game with realistic rally sequences
   public static func createGameWithRealisticEvents(rallyCount: Int = 15) -> Game {
-    let base = createActiveGame(
-      .recreational,
-      score1: Int.random(in: 0...10),
-      score2: Int.random(in: 0...10),
-      currentServer: [1, 2].randomElement()!,
-      serverNumber: [1, 2].randomElement()!,
-      rallies: rallyCount
-    )
-
-    if Bool.random() {
-      base.gameType = .training
-    }
+    let base = ActiveGameFactory()
+      .gameType(Bool.random() ? .training : .recreational)
+      .scores(Int.random(in: 0...10), Int.random(in: 0...10))
+      .server(team: [1, 2].randomElement()!, player: [1, 2].randomElement()!)
+      .rallies(rallyCount)
+      .state(.playing)
+      .generate()
 
     return attachRealisticEvents(to: base)
   }

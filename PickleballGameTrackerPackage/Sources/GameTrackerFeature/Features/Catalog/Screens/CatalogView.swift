@@ -45,15 +45,15 @@ struct CatalogView: View {
                                     }
                                 }
                                 .scrollTargetLayout()
-                                .padding(.horizontal, DesignSystem.Spacing.md)
                             }
+                            .contentMargins(.horizontal, DesignSystem.Spacing.md, for: .scrollContent)
                             .scrollTargetBehavior(.viewAligned)
                             .scrollClipDisabled()
                         }
                     }
                 }
-                .padding(.top, DesignSystem.Spacing.md)
             }
+            .contentMargins(.top, DesignSystem.Spacing.md, for: .scrollContent)
             .scrollClipDisabled()
             .navigationTitle("Games")
             .toolbarTitleDisplayMode(.inlineLarge)
@@ -90,19 +90,7 @@ struct CatalogView: View {
     }
 }
 
-#Preview("Default") {
-    let env = PreviewEnvironment.catalog()
+#Preview {
     CatalogView()
-        .modelContainer(env.container)
-        .accentColor(.green)
-}
-
-#Preview("With Game Types") {
-    CatalogView()
-        .minimalPreview(environment: PreviewEnvironment.catalog())
-}
-
-#Preview("Empty Catalog") {
-    CatalogView()
-        .minimalPreview(environment: PreviewEnvironment.emptyComponent())
+        .modelContainer(PreviewContainers.standard())
 }

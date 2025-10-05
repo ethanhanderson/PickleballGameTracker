@@ -626,8 +626,8 @@ public final class SwiftDataStorage: SwiftDataStorageProtocol, Sendable {
     let context = modelContainer.mainContext
     let predicate: Predicate<PlayerProfile> =
       includeArchived
-      ? #Predicate { _ in true }
-      : #Predicate { $0.isArchived == false }
+      ? #Predicate { $0.isGuest == false }
+      : #Predicate { $0.isArchived == false && $0.isGuest == false }
     let descriptor = FetchDescriptor<PlayerProfile>(
       predicate: predicate,
       sortBy: [SortDescriptor(\.lastModified, order: .reverse)]

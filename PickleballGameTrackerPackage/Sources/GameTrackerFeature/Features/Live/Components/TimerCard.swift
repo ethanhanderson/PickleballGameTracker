@@ -124,7 +124,7 @@ struct TimerCard: View {
     onToggleTimer: {}
   )
   .padding()
-  .minimalPreview(environment: PreviewEnvironment.componentWithGame())
+  .modelContainer(PreviewContainers.standard())
 }
 
 #Preview("Basic Timer") {
@@ -142,7 +142,7 @@ struct TimerCard: View {
     onToggleTimer: {}
   )
   .padding()
-  .minimalPreview(environment: PreviewEnvironment.component())
+  .modelContainer(PreviewContainers.minimal())
 }
 
 #Preview("Timer Paused") {
@@ -160,7 +160,7 @@ struct TimerCard: View {
     onToggleTimer: {}
   )
   .padding()
-  .minimalPreview(environment: PreviewEnvironment.component())
+  .modelContainer(PreviewContainers.minimal())
 }
 
 #Preview("Game Paused") {
@@ -178,7 +178,7 @@ struct TimerCard: View {
     onToggleTimer: {}
   )
   .padding()
-  .minimalPreview(environment: PreviewEnvironment.component())
+  .modelContainer(PreviewContainers.minimal())
 }
 
 #Preview("Game Completed") {
@@ -196,5 +196,5 @@ struct TimerCard: View {
     onToggleTimer: {}
   )
   .padding()
-  .minimalPreview(environment: PreviewEnvironment.component())
+  .modelContainer(PreviewContainers.minimal())
 }

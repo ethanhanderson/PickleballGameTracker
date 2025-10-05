@@ -31,9 +31,9 @@ struct CatalogSectionDetailView: View {
           )
         }
       }
-      .padding(.horizontal, DesignSystem.Spacing.md)
-      .padding(.top, DesignSystem.Spacing.md)
     }
+    .contentMargins(.horizontal, DesignSystem.Spacing.md, for: .scrollContent)
+    .contentMargins(.top, DesignSystem.Spacing.md, for: .scrollContent)
     .accessibilityIdentifier("catalogSectionDetail.scroll")
     .navigationTitle(sectionTitle)
     .viewContainerBackground()
@@ -56,5 +56,5 @@ struct CatalogSectionDetailView: View {
       navigationState: AppNavigationState()
     )
   }
-  .minimalPreview(environment: PreviewEnvironment.catalog())
+  .modelContainer(PreviewContainers.standard())
 }

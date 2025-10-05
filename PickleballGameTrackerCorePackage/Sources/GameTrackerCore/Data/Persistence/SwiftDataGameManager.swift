@@ -8,87 +8,29 @@
 import Foundation
 import SwiftData
 
-/// Primary business logic and data management for pickleball games
+/// Primary business logic service for pickleball games
 /// Handles all game operations, rules validation, and data persistence
+/// 
+/// Views should use @Query for data access, and this manager for operations only.
 @MainActor
 @Observable
 public final class SwiftDataGameManager: Sendable {
 
   public let storage: any SwiftDataStorageProtocol
 
-  // Observable state
-  public var gameHistory: [Game] = []
-
-  // Loading states
-  public var isLoading = false
-  public var lastError: (any Error)?
-
-  // Game statistics
-  public var completedGamesCount: Int {
-    gameHistory.filter { $0.isCompleted }.count
-  }
-
-  public var todaysGames: [Game] {
-    let today = Calendar.current.startOfDay(for: Date())
-    let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today) ?? Date()
-
-    return gameHistory.filter { game in
-      game.createdDate >= today && game.createdDate < tomorrow
-    }
-  }
-
   // Delegate reference for active game coordination
   public weak var activeGameDelegate: (any LiveGameCoordinator)?
 
   public init(storage: any SwiftDataStorageProtocol = SwiftDataStorage.shared) {
     self.storage = storage
-
-    Task {
-      await loadInitialData()
-    }
-  }
-
-  // MARK: - Data Loading
-
-  private func loadInitialData() async {
-    isLoading = true
-    defer { isLoading = false }
-
-    await loadGameHistory()
-    Log.event(.loadSucceeded, level: .info, message: "Initial data loaded")
-  }
-
-  private func loadGameHistory() async {
-    do {
-      gameHistory = try await storage.loadGames()
-
-      // Notify delegate about any active games found
-      let activeGames = gameHistory.filter { !$0.isCompleted }
-      if let activeGame = activeGames.first {
-        activeGameDelegate?.setCurrentGame(activeGame)
-      }
-    } catch {
-      Log.error(error, event: .loadFailed)
-      lastError = error
-    }
   }
 
   // MARK: - Game Creation
 
   /// Create a new game with the specified type
   public func createGame(type: GameType) async throws -> Game {
-    guard !isLoading else {
-      throw GameError.operationInProgress
-    }
-
-    isLoading = true
-    defer { isLoading = false }
-
     let newGame = Game(gameType: type)
     try await storage.saveGame(newGame)
-
-    // Add to history
-    gameHistory.insert(newGame, at: 0)
 
     Log.event(
       .saveSucceeded,
@@ -102,18 +44,8 @@ public final class SwiftDataGameManager: Sendable {
 
   /// Create a new game with a specific variation
   public func createGame(variation: GameVariation) async throws -> Game {
-    guard !isLoading else {
-      throw GameError.operationInProgress
-    }
-
-    isLoading = true
-    defer { isLoading = false }
-
     let newGame = Game(gameVariation: variation)
     try await storage.saveGame(newGame)
-
-    // Add to history
-    gameHistory.insert(newGame, at: 0)
 
     Log.event(
       .saveSucceeded,
@@ -130,13 +62,6 @@ public final class SwiftDataGameManager: Sendable {
     variation: GameVariation,
     matchup: MatchupSelection
   ) async throws -> Game {
-    guard !isLoading else {
-      throw GameError.operationInProgress
-    }
-
-    isLoading = true
-    defer { isLoading = false }
-
     let newGame = Game(
       gameType: variation.gameType,
       gameVariation: variation,
@@ -146,8 +71,19 @@ public final class SwiftDataGameManager: Sendable {
       doubleBounceRule: variation.doubleBounceRule
     )
 
+    // Store participant data from matchup
+    switch matchup.mode {
+    case .players(let sideA, let sideB):
+      newGame.participantMode = .players
+      newGame.side1PlayerIds = sideA
+      newGame.side2PlayerIds = sideB
+    case .teams(let team1Id, let team2Id):
+      newGame.participantMode = .teams
+      newGame.side1TeamId = team1Id
+      newGame.side2TeamId = team2Id
+    }
+
     try await storage.saveGame(newGame)
-    gameHistory.insert(newGame, at: 0)
 
     Log.event(
       .saveSucceeded,
@@ -331,7 +267,6 @@ public final class SwiftDataGameManager: Sendable {
           metadata: ["phase": "completionValidation"])
       }
     } catch {
-      lastError = error
       Log.error(
         error, event: .saveFailed, context: .current(gameId: game.id),
         metadata: ["action": "completeGame"])
@@ -364,18 +299,6 @@ public final class SwiftDataGameManager: Sendable {
       game.lastModified = Date()
       try await storage.updateGame(game)
 
-      // Update in local history if present
-      if let index = gameHistory.firstIndex(where: { $0.id == game.id }) {
-        gameHistory[index] = game
-      } else {
-        // Game not in history - this could indicate a data inconsistency
-        Log.event(
-          .loadFailed, level: .warn, context: .current(gameId: game.id),
-          metadata: ["reason": "historyNotFound"])
-        // Reload history to ensure consistency
-        await loadGameHistory()
-      }
-
       // Validate state consistency for active games
       if game.id == activeGameDelegate?.currentGame?.id {
         Task { @MainActor in
@@ -383,7 +306,6 @@ public final class SwiftDataGameManager: Sendable {
         }
       }
     } catch {
-      lastError = error
       Log.error(
         error, event: .saveFailed, context: .current(gameId: game.id),
         metadata: ["action": "updateGame"])
@@ -391,12 +313,9 @@ public final class SwiftDataGameManager: Sendable {
     }
   }
 
-  /// Delete a game from storage and history
+  /// Delete a game from storage
   public func deleteGame(_ game: Game) async throws {
     try await storage.deleteGame(id: game.id)
-
-    // Remove from history
-    gameHistory.removeAll { $0.id == game.id }
 
     // Notify delegate if this was the active game
     activeGameDelegate?.gameDidDelete(game)
@@ -404,50 +323,10 @@ public final class SwiftDataGameManager: Sendable {
     Log.event(.deleteSucceeded, level: .info, context: .current(gameId: game.id))
   }
 
-  // MARK: - Game Queries
-
-  /// Get all active (non-completed) games
-  public func getActiveGames() -> [Game] {
-    return gameHistory.filter { !$0.isCompleted }
-  }
-
-  /// Get games for a specific date
-  public func getGames(for date: Date) -> [Game] {
-    let startOfDay = Calendar.current.startOfDay(for: date)
-    let endOfDay = Calendar.current.date(byAdding: .day, value: 1, to: startOfDay) ?? Date()
-
-    return gameHistory.filter { game in
-      game.createdDate >= startOfDay && game.createdDate < endOfDay
-    }
-  }
-
-  /// Get games by type
-  public func getGames(ofType gameType: GameType) -> [Game] {
-    return gameHistory.filter { $0.gameType == gameType }
-  }
-
   // MARK: - Statistics
 
   public func getGameStatistics() async throws -> GameStatistics {
     return try await storage.loadGameStatistics()
-  }
-
-  // MARK: - Data Management
-
-  /// Refresh all data from storage
-  public func refreshData() async {
-    await loadInitialData()
-  }
-
-  /// Perform maintenance operations
-  public func performMaintenance() async throws {
-    try await storage.performMaintenance()
-    await loadGameHistory()
-  }
-
-  /// Clear any cached error state
-  public func clearError() {
-    lastError = nil
   }
 
   // MARK: - Archive / Restore
@@ -531,9 +410,6 @@ public final class SwiftDataGameManager: Sendable {
         // Continue with other games
       }
     }
-
-    // Reload history to reflect any changes
-    await loadGameHistory()
 
     Log.event(
       .loadSucceeded, level: .info, message: "validateAndRecover: done",
@@ -770,7 +646,6 @@ public enum GameError: Error, LocalizedError, Sendable {
   case invalidPlayer
   case invalidOperation
   case noPointsToUndo
-  case operationInProgress
   case gameNotFound
   case cannotScoreWhenPaused
   case cannotChangeServeWhenNotPlaying
@@ -791,8 +666,6 @@ public enum GameError: Error, LocalizedError, Sendable {
       return "Invalid operation for current game configuration"
     case .noPointsToUndo:
       return "No points to undo"
-    case .operationInProgress:
-      return "Another operation is in progress"
     case .gameNotFound:
       return "Game not found"
     case .cannotScoreWhenPaused:

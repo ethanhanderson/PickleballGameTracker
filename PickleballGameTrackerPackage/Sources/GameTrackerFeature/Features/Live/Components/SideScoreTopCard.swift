@@ -9,7 +9,6 @@ struct SideScoreTopCard: View {
     let teamName: String
     let isGameActive: Bool
     let showTapIndicator: Bool
-    let gameManager: SwiftDataGameManager
     let tintOverride: Color?
 
     @State private var matchLabelVisible: Bool = false
@@ -18,6 +17,8 @@ struct SideScoreTopCard: View {
     @State private var matchAnimationTick: Int = 0
     @State private var wasJustResumed: Bool = false
     @State private var previousScore: Int = 0
+    
+    @Environment(SwiftDataGameManager.self) private var gameManager
 
     private var cardTintColor: Color {
         tintOverride ?? game.teamTintColor(for: teamNumber)

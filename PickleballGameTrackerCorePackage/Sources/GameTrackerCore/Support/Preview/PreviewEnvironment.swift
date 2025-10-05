@@ -12,8 +12,122 @@ public enum PreviewEnvironment {
     case statistics // Rich data for statistics views
     case search // Mixed data for search functionality
     case roster // Player and team management
+    case gameSetup // Game setup with roster, variations, and history (no active game)
     case empty // Empty state for empty view testing
     case custom(ModelContainer) // Custom container
+    
+    /// Returns the appropriate container for this scenario.
+    ///
+    /// This computed property encapsulates the mapping between scenarios and their
+    /// container creation methods, eliminating the need for manual switch statements
+    /// when creating containers.
+    ///
+    /// - Note: When adding a new scenario, implement its case here and create the
+    ///   corresponding container method in `PreviewDataSeeder`.
+    @MainActor
+    var containerProvider: ModelContainer {
+      switch self {
+      case .app:
+        return PreviewDataSeeder.appContainer()
+      case .liveGame:
+        return PreviewDataSeeder.liveGameContainer()
+      case .catalog:
+        return PreviewDataSeeder.catalogContainer()
+      case .history:
+        return PreviewDataSeeder.historyContainer()
+      case .statistics:
+        return PreviewDataSeeder.statisticsContainer()
+      case .search:
+        return PreviewDataSeeder.searchContainer()
+      case .roster:
+        return PreviewDataSeeder.rosterContainer()
+      case .gameSetup:
+        return PreviewDataSeeder.gameSetupContainer()
+      case .empty:
+        return PreviewDataSeeder.emptyContainer()
+      case .custom(let container):
+        return container
+      }
+    }
+    
+    /// Indicates whether this scenario should include a roster manager.
+    ///
+    /// Used to determine if `PlayerTeamManager` should be initialized for this
+    /// scenario's context.
+    var needsRosterManager: Bool {
+      switch self {
+      case .app, .liveGame, .roster, .gameSetup:
+        return true
+      case .catalog, .history, .statistics, .search, .empty, .custom:
+        return false
+      }
+    }
+    
+    /// Configuration characteristics for this scenario.
+    ///
+    /// Defines the default configuration settings for each scenario, eliminating
+    /// the need for manual configuration initialization in `Configuration` static
+    /// properties.
+    ///
+    /// - Note: When adding a new scenario, define its characteristics here to
+    ///   automatically generate its configuration preset.
+    var configurationCharacteristics: (
+      withLiveGame: Bool,
+      withPlayerAssignments: Bool,
+      gameState: GameState?
+    ) {
+      switch self {
+      case .app:
+        return (withLiveGame: true, withPlayerAssignments: true, gameState: nil)
+      case .liveGame:
+        return (withLiveGame: true, withPlayerAssignments: true, gameState: .playing)
+      case .catalog:
+        return (withLiveGame: false, withPlayerAssignments: false, gameState: nil)
+      case .history:
+        return (withLiveGame: false, withPlayerAssignments: false, gameState: nil)
+      case .statistics:
+        return (withLiveGame: false, withPlayerAssignments: true, gameState: nil)
+      case .search:
+        return (withLiveGame: false, withPlayerAssignments: true, gameState: nil)
+      case .roster:
+        return (withLiveGame: false, withPlayerAssignments: true, gameState: nil)
+      case .gameSetup:
+        return (withLiveGame: false, withPlayerAssignments: true, gameState: nil)
+      case .empty:
+        return (withLiveGame: false, withPlayerAssignments: false, gameState: nil)
+      case .custom:
+        return (withLiveGame: false, withPlayerAssignments: false, gameState: nil)
+      }
+    }
+    
+    /// Creates a `Context` directly from this scenario using default configuration.
+    ///
+    /// This convenience method eliminates the need for separate static helper functions
+    /// on `PreviewEnvironment`. Instead of calling `PreviewEnvironment.app()`, you can
+    /// call `PreviewEnvironment.Scenario.app.makeContext()`.
+    ///
+    /// ## Usage
+    ///
+    /// ```swift
+    /// // Direct scenario-to-context
+    /// let env = PreviewEnvironment.Scenario.app.makeContext()
+    ///
+    /// // Or use the PreviewEnvironment helper (maintained for compatibility)
+    /// let env = PreviewEnvironment.app()
+    /// ```
+    ///
+    /// - Returns: A fully configured `Context` for this scenario.
+    @MainActor
+    public func makeContext() -> PreviewEnvironment.Context {
+      let characteristics = configurationCharacteristics
+      let configuration = Configuration(
+        scenario: self,
+        withLiveGame: characteristics.withLiveGame,
+        withPlayerAssignments: characteristics.withPlayerAssignments,
+        gameState: characteristics.gameState
+      )
+      return PreviewEnvironment.make(configuration: configuration)
+    }
   }
 
   public struct Configuration: Sendable {
@@ -43,14 +157,102 @@ public enum PreviewEnvironment {
       self.startTimer = startTimer
     }
 
-    public static let app: Configuration = Configuration(scenario: .app, withLiveGame: true, withPlayerAssignments: true, gameState: nil)
-    public static let liveGame: Configuration = Configuration(scenario: .liveGame, withLiveGame: true, withPlayerAssignments: true, gameState: .playing)
-    public static let catalog: Configuration = Configuration(scenario: .catalog, withLiveGame: false, withPlayerAssignments: false, gameState: nil)
-    public static let history: Configuration = Configuration(scenario: .history, withLiveGame: false, withPlayerAssignments: false, gameState: nil)
-    public static let statistics: Configuration = Configuration(scenario: .statistics, withLiveGame: false, withPlayerAssignments: true, gameState: nil)
-    public static let search: Configuration = Configuration(scenario: .search, withLiveGame: false, withPlayerAssignments: true, gameState: nil)
-    public static let roster: Configuration = Configuration(scenario: .roster, withLiveGame: false, withPlayerAssignments: true, gameState: nil)
-    public static let empty: Configuration = Configuration(scenario: .empty, withLiveGame: false, withPlayerAssignments: false, gameState: nil)
+    // MARK: - Configuration Presets
+    //
+    // These presets are auto-generated from scenario characteristics.
+    // When adding a new scenario, define its characteristics in
+    // `Scenario.configurationCharacteristics` and the preset will be
+    // automatically available here.
+    
+    public static var app: Configuration {
+      let characteristics = Scenario.app.configurationCharacteristics
+      return Configuration(
+        scenario: .app,
+        withLiveGame: characteristics.withLiveGame,
+        withPlayerAssignments: characteristics.withPlayerAssignments,
+        gameState: characteristics.gameState
+      )
+    }
+    
+    public static var liveGame: Configuration {
+      let characteristics = Scenario.liveGame.configurationCharacteristics
+      return Configuration(
+        scenario: .liveGame,
+        withLiveGame: characteristics.withLiveGame,
+        withPlayerAssignments: characteristics.withPlayerAssignments,
+        gameState: characteristics.gameState
+      )
+    }
+    
+    public static var catalog: Configuration {
+      let characteristics = Scenario.catalog.configurationCharacteristics
+      return Configuration(
+        scenario: .catalog,
+        withLiveGame: characteristics.withLiveGame,
+        withPlayerAssignments: characteristics.withPlayerAssignments,
+        gameState: characteristics.gameState
+      )
+    }
+    
+    public static var history: Configuration {
+      let characteristics = Scenario.history.configurationCharacteristics
+      return Configuration(
+        scenario: .history,
+        withLiveGame: characteristics.withLiveGame,
+        withPlayerAssignments: characteristics.withPlayerAssignments,
+        gameState: characteristics.gameState
+      )
+    }
+    
+    public static var statistics: Configuration {
+      let characteristics = Scenario.statistics.configurationCharacteristics
+      return Configuration(
+        scenario: .statistics,
+        withLiveGame: characteristics.withLiveGame,
+        withPlayerAssignments: characteristics.withPlayerAssignments,
+        gameState: characteristics.gameState
+      )
+    }
+    
+    public static var search: Configuration {
+      let characteristics = Scenario.search.configurationCharacteristics
+      return Configuration(
+        scenario: .search,
+        withLiveGame: characteristics.withLiveGame,
+        withPlayerAssignments: characteristics.withPlayerAssignments,
+        gameState: characteristics.gameState
+      )
+    }
+    
+    public static var roster: Configuration {
+      let characteristics = Scenario.roster.configurationCharacteristics
+      return Configuration(
+        scenario: .roster,
+        withLiveGame: characteristics.withLiveGame,
+        withPlayerAssignments: characteristics.withPlayerAssignments,
+        gameState: characteristics.gameState
+      )
+    }
+    
+    public static var gameSetup: Configuration {
+      let characteristics = Scenario.gameSetup.configurationCharacteristics
+      return Configuration(
+        scenario: .gameSetup,
+        withLiveGame: characteristics.withLiveGame,
+        withPlayerAssignments: characteristics.withPlayerAssignments,
+        gameState: characteristics.gameState
+      )
+    }
+    
+    public static var empty: Configuration {
+      let characteristics = Scenario.empty.configurationCharacteristics
+      return Configuration(
+        scenario: .empty,
+        withLiveGame: characteristics.withLiveGame,
+        withPlayerAssignments: characteristics.withPlayerAssignments,
+        gameState: characteristics.gameState
+      )
+    }
 
     public static func custom(_ container: ModelContainer) -> Configuration {
       Configuration(scenario: .custom(container), withLiveGame: false, withPlayerAssignments: false, gameState: nil)
@@ -83,19 +285,14 @@ public enum PreviewEnvironment {
   }
 
   public static func make(configuration: Configuration = .app) -> Context {
-    let container = makeContainer(for: configuration)
+    let container = configuration.scenario.containerProvider
     let storage = SwiftDataStorage(modelContainer: container)
     let gameManager = SwiftDataGameManager(storage: storage)
     let active = LiveGameStateManager.production(storage: storage)
 
-    let rosterManager: PlayerTeamManager? = {
-      switch configuration.scenario {
-      case .app, .liveGame, .roster:
-        return PlayerTeamManager(storage: storage, autoRefresh: false)
-      default:
-        return nil
-      }
-    }()
+    let rosterManager: PlayerTeamManager? = configuration.scenario.needsRosterManager
+      ? PlayerTeamManager(storage: storage)
+      : nil
 
     // Configure live game state if needed
     if configuration.withLiveGame {
@@ -189,65 +386,52 @@ public enum PreviewEnvironment {
     )
   }
 
-  private static func makeContainer(for configuration: Configuration) -> ModelContainer {
-    switch configuration.scenario {
-    case .app:
-      return PreviewDataSeeder.appContainer()
-    case .liveGame:
-      return PreviewDataSeeder.liveGameContainer()
-    case .catalog:
-      return PreviewDataSeeder.catalogContainer()
-    case .history:
-      return PreviewDataSeeder.historyContainer()
-    case .statistics:
-      return PreviewDataSeeder.statisticsContainer()
-    case .search:
-      return PreviewDataSeeder.searchContainer()
-    case .roster:
-      return PreviewDataSeeder.rosterContainer()
-    case .empty:
-      return PreviewDataSeeder.emptyContainer()
-    case .custom(let container):
-      return container
-    }
-  }
 
   // MARK: - Convenience Helpers
+  //
+  // These helpers delegate to `Scenario.makeContext()` for a consistent API.
+  // They are maintained for backward compatibility and ergonomics.
+  //
+  // You can also use the scenario directly: `Scenario.app.makeContext()`
 
   public static func app() -> Context {
-    make(configuration: .app)
+    Scenario.app.makeContext()
   }
 
   public static func liveGame() -> Context {
-    make(configuration: .liveGame)
+    Scenario.liveGame.makeContext()
   }
 
   public static func catalog() -> Context {
-    make(configuration: .catalog)
+    Scenario.catalog.makeContext()
   }
 
   public static func history() -> Context {
-    make(configuration: .history)
+    Scenario.history.makeContext()
   }
 
   public static func statistics() -> Context {
-    make(configuration: .statistics)
+    Scenario.statistics.makeContext()
   }
 
   public static func search() -> Context {
-    make(configuration: .search)
+    Scenario.search.makeContext()
   }
 
   public static func roster() -> Context {
-    make(configuration: .roster)
+    Scenario.roster.makeContext()
+  }
+
+  public static func gameSetup() -> Context {
+    Scenario.gameSetup.makeContext()
   }
 
   public static func empty() -> Context {
-    make(configuration: .empty)
+    Scenario.empty.makeContext()
   }
 
   public static func custom(_ container: ModelContainer) -> Context {
-    make(configuration: .custom(container))
+    Scenario.custom(container).makeContext()
   }
 
   // MARK: - Component Preview Helpers
@@ -357,10 +541,7 @@ extension PreviewEnvironment.Context {
 
   @MainActor
   public func configureLiveGame() async throws {
-    guard let rosterManager else { return }
-
-    // Refresh roster to ensure we have players
-    rosterManager.refreshAll()
+    guard rosterManager != nil else { return }
 
     // Ensure there's a live game in the container; if none, create a simple one
     let allGames = try container.mainContext.fetch(FetchDescriptor<Game>())
@@ -424,4 +605,46 @@ extension PreviewEnvironment.Context {
   }
 }
 
+// MARK: - Simplified Preview API (Modern)
 
+/// Modern, simplified preview helpers that delegate to PreviewContainers.
+///
+/// These provide cleaner, more maintainable preview setup compared to the legacy
+/// PreviewEnvironment.Context pattern. New code should prefer PreviewContainers directly.
+extension PreviewEnvironment {
+    
+    /// Create a simple container for a scenario (delegates to PreviewContainers)
+    ///
+    /// This is a compatibility bridge. New code should use `PreviewContainers` directly:
+    ///
+    /// ```swift
+    /// // Preferred:
+    /// .modelContainer(PreviewContainers.standard())
+    ///
+    /// // Legacy (still supported):
+    /// .modelContainer(PreviewEnvironment.container(for: .app))
+    /// ```
+    @available(*, deprecated, message: "Use PreviewContainers directly for new code")
+    public static func container(for scenario: Scenario) -> ModelContainer {
+        switch scenario {
+        case .app: return PreviewContainers.standard()
+        case .liveGame: return PreviewContainers.liveGame()
+        case .catalog, .gameSetup: return PreviewContainers.standard()
+        case .history, .search, .statistics: return PreviewContainers.history()
+        case .roster: return PreviewContainers.roster()
+        case .empty: return PreviewContainers.empty()
+        case .custom(let container): return container
+        }
+    }
+    
+    /// Create managers for operations (delegates to PreviewContainers)
+    ///
+    /// This is a compatibility bridge. New code should use `PreviewContainers.managers()` directly.
+    @available(*, deprecated, message: "Use PreviewContainers.managers() for new code")
+    public static func createManagers(for container: ModelContainer) -> (
+        gameManager: SwiftDataGameManager,
+        liveGameManager: LiveGameStateManager
+    ) {
+        return PreviewContainers.managers(for: container)
+    }
+}

@@ -5,20 +5,18 @@ import SwiftUI
 @MainActor
 struct LiveView: View {
     @Bindable var game: Game
-    let gameManager: SwiftDataGameManager
     @Environment(LiveGameStateManager.self) private var activeGameStateManager
     @Environment(\.modelContext) private var modelContext
+    @Environment(SwiftDataGameManager.self) private var gameManager
     let onDismiss: (() -> Void)?
     var animation: Namespace.ID?
 
     init(
         game: Game,
-        gameManager: SwiftDataGameManager,
         onDismiss: (() -> Void)? = nil,
         animation: Namespace.ID? = nil
     ) {
         self.game = game
-        self.gameManager = gameManager
         self.onDismiss = onDismiss
         self.animation = animation
     }
@@ -47,12 +45,11 @@ struct LiveView: View {
                 onToggleTimer: toggleTimer
             )
 
-            ForEach(game.teamsWithLabels, id: \.teamNumber) { teamConfig in
+            ForEach(game.teamsWithLabels(context: modelContext), id: \.teamNumber) { teamConfig in
                 SideScoreSection(
                     game: game,
                     teamNumber: teamConfig.teamNumber,
                     teamName: teamConfig.teamName,
-                    gameManager: gameManager,
                     isGameActive: activeGameStateManager.isGameActive,
                     currentTimestamp: activeGameStateManager.elapsedTime,
                     onEventLogged: handleEventLogged
@@ -226,9 +223,9 @@ private extension LiveView {
             return player.primaryColor
         }
         // Fallback to game-provided tint helper
-        if teamName == game.teamsWithLabels.first?.teamName {
+        if teamName == game.teamsWithLabels(context: modelContext).first?.teamName {
             return game.teamTintColor(for: 1)
-        } else if teamName == game.teamsWithLabels.dropFirst().first?.teamName {
+        } else if teamName == game.teamsWithLabels(context: modelContext).dropFirst().first?.teamName {
             return game.teamTintColor(for: 2)
         }
         return Color.accentColor
@@ -236,50 +233,47 @@ private extension LiveView {
 }
 
 #Preview {
-    let env = PreviewEnvironment.liveGame()
-    let ctx = env.container.mainContext
+    let container = PreviewContainers.liveGame()
+    let (gameManager, liveGameManager) = PreviewContainers.managers(for: container)
+    let ctx = container.mainContext
     let fetched = (try? ctx.fetch(FetchDescriptor<Game>())) ?? []
     let game = fetched.first(where: { $0.gameState == .playing }) ?? fetched.first ?? Game(gameType: .recreational)
 
     NavigationStack {
-        LiveView(
-            game: game,
-            gameManager: SwiftDataGameManager(storage: env.storage)
-        )
+        LiveView(game: game)
     }
-    .modelContainer(env.container)
-    .environment(env.activeGameStateManager)
+    .modelContainer(container)
+    .environment(liveGameManager)
+    .environment(gameManager)
 }
 
 #Preview("Singles Game") {
-    let env = PreviewEnvironment.liveGame()
-    let ctx = env.container.mainContext
+    let container = PreviewContainers.liveGame()
+    let (gameManager, liveGameManager) = PreviewContainers.managers(for: container)
+    let ctx = container.mainContext
     let fetched = (try? ctx.fetch(FetchDescriptor<Game>())) ?? []
     let game = fetched.first(where: { $0.gameVariation?.teamSize == 1 }) ?? fetched.first ?? Game(gameType: .recreational)
 
     NavigationStack {
-        LiveView(
-            game: game,
-            gameManager: SwiftDataGameManager(storage: env.storage)
-        )
+        LiveView(game: game)
     }
-    .modelContainer(env.container)
-    .environment(env.activeGameStateManager)
+    .modelContainer(container)
+    .environment(liveGameManager)
+    .environment(gameManager)
 }
 
 #Preview("Teams Game") {
-    let env = PreviewEnvironment.liveGame()
-    let ctx = env.container.mainContext
+    let container = PreviewContainers.liveGame()
+    let (gameManager, liveGameManager) = PreviewContainers.managers(for: container)
+    let ctx = container.mainContext
     let fetched = (try? ctx.fetch(FetchDescriptor<Game>())) ?? []
     let game = fetched.first(where: { $0.gameVariation?.teamSize ?? $0.gameType.defaultTeamSize > 1 }) ?? fetched.first ?? Game(gameType: .recreational)
 
     NavigationStack {
-        LiveView(
-            game: game,
-            gameManager: SwiftDataGameManager(storage: env.storage)
-        )
+        LiveView(game: game)
     }
-    .modelContainer(env.container)
-    .environment(env.activeGameStateManager)
+    .modelContainer(container)
+    .environment(liveGameManager)
+    .environment(gameManager)
 }
 

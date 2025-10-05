@@ -86,7 +86,10 @@ struct IconAvatarContent: View {
               .accessibilityAddTraits(selectedIconName == iconName ? .isSelected : [])
             }
           }
+          .scrollTargetLayout()
         }
+        .scrollTargetBehavior(.viewAligned)
+        .scrollClipDisabled()
       }
 
     }

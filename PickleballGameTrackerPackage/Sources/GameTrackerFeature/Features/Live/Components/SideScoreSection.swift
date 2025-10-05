@@ -7,17 +7,16 @@ struct SideScoreSection: View {
     @Bindable var game: Game
     let teamNumber: Int
     let teamName: String
-    let gameManager: SwiftDataGameManager
     let isGameActive: Bool
     let currentTimestamp: TimeInterval
     let onEventLogged: ((GameEvent) -> Void)?
     @Environment(\.modelContext) private var modelContext
+    @Environment(SwiftDataGameManager.self) private var gameManager
 
     init(
         game: Game,
         teamNumber: Int,
         teamName: String,
-        gameManager: SwiftDataGameManager,
         isGameActive: Bool,
         currentTimestamp: TimeInterval,
         onEventLogged: ((GameEvent) -> Void)? = nil
@@ -25,7 +24,6 @@ struct SideScoreSection: View {
         self.game = game
         self.teamNumber = teamNumber
         self.teamName = teamName
-        self.gameManager = gameManager
         self.isGameActive = isGameActive
         self.currentTimestamp = currentTimestamp
         self.onEventLogged = onEventLogged
@@ -50,7 +48,6 @@ struct SideScoreSection: View {
                 teamName: teamName,
                 isGameActive: isGameActive,
                 showTapIndicator: game.gameState == .playing || game.gameState == .paused,
-                gameManager: gameManager,
                 tintOverride: teamTintColor
             )
             .animation(
@@ -63,7 +60,6 @@ struct SideScoreSection: View {
                     game: game,
                     currentTimestamp: currentTimestamp,
                     tintColor: teamTintColor,
-                    gameManager: gameManager,
                     teamNumber: teamNumber,
                     onEventLogged: onEventLogged
                 )
@@ -80,16 +76,15 @@ struct SideScoreSection: View {
 @MainActor
 private struct SideScorePreviewHost: View {
     @Bindable var game: Game
-    let gameManager: SwiftDataGameManager
+    @Environment(\.modelContext) private var modelContext
 
     var body: some View {
         VStack(spacing: DesignSystem.Spacing.md) {
-            ForEach(game.teamsWithLabels, id: \.teamNumber) { teamConfig in
+            ForEach(game.teamsWithLabels(context: modelContext), id: \.teamNumber) { teamConfig in
                 SideScoreSection(
                     game: game,
                     teamNumber: teamConfig.teamNumber,
                     teamName: teamConfig.teamName,
-                    gameManager: gameManager,
                     isGameActive: true,
                     currentTimestamp: 60.0
                 )
@@ -99,21 +94,25 @@ private struct SideScorePreviewHost: View {
 }
 
 #Preview("Random Player") {
-    let env = PreviewEnvironment.liveGame()
-    let context = env.container.mainContext
+    let container = PreviewContainers.liveGame()
+    let (gameManager, _) = PreviewContainers.managers(for: container)
+    let context = container.mainContext
     let game: Game = (try? context.fetch(FetchDescriptor<Game>()).first(where: { $0.gameVariation?.teamSize == 1 }))
         ?? ((try? context.fetch(FetchDescriptor<Game>()))?.first ?? Game(gameType: .recreational))
 
-    SideScorePreviewHost(game: game, gameManager: env.gameManager)
-        .modelContainer(env.container)
+    SideScorePreviewHost(game: game)
+        .modelContainer(container)
+        .environment(gameManager)
 }
 
 #Preview("Random Team") {
-    let env = PreviewEnvironment.liveGame()
-    let context = env.container.mainContext
+    let container = PreviewContainers.liveGame()
+    let (gameManager, _) = PreviewContainers.managers(for: container)
+    let context = container.mainContext
     let game: Game = (try? context.fetch(FetchDescriptor<Game>()).first(where: { ($0.gameVariation?.teamSize ?? $0.gameType.defaultTeamSize) > 1 }))
         ?? ((try? context.fetch(FetchDescriptor<Game>()))?.first ?? Game(gameType: .recreational))
 
-    SideScorePreviewHost(game: game, gameManager: env.gameManager)
-        .modelContainer(env.container)
+    SideScorePreviewHost(game: game)
+        .modelContainer(container)
+        .environment(gameManager)
 }

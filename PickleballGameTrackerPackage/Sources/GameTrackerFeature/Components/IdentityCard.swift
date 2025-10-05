@@ -26,13 +26,17 @@ struct IdentityCard: View {
       switch self {
       case .player(let player, let teamCount):
         let skill: String
-        let skillLevel: PlayerSkillLevel = player.skillLevel
-        switch skillLevel {
-        case .beginner: skill = "Beginner"
-        case .intermediate: skill = "Intermediate"
-        case .advanced: skill = "Advanced"
-        case .expert: skill = "Expert"
-        case .unknown: skill = "Skill Unspecified"
+        if player.isGuest {
+          skill = "Guest"
+        } else {
+          let skillLevel: PlayerSkillLevel = player.skillLevel
+          switch skillLevel {
+          case .beginner: skill = "Beginner"
+          case .intermediate: skill = "Intermediate"
+          case .advanced: skill = "Advanced"
+          case .expert: skill = "Expert"
+          case .unknown: skill = "Skill Unspecified"
+          }
         }
         if let teams = teamCount {
           return "\(skill) • \(teams) team\(teams == 1 ? "" : "s")"

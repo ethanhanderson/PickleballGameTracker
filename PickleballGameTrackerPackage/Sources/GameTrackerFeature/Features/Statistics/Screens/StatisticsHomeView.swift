@@ -6,10 +6,10 @@ import SwiftUI
 struct StatisticsHomeView: View {
   var gameId: String? = nil
   var gameTypeId: String? = nil
-  @State private var path: [StatDetailDestination] = []
+  @State private var navigationState = AppNavigationState()
 
   var body: some View {
-    NavigationStack(path: $path) {
+    NavigationStack(path: $navigationState.navigationPath) {
       ScrollView {
         VStack(spacing: 24) {
           // Results
@@ -17,6 +17,11 @@ struct StatisticsHomeView: View {
             NavigationLink(value: StatDetailDestination.winRate(filters: filters)) {
               StatNavCard(title: "Win rate", subtitle: "Overall", systemImage: "medal")
             }
+            .simultaneousGesture(
+              TapGesture().onEnded {
+                navigationState.trackStatNavigation(.winRate(filters: filters))
+              }
+            )
             .accessibilityIdentifier("NavLink.Statistics.winRate")
           }
 
@@ -27,6 +32,11 @@ struct StatisticsHomeView: View {
                 title: "Serve win %", subtitle: "Points won on serve",
                 systemImage: "rectangle.portrait.and.arrow.right")
             }
+            .simultaneousGesture(
+              TapGesture().onEnded {
+                navigationState.trackStatNavigation(.serveWin(filters: filters))
+              }
+            )
             .accessibilityIdentifier("NavLink.Statistics.serveWin")
           }
 
@@ -37,6 +47,11 @@ struct StatisticsHomeView: View {
                 title: "Win rate (7/30d)", subtitle: "Trend",
                 systemImage: "chart.line.uptrend.xyaxis")
             }
+            .simultaneousGesture(
+              TapGesture().onEnded {
+                navigationState.trackStatNavigation(.trends(filters: filters))
+              }
+            )
             .accessibilityIdentifier("NavLink.Statistics.trends")
           }
 
@@ -45,6 +60,11 @@ struct StatisticsHomeView: View {
             NavigationLink(value: StatDetailDestination.streaks(filters: filters)) {
               StatNavCard(title: "Current streak", subtitle: "Wins in a row", systemImage: "flame")
             }
+            .simultaneousGesture(
+              TapGesture().onEnded {
+                navigationState.trackStatNavigation(.streaks(filters: filters))
+              }
+            )
             .accessibilityIdentifier("NavLink.Statistics.streaks")
           }
 
@@ -60,9 +80,9 @@ struct StatisticsHomeView: View {
               .foregroundStyle(.secondary)
           }
         }
-        .padding(.horizontal)
-        .padding(.vertical, 16)
       }
+      .contentMargins(.horizontal, DesignSystem.Spacing.md, for: .scrollContent)
+      .contentMargins(.vertical, 16, for: .scrollContent)
       .navigationTitle("Statistics")
       .viewContainerBackground()
       .navigationDestination(for: StatDetailDestination.self) { destination in
@@ -79,10 +99,9 @@ struct StatisticsHomeView: View {
       }
       .task(id: gameId ?? "\(gameTypeId ?? "")") {
         if gameId != nil || gameTypeId != nil {
-          // Navigate directly to default detail when pre-filtered via deep link
-          path = [.winRate(filters: filters)]
+          navigationState.navigateToStatDetail(.winRate(filters: filters))
         } else {
-          path.removeAll()
+          navigationState.popToRoot()
         }
       }
     }
@@ -96,20 +115,20 @@ struct StatisticsHomeView: View {
 
 #Preview("With Live Game Data") {
   StatisticsHomeView()
-    .minimalPreview(environment: PreviewEnvironment.statistics())
+    .modelContainer(PreviewContainers.standard())
 }
 
 #Preview("Deep Link Context") {
   StatisticsHomeView(gameId: "demo-game-id", gameTypeId: "singles")
-    .minimalPreview(environment: PreviewEnvironment.statistics())
+    .modelContainer(PreviewContainers.standard())
 }
 
 #Preview("Empty State") {
   StatisticsHomeView()
-    .minimalPreview(environment: PreviewEnvironment.empty())
+    .modelContainer(PreviewContainers.empty())
 }
 
 #Preview("Rich Statistics Data") {
   StatisticsHomeView()
-    .minimalPreview(environment: PreviewEnvironment.statistics())
+    .modelContainer(PreviewContainers.standard())
 }
