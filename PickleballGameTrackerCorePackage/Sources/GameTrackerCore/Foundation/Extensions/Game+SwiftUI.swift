@@ -26,7 +26,6 @@ extension Game {
   /// Array of team configurations for dynamic UI rendering
   /// Requires ModelContext to resolve participant names from roster
   public func teamsWithLabels(context: ModelContext) -> [TeamConfig] {
-    // Try to resolve from stored participant data
     switch participantMode {
     case .players:
       if let side1Players = resolveSide1Players(context: context),
@@ -38,6 +37,7 @@ extension Game {
           TeamConfig(teamNumber: 2, teamName: side2Name)
         ]
       }
+      
     case .teams:
       if let team1 = resolveSide1Team(context: context),
          let team2 = resolveSide2Team(context: context) {
@@ -46,58 +46,40 @@ extension Game {
           TeamConfig(teamNumber: 2, teamName: team2.name)
         ]
       }
+      
     case .anonymous:
       break
     }
     
-    // Fallback: parse from variation name (for legacy games)
-    if let name = gameVariation?.name {
-      let parts = name.split(separator: " vs ")
-      if parts.count == 2 {
-        let a = String(parts[0]).trimmingCharacters(in: .whitespacesAndNewlines)
-        let b = String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
-        if !a.isEmpty && !b.isEmpty {
-          return [
-            TeamConfig(teamNumber: 1, teamName: a),
-            TeamConfig(teamNumber: 2, teamName: b)
-          ]
-        }
-      }
-    }
-    
-    // Final fallback
     return [
       TeamConfig(teamNumber: 1, teamName: "Team 1"),
       TeamConfig(teamNumber: 2, teamName: "Team 2")
     ]
   }
 
-  /// Convenience property for views without ModelContext (uses parsing fallback)
+  /// Convenience property for views without ModelContext
   public var teamsWithLabels: [TeamConfig] {
-    // Legacy behavior - parse from variation name
-    if let name = gameVariation?.name {
-      let parts = name.split(separator: " vs ")
-      if parts.count == 2 {
-        let a = String(parts[0]).trimmingCharacters(in: .whitespacesAndNewlines)
-        let b = String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
-        if !a.isEmpty && !b.isEmpty {
-          return [
-            TeamConfig(teamNumber: 1, teamName: a),
-            TeamConfig(teamNumber: 2, teamName: b)
-          ]
-        }
-      }
-    }
+    // Fallback to default labels
     return [
       TeamConfig(teamNumber: 1, teamName: "Team 1"),
       TeamConfig(teamNumber: 2, teamName: "Team 2")
     ]
   }
 
-  /// Get the tint color for a team
-  public func teamTintColor(for teamNumber: Int) -> Color {
-    let defaultColor = Color.green
-    return defaultColor
+  /// Get the accent color for a team using the current roster associations
+  public func teamTintColor(for teamNumber: Int, context: ModelContext) -> Color {
+    switch participantMode {
+    case .teams:
+      let team = (teamNumber == 1) ? resolveSide1Team(context: context) : resolveSide2Team(context: context)
+      if let team { return team.accentColor }
+    case .players:
+      let players = (teamNumber == 1) ? resolveSide1Players(context: context) : resolveSide2Players(context: context)
+      if let first = players?.first { return first.accentColor }
+    case .anonymous:
+      break
+    }
+    // Fallback to game type color if roster cannot be resolved
+    return gameType.color
   }
 }
 
@@ -147,119 +129,25 @@ extension Game {
 // MARK: - PlayerProfile SwiftUI Extensions
 
 extension PlayerProfile {
-  /// The tint color for the player's icon
-  public var iconTintColorValue: Color? {
-    if isGuest {
-      return .green
-    }
-    return accentColor
+  /// Non-optional accent color derived from stored RGBA
+  public var accentColor: Color {
+    accentColorStored.swiftUIColor
   }
 
-  /// The accent color for the player
-  public var accentColor: Color? {
-    get {
-      guard let stored = accentColorStored else { return nil }
-      return Color(.sRGB,
-                   red: Double(stored.red),
-                   green: Double(stored.green),
-                   blue: Double(stored.blue),
-                   opacity: Double(stored.alpha))
-    }
-    set {
-      if let c = newValue {
-        // Convert to sRGB components via UIColor bridging
-        #if canImport(UIKit)
-        let ui = UIColor(c)
-        if let cg = ui.cgColor.converted(to: CGColorSpace(name: CGColorSpace.sRGB)!, intent: .defaultIntent, options: nil),
-           let comps = cg.components, comps.count >= 3 {
-          let a = comps.count >= 4 ? comps[3] : 1
-          accentColorStored = StoredRGBAColor(
-            red: Float(comps[0]),
-            green: Float(comps[1]),
-            blue: Float(comps[2]),
-            alpha: Float(a)
-          )
-        }
-        #endif
-      } else {
-        accentColorStored = nil
-      }
-    }
-  }
-
-  /// A default color for the player based on their skill level
-  public var defaultColor: Color {
-    if isGuest {
-      return .green
-    }
-    switch skillLevel {
-    case .beginner:
-      return .green
-    case .intermediate:
-      return .blue
-    case .advanced:
-      return .orange
-    case .expert:
-      return .red
-    case .unknown:
-      return .gray
-    }
-  }
-
-  /// The primary color to use for the player (custom tint color or default)
-  public var primaryColor: Color {
-    iconTintColorValue ?? defaultColor
-  }
+  /// For UI usages expecting a primary color, use accentColor
+  public var primaryColor: Color { accentColor }
 }
 
 // MARK: - TeamProfile SwiftUI Extensions
 
 extension TeamProfile {
-  /// The tint color for the team's icon
-  public var iconTintColorValue: Color? {
-    accentColor
+  /// Non-optional accent color derived from stored RGBA
+  public var accentColor: Color {
+    accentColorStored.swiftUIColor
   }
 
-  /// The accent color for the team
-  public var accentColor: Color? {
-    get {
-      guard let stored = accentColorStored else { return nil }
-      return Color(.sRGB,
-                   red: Double(stored.red),
-                   green: Double(stored.green),
-                   blue: Double(stored.blue),
-                   opacity: Double(stored.alpha))
-    }
-    set {
-      if let c = newValue {
-        #if canImport(UIKit)
-        let ui = UIColor(c)
-        if let cg = ui.cgColor.converted(to: CGColorSpace(name: CGColorSpace.sRGB)!, intent: .defaultIntent, options: nil),
-           let comps = cg.components, comps.count >= 3 {
-          let a = comps.count >= 4 ? comps[3] : 1
-          accentColorStored = StoredRGBAColor(
-            red: Float(comps[0]),
-            green: Float(comps[1]),
-            blue: Float(comps[2]),
-            alpha: Float(a)
-          )
-        }
-        #endif
-      } else {
-        accentColorStored = nil
-      }
-    }
-  }
-
-  /// A default color for the team
-  public var defaultColor: Color {
-    .green
-  }
-
-  /// The primary color to use for the team (custom tint color or default)
-  public var primaryColor: Color {
-    iconTintColorValue ?? defaultColor
-  }
+  /// For UI usages expecting a primary color, use accentColor
+  public var primaryColor: Color { accentColor }
 }
 
 // MARK: - GameType SwiftUI Extensions

@@ -1,0 +1,8 @@
+---
+alwaysApply: true
+---
+# Agent Development Rules
+
+When writing new code, only write comments that add crutial context to a complex block of code. Never write comments describing what a block of code does when the purpose of the code can be understood by reading the code. When editing a file, take time to clean up these kinds of comments from it.
+
+Never create additional MD files as part of your response, simply respond with your findings or conclusions.

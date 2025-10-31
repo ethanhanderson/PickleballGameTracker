@@ -69,6 +69,7 @@ struct GameEventsView: View {
 private struct GameEventRow: View {
     let event: GameEvent
     let game: Game
+  @Environment(\.modelContext) private var modelContext
 
     @State private var isExpanded = false
 
@@ -230,7 +231,6 @@ private struct GameEventRow: View {
     }
 
     private func teamColor(for teamNumber: Int) -> Color {
-        // Without embedded roster in Core v1, fallback to team tint color helper
-        return game.teamTintColor(for: teamNumber)
+        game.teamTintColor(for: teamNumber, context: modelContext)
     }
 }

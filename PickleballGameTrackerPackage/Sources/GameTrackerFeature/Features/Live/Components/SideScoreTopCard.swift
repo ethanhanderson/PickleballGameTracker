@@ -7,7 +7,7 @@ struct SideScoreTopCard: View {
     @Bindable var game: Game
     let teamNumber: Int
     let teamName: String
-    let isGameActive: Bool
+    let isGameLive: Bool
     let showTapIndicator: Bool
     let tintOverride: Color?
 
@@ -19,9 +19,12 @@ struct SideScoreTopCard: View {
     @State private var previousScore: Int = 0
     
     @Environment(SwiftDataGameManager.self) private var gameManager
+    @Environment(LiveGameStateManager.self) private var activeGameStateManager
+    @Environment(LiveSyncCoordinator.self) private var syncCoordinator
+    @Environment(\.modelContext) private var modelContext
 
     private var cardTintColor: Color {
-        tintOverride ?? game.teamTintColor(for: teamNumber)
+        tintOverride ?? game.teamTintColor(for: teamNumber, context: modelContext)
     }
 
     private var score: Int { game.score(for: teamNumber) }
@@ -74,7 +77,7 @@ struct SideScoreTopCard: View {
                         label: "MATCH POINT",
                         tint: cardTintColor.opacity(0.14),
                         visible: isAtMatchPoint,
-                        animate: !hasAppeared || isGameActive,
+                        animate: !hasAppeared || isGameLive,
                         triggerAnimationId: matchAnimationTick,
                         accessibilityId:
                             "SideScoreCard.status.matchPoint.team\(teamNumber)",
@@ -100,7 +103,7 @@ struct SideScoreTopCard: View {
                             serveLabelVisible = isVisible
                         },
                         shouldDefer: {
-                            (isAtMatchPoint && isGameActive)
+                            (isAtMatchPoint && isGameLive)
                                 && matchLabelVisible
                         }
                     )
@@ -121,12 +124,12 @@ struct SideScoreTopCard: View {
                         )
                         .foregroundStyle(.primary)
                         .monospacedDigit()
-                        .scaleEffect(isGameActive ? 1.0 : 0.85)
-                        .opacity(isGameActive ? 1.0 : 0.5)
+                        .scaleEffect(isGameLive ? 1.0 : 0.85)
+                        .opacity(isGameLive ? 1.0 : 0.5)
                         .contentTransition(.numericText(countsDown: scoreIsDecreasing))
                         .animation(
                             .easeInOut(duration: 0.3),
-                            value: isGameActive
+                            value: isGameLive
                         )
                         .accessibilityIdentifier(
                             "SideScoreCard.score.team\(teamNumber)"
@@ -143,7 +146,7 @@ struct SideScoreTopCard: View {
         .padding(.leading, DesignSystem.Spacing.md)
         .padding(.trailing, DesignSystem.Spacing.lg)
         .glassEffect(
-            .regular.tint(cardTintColor.opacity(isGameActive ? 0.2 : 0.05)).interactive(),
+            .regular.tint(cardTintColor.opacity(isGameLive ? 0.2 : 0.05)).interactive(),
             in: .capsule
         )
         .contentShape(.capsule)
@@ -160,6 +163,15 @@ struct SideScoreTopCard: View {
                     // Always delegate to manager; it enforces allowed states
                     if game.currentServer != teamNumber {
                         try await gameManager.setServer(to: teamNumber, in: game)
+                        
+                        // Publish server change to sync with companion device
+                        Task { @MainActor in
+                            try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
+                                gameId: game.id,
+                                timestamp: activeGameStateManager.elapsedTime,
+                                operation: .setServer(team: teamNumber)
+                            ))
+                        }
                     }
                 } catch {
                     print("Failed to update server: \(error.localizedDescription)")

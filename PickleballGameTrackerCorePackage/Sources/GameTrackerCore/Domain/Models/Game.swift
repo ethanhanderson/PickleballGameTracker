@@ -19,8 +19,6 @@ public final class Game: Hashable {
   @Attribute(.unique) public var id: UUID
   public var gameType: GameType
 
-  public var gameVariation: GameVariation?
-
   public var score1: Int
   public var score2: Int
   public var isCompleted: Bool
@@ -37,11 +35,16 @@ public final class Game: Hashable {
   public var gameState: GameState
   public var isFirstServiceSequence: Bool
 
+  // Rule fields (copied from GameRules at game creation)
   public var winningScore: Int
   public var winByTwo: Bool
-
   public var kitchenRule: Bool
   public var doubleBounceRule: Bool
+  public var sideSwitchingRule: SideSwitchingRule
+  public var servingRotation: ServingRotation
+  public var scoringType: ScoringType
+  public var timeLimit: TimeInterval?
+  public var maxRallies: Int?
 
   public var notes: String?
 
@@ -54,11 +57,13 @@ public final class Game: Hashable {
   public var side2PlayerIds: [UUID] = []
   public var side1TeamId: UUID?
   public var side2TeamId: UUID?
+  
+  public var sessionId: UUID?
 
   public init(
     id: UUID = UUID(),
     gameType: GameType,
-    gameVariation: GameVariation? = nil,
+    rules: GameRules? = nil,
     score1: Int = 0,
     score2: Int = 0,
     isCompleted: Bool = false,
@@ -75,11 +80,15 @@ public final class Game: Hashable {
     winByTwo: Bool? = nil,
     kitchenRule: Bool? = nil,
     doubleBounceRule: Bool? = nil,
+    sideSwitchingRule: SideSwitchingRule? = nil,
+    servingRotation: ServingRotation? = nil,
+    scoringType: ScoringType? = nil,
+    timeLimit: TimeInterval? = nil,
+    maxRallies: Int? = nil,
     notes: String? = nil
   ) {
     self.id = id
     self.gameType = gameType
-    self.gameVariation = gameVariation
     self.score1 = score1
     self.score2 = score2
     self.isCompleted = isCompleted
@@ -95,21 +104,32 @@ public final class Game: Hashable {
     self.gameState = gameState
     self.isFirstServiceSequence = isFirstServiceSequence
 
-    self.winningScore = winningScore ?? gameVariation?.winningScore ?? 11
-    self.winByTwo = winByTwo ?? gameVariation?.winByTwo ?? true
-    self.kitchenRule = kitchenRule ?? gameVariation?.kitchenRule ?? true
-    self.doubleBounceRule = doubleBounceRule ?? gameVariation?.doubleBounceRule ?? true
+    let defaultRules = rules ?? gameType.defaultRules
+    self.winningScore = winningScore ?? defaultRules.winningScore
+    self.winByTwo = winByTwo ?? defaultRules.winByTwo
+    self.kitchenRule = kitchenRule ?? defaultRules.kitchenRule
+    self.doubleBounceRule = doubleBounceRule ?? defaultRules.doubleBounceRule
+    self.sideSwitchingRule = sideSwitchingRule ?? defaultRules.sideSwitchingRule
+    self.servingRotation = servingRotation ?? defaultRules.servingRotation
+    self.scoringType = scoringType ?? defaultRules.scoringType
+    self.timeLimit = timeLimit ?? defaultRules.timeLimit
+    self.maxRallies = maxRallies ?? defaultRules.maxRallies
     self.notes = notes
   }
 
-  public convenience init(gameVariation: GameVariation) {
+  public convenience init(gameType: GameType, rules: GameRules) {
     self.init(
-      gameType: gameVariation.gameType,
-      gameVariation: gameVariation,
-      winningScore: gameVariation.winningScore,
-      winByTwo: gameVariation.winByTwo,
-      kitchenRule: gameVariation.kitchenRule,
-      doubleBounceRule: gameVariation.doubleBounceRule
+      gameType: gameType,
+      rules: rules,
+      winningScore: rules.winningScore,
+      winByTwo: rules.winByTwo,
+      kitchenRule: rules.kitchenRule,
+      doubleBounceRule: rules.doubleBounceRule,
+      sideSwitchingRule: rules.sideSwitchingRule,
+      servingRotation: rules.servingRotation,
+      scoringType: rules.scoringType,
+      timeLimit: rules.timeLimit,
+      maxRallies: rules.maxRallies
     )
   }
 }
@@ -185,24 +205,18 @@ extension Game {
     }
   }
 
-  /// Get effective player labels considering variation team sizes
+  /// Get effective player labels based on game type
   public var effectivePlayerLabel1: String {
-    if let variation = gameVariation {
-      return variation.playerLabel1
-    }
     return gameType.playerLabel1
   }
 
   public var effectivePlayerLabel2: String {
-    if let variation = gameVariation {
-      return variation.playerLabel2
-    }
     return gameType.playerLabel2
   }
 
-  /// Get effective team size from variation or game type
+  /// Get effective team size from game type
   public var effectiveTeamSize: Int {
-    return gameVariation?.teamSize ?? gameType.defaultTeamSize
+    return gameType.defaultTeamSize
   }
 
   /// Get the label for the currently serving player
@@ -236,7 +250,7 @@ extension Game {
     let winByTwoSatisfied = !winByTwo || abs(score1 - score2) >= 2
 
     let timeLimitReached: Bool
-    if let timeLimit = gameVariation?.timeLimit,
+    if let timeLimit = timeLimit,
       let duration = duration
     {
       timeLimitReached = duration >= timeLimit
@@ -245,7 +259,7 @@ extension Game {
     }
 
     let maxRalliesReached: Bool
-    if let maxRallies = gameVariation?.maxRallies {
+    if let maxRallies = maxRallies {
       maxRalliesReached = totalRallies >= maxRallies
     } else {
       maxRalliesReached = false
@@ -275,16 +289,11 @@ extension Game {
       side: SideOfCourt
     )
   {
-    let shouldSwitchSide: Bool
-    if let variation = gameVariation {
-      shouldSwitchSide = variation.sideSwitchingRule.shouldSwitchSides(
-        currentScore1: score1,
-        currentScore2: score2,
-        winningScore: winningScore
-      )
-    } else {
-      shouldSwitchSide = (score1 + score2) == 6
-    }
+    let shouldSwitchSide = sideSwitchingRule.shouldSwitchSides(
+      currentScore1: score1,
+      currentScore2: score2,
+      winningScore: winningScore
+    )
 
     let newSide: SideOfCourt =
       shouldSwitchSide ? (sideOfCourt == .side1 ? .side2 : .side1) : sideOfCourt

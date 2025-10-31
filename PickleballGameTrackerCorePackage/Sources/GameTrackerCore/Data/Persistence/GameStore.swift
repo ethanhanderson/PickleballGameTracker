@@ -33,8 +33,8 @@ public struct GameStore: Sendable {
 
   @MainActor
   @discardableResult
-  public func create(variation: GameVariation) throws -> Game {
-    let game = Game(gameVariation: variation)
+  public func create(type: GameType, rules: GameRules) throws -> Game {
+    let game = Game(gameType: type, rules: rules)
     try repo.insert(game)
     try repo.save()
     return game

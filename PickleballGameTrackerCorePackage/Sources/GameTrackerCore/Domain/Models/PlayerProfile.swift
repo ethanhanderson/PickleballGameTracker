@@ -19,7 +19,7 @@ public final class PlayerProfile: Hashable {
   public var isGuest: Bool
   public var avatarImageData: Data?
   public var iconSymbolName: String?
-  public var accentColorStored: StoredRGBAColor?
+  public var accentColorStored: StoredRGBAColor
   public var createdDate: Date
   public var lastModified: Date
 
@@ -38,7 +38,7 @@ public final class PlayerProfile: Hashable {
     isGuest: Bool = false,
     avatarImageData: Data? = nil,
     iconSymbolName: String? = nil,
-    accentColor: StoredRGBAColor? = nil,
+    accentColor: StoredRGBAColor,
     skillLevel: PlayerSkillLevel = .unknown,
     preferredHand: PlayerHandedness = .unknown,
     createdDate: Date = Date(),

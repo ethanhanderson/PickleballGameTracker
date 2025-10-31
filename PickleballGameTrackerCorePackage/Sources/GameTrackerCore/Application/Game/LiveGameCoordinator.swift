@@ -4,7 +4,7 @@ import SwiftData
 @MainActor
 public protocol LiveGameCoordinator: AnyObject {
   var currentGame: Game? { get }
-  func setCurrentGame(_ game: Game)
+  func setCurrentGame(_ game: Game) async
   func incrementServeNumber()
   func triggerServeChangeHaptic()
   func gameStateDidChange(to gameState: GameState)

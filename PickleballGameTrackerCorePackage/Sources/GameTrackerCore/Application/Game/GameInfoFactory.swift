@@ -61,8 +61,8 @@ public final class GameInfoFactory {
             kitchenRule: game.kitchenRule,
             doubleBounceRule: game.doubleBounceRule,
             effectiveTeamSize: game.effectiveTeamSize,
-            hasCustomVariation: game.gameVariation != nil,
-            variationName: game.gameVariation?.name
+            hasCustomVariation: false,
+            variationName: nil
         )
     }
 

@@ -64,6 +64,7 @@ struct NavigationDestinationFactory {
 private struct GameDetailDestinationView: View {
   @Environment(SwiftDataGameManager.self) private var gameManager
   @Environment(LiveGameStateManager.self) private var activeGameStateManager
+  @Environment(LiveSyncCoordinator.self) private var syncCoordinator
 
   let gameType: GameType
   @Bindable var navigationState: AppNavigationState
@@ -71,22 +72,13 @@ private struct GameDetailDestinationView: View {
   var body: some View {
     GameDetailView(
       gameType: gameType,
-      onStartGame: { variation, matchup in
+      onStartGame: { gameType, rules, matchup in
         Task {
           do {
             let config = GameStartConfiguration(
               gameType: gameType,
-              teamSize: TeamSize(playersPerSide: matchup.teamSize) ?? .doubles,
-              participants: {
-                switch matchup.mode {
-                case .players(let a, let b):
-                  return Participants(side1: .players(a), side2: .players(b))
-                case .teams(let t1, let t2):
-                  return Participants(side1: .team(t1), side2: .team(t2))
-                }
-              }(),
-              notes: nil,
-              variation: variation
+              matchup: matchup,
+              rules: rules
             )
             _ = try await activeGameStateManager.startNewGame(with: config)
             Log.event(
@@ -99,6 +91,15 @@ private struct GameDetailDestinationView: View {
               name: Notification.Name("OpenLiveGameRequested"),
               object: nil
             )
+
+            // Mirror game start on companion
+            // 1) Publish roster snapshot first to ensure identities exist
+            let rosterBuilder = RosterSnapshotBuilder(storage: SwiftDataStorage.shared)
+            if let roster = try? rosterBuilder.build(includeArchived: false) {
+              try? await syncCoordinator.publishRoster(roster)
+            }
+            // 2) Publish start configuration so watch can start locally with same setup
+            try? await syncCoordinator.publishStart(config)
           } catch {
             Log.error(error, event: .saveFailed, metadata: ["action": "startNewGame"])
           }

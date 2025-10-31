@@ -17,6 +17,9 @@
 		<string>$(AppIdentifierPrefix)com.ehadev.PickleballGameTracker</string>
 	</array>
 
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
+
 	<!--
 	Additional entitlements can be uncommented as needed:
 
@@ -27,9 +30,6 @@
 	<true/>
 
 	<key>com.apple.developer.contacts.notes</key>
-	<true/>
-
-	<key>com.apple.developer.usernotifications.time-sensitive</key>
 	<true/>
 	-->
 </dict>

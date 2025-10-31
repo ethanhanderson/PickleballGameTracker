@@ -371,7 +371,7 @@ struct CurrentMatchupSection: View {
 @MainActor
 struct SetupView: View {
     let gameType: GameType
-    let onStartGame: (GameVariation, MatchupSelection) -> Void
+    let onStartGame: (GameType, GameRules?, MatchupSelection) -> Void
 
     @Query(filter: #Predicate<PlayerProfile> { !$0.isArchived && !$0.isGuest })
     private var allPlayers: [PlayerProfile]
@@ -391,7 +391,7 @@ struct SetupView: View {
     @State private var errorMessage = ""
 
     @State private var showingLiveGameConfirm = false
-    @State private var pendingVariation: GameVariation?
+    @State private var pendingRules: GameRules?
     @State private var pendingMatchup: MatchupSelection?
 
     @State private var showPlayerSheet = false
@@ -535,7 +535,7 @@ struct SetupView: View {
 
     init(
         gameType: GameType,
-        onStartGame: @escaping (GameVariation, MatchupSelection) -> Void
+        onStartGame: @escaping (GameType, GameRules?, MatchupSelection) -> Void
     ) {
         self.gameType = gameType
         self.onStartGame = onStartGame
@@ -643,7 +643,7 @@ struct SetupView: View {
                             "End current game and start new",
                             role: .destructive
                         ) {
-                            guard let variation = pendingVariation,
+                            guard let rules = pendingRules,
                                 let matchup = pendingMatchup
                             else { return }
                             Task { @MainActor in
@@ -659,15 +659,15 @@ struct SetupView: View {
                                         ]
                                     )
                                 }
-                                onStartGame(variation, matchup)
-                                pendingVariation = nil
+                                onStartGame(gameType, rules, matchup)
+                                pendingRules = nil
                                 pendingMatchup = nil
                             }
                         }
 
                         Button("Keep current game") {
                             dismiss()
-                            pendingVariation = nil
+                            pendingRules = nil
                             pendingMatchup = nil
                         }
                     } message: {
@@ -827,17 +827,17 @@ struct SetupView: View {
         Task { @MainActor in
             defer { isCreatingGame = false }
             do {
-                let (variation, matchup) =
-                    try await createGameVariationAndMatchup()
+                let (rules, matchup) =
+                    try await createGameRulesAndMatchup()
                 // If there is a live game, confirm with the user before starting
-                if activeGameStateManager.hasActiveGame {
-                    pendingVariation = variation
+                if activeGameStateManager.hasLiveGame {
+                    pendingRules = rules
                     pendingMatchup = matchup
                     showingLiveGameConfirm = true
                 } else {
-                    onStartGame(variation, matchup)
+                    onStartGame(gameType, rules, matchup)
                 }
-            } catch let error as GameVariationError {
+            } catch let error as GameRulesError {
                 if let suggestion = error.recoverySuggestion {
                     errorMessage =
                         "\(error.localizedDescription)\n\n\(suggestion)"
@@ -853,21 +853,23 @@ struct SetupView: View {
         }
     }
 
-    private func createGameVariationAndMatchup()
-        async throws(GameVariationError)
-        -> (GameVariation, MatchupSelection)
+    private func createGameRulesAndMatchup()
+        async throws(GameRulesError)
+        -> (GameRules?, MatchupSelection)
     {
         guard
             sideASlotsFilled == slotsPerSide && sideBSlotsFilled == slotsPerSide
         else {
-            throw GameVariationError.invalidConfiguration(
+            throw GameRulesError.invalidConfiguration(
                 "Please fill all slots for both sides"
             )
         }
 
+        let rules = gameType.defaultRules
+
         if selectedTeamSize == 1 {
             guard sideAPlayers.count == 1 && sideBPlayers.count == 1 else {
-                throw GameVariationError.invalidConfiguration(
+                throw GameRulesError.invalidConfiguration(
                     "Please select exactly 1 player per side"
                 )
             }
@@ -875,10 +877,6 @@ struct SetupView: View {
             let player1 = sideAPlayers[0]
             let player2 = sideBPlayers[0]
 
-            let variation = try createGameVariation(
-                name: "\(player1.name) vs \(player2.name)",
-                teamSize: 1
-            )
             let matchup = MatchupSelection(
                 teamSize: 1,
                 mode: .players(
@@ -886,56 +884,40 @@ struct SetupView: View {
                     sideB: [player2.id]
                 )
             )
-            return (variation, matchup)
+            return (rules, matchup)
         } else {
             if let team1 = selectedTeam1, let team2 = selectedTeam2 {
-                let variation = try createGameVariation(
-                    name: "\(team1.name) vs \(team2.name)",
-                    teamSize: selectedTeamSize
-                )
                 let matchup = MatchupSelection(
                     teamSize: selectedTeamSize,
                     mode: .teams(team1Id: team1.id, team2Id: team2.id)
                 )
-                return (variation, matchup)
+                return (rules, matchup)
             } else {
                 let sideAPlayerIds: [UUID]
                 let sideBPlayerIds: [UUID]
-                let sideAName: String
-                let sideBName: String
 
                 if let team1 = selectedTeam1 {
                     sideAPlayerIds = team1.players.map { $0.id }
-                    sideAName = team1.name
                 } else {
                     guard sideAPlayers.count == 2 else {
-                        throw GameVariationError.invalidConfiguration(
+                        throw GameRulesError.invalidConfiguration(
                             "Please select 2 players for the first side"
                         )
                     }
                     sideAPlayerIds = sideAPlayers.map { $0.id }
-                    sideAName =
-                        "\(sideAPlayers[0].name) & \(sideAPlayers[1].name)"
                 }
 
                 if let team2 = selectedTeam2 {
                     sideBPlayerIds = team2.players.map { $0.id }
-                    sideBName = team2.name
                 } else {
                     guard sideBPlayers.count == 2 else {
-                        throw GameVariationError.invalidConfiguration(
+                        throw GameRulesError.invalidConfiguration(
                             "Please select 2 players for the second side"
                         )
                     }
                     sideBPlayerIds = sideBPlayers.map { $0.id }
-                    sideBName =
-                        "\(sideBPlayers[0].name) & \(sideBPlayers[1].name)"
                 }
 
-                let variation = try createGameVariation(
-                    name: "\(sideAName) vs \(sideBName)",
-                    teamSize: 2
-                )
                 let matchup = MatchupSelection(
                     teamSize: 2,
                     mode: .players(
@@ -943,27 +925,12 @@ struct SetupView: View {
                         sideB: sideBPlayerIds
                     )
                 )
-                return (variation, matchup)
+                return (rules, matchup)
             }
         }
     }
 
-    private func createGameVariation(name: String, teamSize: Int)
-        throws(GameVariationError) -> GameVariation
-    {
-        try GameVariation.createValidated(
-            name: name,
-            gameType: gameType,
-            teamSize: teamSize,
-            winningScore: gameType.defaultWinningScore,
-            winByTwo: gameType.defaultWinByTwo,
-            kitchenRule: gameType.defaultKitchenRule,
-            doubleBounceRule: gameType.defaultDoubleBounceRule,
-            servingRotation: .standard,
-            sideSwitchingRule: gameType.defaultSideSwitchingRule,
-            isCustom: true
-        )
-    }
+    // removed manual "Start on Watch" flow; normal start triggers cross-device sync
 }
 
 #Preview {
@@ -972,7 +939,7 @@ struct SetupView: View {
     let (_, liveGameManager) = PreviewContainers.managers(for: container)
     let rosterManager = PreviewContainers.rosterManager(for: container)
 
-    SetupView(gameType: randomType) { _, _ in }
+    SetupView(gameType: randomType) { _, _, _ in }
         .modelContainer(container)
         .environment(liveGameManager)
         .environment(rosterManager)

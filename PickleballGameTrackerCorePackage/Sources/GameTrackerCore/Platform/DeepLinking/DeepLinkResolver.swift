@@ -5,6 +5,7 @@ public enum DeepLinkDestination: Sendable, Equatable {
   case author(id: String)
   case completedGame(id: String, token: String?)
   case statistics(gameId: String?, gameTypeId: String?)
+  case setup(gameTypeId: String)
 }
 
 public enum DeepLinkError: LocalizedError, Sendable, Equatable {
@@ -42,7 +43,7 @@ public struct DeepLinkResolver: Sendable {
     let rawPathComponents = components.path.split(separator: "/").map(String.init)
     let host = components.host
 
-    let knownEntities: Set<String> = ["gametype", "author", "game", "stats", "statistics"]
+    let knownEntities: Set<String> = ["gametype", "author", "game", "stats", "statistics", "setup"]
 
     // Determine entity and identifier with smarter precedence:
     // - If host is a known entity (custom scheme like matchtally://stats/...), prefer host
@@ -108,6 +109,11 @@ public struct DeepLinkResolver: Sendable {
       }
 
       return .statistics(gameId: gameId, gameTypeId: gameTypeId)
+    case "setup":
+      // matchtally://setup?gameType=<rawValue>
+      let gameTypeId = components.queryItems?.first(where: { $0.name == "gameType" })?.value ?? identifier
+      guard !gameTypeId.isEmpty else { throw DeepLinkError.missingIdentifier }
+      return .setup(gameTypeId: gameTypeId)
     default:
       throw DeepLinkError.unsupportedRoute
     }

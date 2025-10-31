@@ -18,9 +18,13 @@ public final class PlayerTeamManager {
   public let storage: any SwiftDataStorageProtocol
   private let rosterStore: RosterStore
 
-  public init(storage: any SwiftDataStorageProtocol = SwiftDataStorage.shared) {
+  public init(
+    storage: any SwiftDataStorageProtocol = SwiftDataStorage.shared,
+  ) {
     self.storage = storage
-    self.rosterStore = RosterStore(context: storage.modelContainer.mainContext)
+    self.rosterStore = RosterStore(
+      context: storage.modelContainer.mainContext
+    )
   }
 
   // MARK: - Player CRUD

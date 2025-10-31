@@ -26,6 +26,7 @@ public final class TimerManager: Sendable {
   private var startTime: Date?
   private var pausedTime: TimeInterval = 0
   private var lastPauseTime: Date?
+  private var updateInterval: TimeInterval = 0.01
 
   /// Haptic feedback service for timer actions
   private var hapticService: HapticFeedbackService {
@@ -124,6 +125,12 @@ public final class TimerManager: Sendable {
       lastPauseTime = nil
     }
 
+    // If we never had a start time (e.g., joined mid-game), synthesize one
+    // so that elapsed time continues from the current value instead of sticking.
+    if startTime == nil {
+      startTime = Date().addingTimeInterval(-elapsedTime)
+    }
+
     startTimerInternal()
   }
 
@@ -147,12 +154,33 @@ public final class TimerManager: Sendable {
 
   /// Set the timer to a specific elapsed time
   public func setElapsedTime(_ timeInterval: TimeInterval) {
+    // Update visible elapsed immediately
     elapsedTime = timeInterval
+    // Clear pause bookkeeping since this is an authoritative set
     pausedTime = 0
     lastPauseTime = nil
 
-    // If timer should be running, restart it
     if isRunning {
+      // Adjust the running baseline so subsequent ticks reflect the new elapsed
+      // elapsed = now - start - pausedTime  =>  start = now - (elapsed + pausedTime)
+      startTime = Date().addingTimeInterval(-(timeInterval + pausedTime))
+      // Ensure a timer is active; if it was somehow invalidated, start it
+      if timer == nil {
+        startTimerInternal()
+      }
+    } else {
+      // Keep startTime nil so a future resume() synthesizes a baseline from elapsed
+      startTime = nil
+    }
+  }
+
+  /// Change the timer update interval. If the timer is running, it will reschedule.
+  public func setUpdateInterval(_ interval: TimeInterval) {
+    let clamped = max(0.001, interval)
+    guard clamped != updateInterval else { return }
+    updateInterval = clamped
+    if isRunning {
+      // Reschedule with the new interval without changing elapsed/baseline
       startTimerInternal()
     }
   }
@@ -165,7 +193,9 @@ public final class TimerManager: Sendable {
       return
     }
 
-    timer = Timer.scheduledTimer(withTimeInterval: 0.01, repeats: true) { [weak self] _ in
+    // Avoid duplicate scheduled timers
+    timer?.invalidate()
+    timer = Timer.scheduledTimer(withTimeInterval: updateInterval, repeats: true) { [weak self] _ in
       guard let self else { return }
       Task { @MainActor in
         self.updateElapsedTime()

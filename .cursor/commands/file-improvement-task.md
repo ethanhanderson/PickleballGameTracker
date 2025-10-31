@@ -16,13 +16,7 @@ This document outlines the **process and workflow** for improving files while ap
    - `swift-testing.mdc` - Modern Swift Testing framework patterns
    - `xcodebuildmcp-tools.mdc` - XcodeBuildMCP tools for building, testing, and deployment
 
-2. **Review architectural context** from the project wiki:
-
-   - [Architecture.md](mdc:PickleballGameTracker.wiki/Architecture.md) - Architecture index
-   - [Features.md](mdc:PickleballGameTracker.wiki/Features.md) - Features index
-   - [Systems.md](mdc:PickleballGameTracker.wiki/Systems.md) - Systems index
-
-3. **Assess current state**:
+2. **Assess current state**:
    - Document existing test coverage and functionality
    - Identify architectural patterns currently in use
    - Note any performance or accessibility considerations

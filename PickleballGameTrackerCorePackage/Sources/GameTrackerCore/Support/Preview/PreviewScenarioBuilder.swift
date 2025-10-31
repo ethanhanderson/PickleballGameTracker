@@ -94,13 +94,14 @@ public struct PreviewScenarioBuilder {
     
     /// Adds game variations to the scenario.
     ///
-    /// Uses `GameVariationFactory` to generate diverse variations.
+    /// Note: Game variations are planned for v0.6 and not yet implemented.
+    /// This method is kept for API compatibility but does nothing.
     ///
-    /// - Parameter count: Number of variations to generate
+    /// - Parameter count: Number of variations to generate (ignored)
     /// - Returns: Self for method chaining
     public func withVariations(count: Int) -> Self {
         var copy = self
-        copy.variationCount = count
+        copy.variationCount = 0  // Variations not yet implemented
         return copy
     }
     
@@ -258,13 +259,7 @@ public struct PreviewScenarioBuilder {
             }
         }
         
-        // 2. Seed variations
-        if variationCount > 0 {
-            let variations = GameVariationFactory.realisticCatalog(count: variationCount)
-            for variation in variations {
-                context.insert(variation)
-            }
-        }
+        // 2. Variations are planned for v0.6 and not yet implemented
         
         // 3. Seed history
         seedHistory()
@@ -340,34 +335,30 @@ public struct PreviewScenarioBuilder {
             let p1 = shuffled[0]
             let p2 = shuffled[1]
             
-            let variation = GameVariationFactory.forMatchup(
-                players: [p1, p2],
-                gameType: .recreational
-            )
-            
             let game = ActiveGameFactory(context: context)
-                .variation(variation)
+                .gameType(.recreational)
                 .midGame()
                 .state(activeGameState ?? .playing)
                 .server(team: [1, 2].randomElement()!, player: 1)
                 .generate()
+            game.participantMode = .players
+            game.side1PlayerIds = [p1.id]
+            game.side2PlayerIds = [p2.id]
             context.insert(game)
         } else if teams.count >= 2 {
             let shuffled = teams.shuffled()
             let t1 = shuffled[0]
             let t2 = shuffled[1]
             
-            let variation = GameVariationFactory.forMatchup(
-                teams: [t1, t2],
-                gameType: .recreational
-            )
-            
             let game = ActiveGameFactory(context: context)
-                .variation(variation)
+                .gameType(.recreational)
                 .midGame()
                 .state(activeGameState ?? .playing)
                 .server(team: [1, 2].randomElement()!, player: [1, 2].randomElement()!)
                 .generate()
+            game.participantMode = .teams
+            game.side1TeamId = t1.id
+            game.side2TeamId = t2.id
             context.insert(game)
         }
     }

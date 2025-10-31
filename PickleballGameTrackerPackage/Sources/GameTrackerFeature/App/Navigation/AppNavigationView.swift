@@ -7,11 +7,16 @@ public struct AppNavigationView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(LiveGameStateManager.self) private var activeGameStateManager
     @Environment(SwiftDataGameManager.self) private var gameManager
+    @Environment(LiveSyncCoordinator.self) private var syncCoordinator
 
     @Namespace var animation
 
     @State private var selectedTab: AppTab = .games
     @State private var showingLiveGameSheet = false
+    @State private var showingSetupSheet = false
+    @State private var setupGameType: GameType?
+    private struct SetupSheetToken: Identifiable { let id: String; let gameType: GameType }
+    @State private var setupSheet: SetupSheetToken?
     @State private var deepLinkDestination: DeepLinkDestination?
     @State private var showDeepLink: Bool = false
     @State private var statisticsFilter:
@@ -19,6 +24,7 @@ public struct AppNavigationView: View {
     @State private var deepLinkObserver: (any NSObjectProtocol)? = nil
     @State private var showPersistenceResetPrompt: Bool = false
     @State private var liveOpenObserver: (any NSObjectProtocol)? = nil
+    @State private var setupRequestObserver: (any NSObjectProtocol)? = nil
 
     public init() {}
 
@@ -29,6 +35,11 @@ public struct AppNavigationView: View {
             selectedTab = .statistics
             showDeepLink = false
             deepLinkDestination = nil
+        case .setup(let gameTypeId):
+            if let gameType = GameType(rawValue: gameTypeId) {
+                setupGameType = gameType
+                setupSheet = SetupSheetToken(id: gameType.rawValue, gameType: gameType)
+            }
         default:
             deepLinkDestination = destination
             showDeepLink = true
@@ -89,7 +100,8 @@ public struct AppNavigationView: View {
                 .tint(.accentColor)
             }
         }
-        .if(activeGameStateManager.hasActiveGame) { view in
+        // Sync v2 is always on; no explicit enable needed
+        .if(activeGameStateManager.hasLiveGame) { view in
             view.tabViewBottomAccessory {
                 LiveGameMiniPreview(
                     onTap: { showingLiveGameSheet = true },
@@ -151,6 +163,33 @@ public struct AppNavigationView: View {
                     showingLiveGameSheet = true
                 }
             }
+
+            setupRequestObserver = NotificationCenter.default.addObserver(
+                forName: Notification.Name("OpenSetupRequested"),
+                object: nil,
+                queue: .main
+            ) { notification in
+                let gameType = notification.userInfo?["gameType"] as? GameType
+                Task { @MainActor in
+                    if let gameType {
+                        // Ensure any existing deep-link sheet is dismissed
+                        if showDeepLink {
+                            showDeepLink = false
+                            deepLinkDestination = nil
+                        }
+                        // Present SetupView directly for parity with phone flow
+                        setupGameType = gameType
+                        setupSheet = SetupSheetToken(id: gameType.rawValue, gameType: gameType)
+                        selectedTab = .games
+                        Log.event(
+                            .viewAppear,
+                            level: .info,
+                            message: "Setup requested from watch → opening SetupView",
+                            metadata: ["gameType": gameType.rawValue]
+                        )
+                    }
+                }
+            }
         }
         .onDisappear {
             if let deepLinkObserver {
@@ -159,8 +198,12 @@ public struct AppNavigationView: View {
             if let liveOpenObserver {
                 NotificationCenter.default.removeObserver(liveOpenObserver)
             }
+            if let setupRequestObserver {
+                NotificationCenter.default.removeObserver(setupRequestObserver)
+            }
             deepLinkObserver = nil
             liveOpenObserver = nil
+            setupRequestObserver = nil
         }
         .onOpenURL { url in
             do {
@@ -197,6 +240,67 @@ public struct AppNavigationView: View {
                 .navigationTransition(.zoom(sourceID: "sheet", in: animation))
                 .tint(.accentColor)
             }
+        }
+        .sheet(item: $setupSheet) { token in
+            let gameType = token.gameType
+            SetupView(
+                gameType: gameType,
+                onStartGame: { gameType, rules, matchup in
+                    setupSheet = nil
+                    Task { @MainActor in
+                        do {
+                            let config = GameStartConfiguration(
+                                gameType: gameType,
+                                matchup: matchup,
+                                rules: rules
+                            )
+                            let game = try await activeGameStateManager.startNewGame(with: config)
+
+                            Log.event(
+                                .viewAppear,
+                                level: .info,
+                                message: "Game created from watch setup request",
+                                context: .current(gameId: game.id),
+                                metadata: [
+                                    "gameType": gameType.rawValue,
+                                    "teamSize": "\(matchup.teamSize)"
+                                ]
+                            )
+
+                            // Standardize live presentation trigger
+                            NotificationCenter.default.post(
+                                name: Notification.Name("OpenLiveGameRequested"),
+                                object: nil
+                            )
+
+                            // Mirror game start on companion
+                            // 1) Publish roster snapshot first to ensure identities exist
+                            let rosterBuilder = RosterSnapshotBuilder(storage: SwiftDataStorage.shared)
+                            if let roster = try? rosterBuilder.build(includeArchived: false) {
+                                try? await syncCoordinator.publishRoster(roster)
+                            }
+                            // 2) Publish start configuration with gameId so watch uses same ID
+                            let cfg = GameStartConfiguration(
+                                gameId: game.id,
+                                gameType: config.gameType,
+                                teamSize: config.teamSize,
+                                participants: config.participants,
+                                notes: config.notes,
+                                rules: config.rules
+                            )
+                            try? await syncCoordinator.publishStart(cfg)
+                        } catch {
+                            Log.error(
+                                error,
+                                event: .saveFailed,
+                                metadata: ["phase": "setupFromWatch"]
+                            )
+                        }
+                    }
+                }
+            )
+            .environment(gameManager)
+            .environment(activeGameStateManager)
         }
         .sheet(isPresented: $showDeepLink) {
             NavigationStack {

@@ -79,32 +79,7 @@ struct InlineMiniPreview: View {
 private extension InlineMiniPreview {
     func teamTintColor(forTeamIndex index: Int) -> Color {
         guard let game = activeGameStateManager.currentGame else { return Color.accentColor }
-
-        let teamName: String? = {
-            if index == 1 {
-                return game.teamsWithLabels(context: modelContext).first?.teamName
-            } else {
-                return game.teamsWithLabels(context: modelContext).dropFirst().first?.teamName
-            }
-        }()
-
-        if let name = teamName,
-           let team = try? modelContext.fetch(
-               FetchDescriptor<TeamProfile>(predicate: #Predicate { $0.name == name })
-           ).first
-        {
-            return team.primaryColor
-        }
-
-        if let name = teamName,
-           let player = try? modelContext.fetch(
-               FetchDescriptor<PlayerProfile>(predicate: #Predicate { $0.name == name })
-           ).first
-        {
-            return player.primaryColor
-        }
-
-        return game.teamTintColor(for: index)
+        return game.teamTintColor(for: index, context: modelContext)
     }
 }
 
@@ -146,7 +121,7 @@ struct ExpandedMiniPreview: View {
                     }
                     .padding(.leading, 4)
 
-                    if activeGameStateManager.isGameActive {
+                    if activeGameStateManager.isGameLive {
                         HStack(spacing: DesignSystem.Spacing.xs) {
                             Image(systemName: "timer")
                                 .font(.system(size: 12, weight: .semibold))
@@ -215,32 +190,7 @@ struct ExpandedMiniPreview: View {
 private extension ExpandedMiniPreview {
     func teamTintColor(forTeamIndex index: Int) -> Color {
         guard let game = activeGameStateManager.currentGame else { return Color.accentColor }
-
-        let teamName: String? = {
-            if index == 1 {
-                return game.teamsWithLabels(context: modelContext).first?.teamName
-            } else {
-                return game.teamsWithLabels(context: modelContext).dropFirst().first?.teamName
-            }
-        }()
-
-        if let name = teamName,
-           let team = try? modelContext.fetch(
-               FetchDescriptor<TeamProfile>(predicate: #Predicate { $0.name == name })
-           ).first
-        {
-            return team.primaryColor
-        }
-
-        if let name = teamName,
-           let player = try? modelContext.fetch(
-               FetchDescriptor<PlayerProfile>(predicate: #Predicate { $0.name == name })
-           ).first
-        {
-            return player.primaryColor
-        }
-
-        return game.teamTintColor(for: index)
+        return game.teamTintColor(for: index, context: modelContext)
     }
 }
 

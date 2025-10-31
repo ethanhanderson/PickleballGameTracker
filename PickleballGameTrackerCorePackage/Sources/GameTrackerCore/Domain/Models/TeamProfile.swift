@@ -18,7 +18,7 @@ public final class TeamProfile: Hashable {
   public var isArchived: Bool
   public var avatarImageData: Data?
   public var iconSymbolName: String?
-  public var accentColorStored: StoredRGBAColor?
+  public var accentColorStored: StoredRGBAColor
   public var createdDate: Date
   public var lastModified: Date
 
@@ -36,7 +36,7 @@ public final class TeamProfile: Hashable {
     isArchived: Bool = false,
     avatarImageData: Data? = nil,
     iconSymbolName: String? = nil,
-    accentColor: StoredRGBAColor? = nil,
+    accentColor: StoredRGBAColor,
     players: [PlayerProfile] = [],
     suggestedGameType: GameType? = nil,
     createdDate: Date = Date(),

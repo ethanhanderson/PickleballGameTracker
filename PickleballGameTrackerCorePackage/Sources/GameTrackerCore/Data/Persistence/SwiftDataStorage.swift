@@ -254,7 +254,6 @@ public final class SwiftDataStorage: SwiftDataStorageProtocol, Sendable {
       allGames = allGames.filter { game in
         game.notes?.localizedLowercase.contains(query) == true
         || game.gameType.displayName.localizedLowercase.contains(query)
-        || game.gameVariation?.name.localizedLowercase.contains(query) == true
       }
     }
 
@@ -770,7 +769,7 @@ extension SwiftDataStorage {
     let winner = game.score1 == game.score2 ? 0 : (game.score1 > game.score2 ? 1 : 2)
     let diff = abs(game.score1 - game.score2)
     let duration = game.duration ?? completed.timeIntervalSince(game.createdDate)
-    let typeId = game.gameVariation?.gameType.rawValue ?? game.gameType.rawValue
+    let typeId = game.gameType.rawValue
 
     let targetId = game.id
     let descriptor = FetchDescriptor<GameSummary>(
@@ -813,6 +812,18 @@ extension SwiftDataStorage {
 // MARK: - Phase 5: Backup/Restore, Purge, Integrity, Compaction
 
 extension SwiftDataStorage {
+  public func importRosterSnapshot(_ snapshot: RosterSnapshotDTO, mode: BackupImportMode) async throws {
+    var dto = BackupFileDTO()
+    dto.players = snapshot.players
+    dto.teams = snapshot.teams
+    dto.presets = snapshot.presets
+
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    let data = try encoder.encode(dto)
+    try await importBackup(data, mode: mode)
+  }
+
   public func exportBackup() async throws -> Data {
     let context = modelContainer.mainContext
     let start = Date()
@@ -821,14 +832,12 @@ extension SwiftDataStorage {
     let players = try context.fetch(FetchDescriptor<PlayerProfile>())
     let teams = try context.fetch(FetchDescriptor<TeamProfile>())
     let presets = try context.fetch(FetchDescriptor<GameTypePreset>())
-    let variations = try context.fetch(FetchDescriptor<GameVariation>())
 
     var dto = BackupFileDTO()
     dto.games = games.map(BackupGameDTO.init(from:))
     dto.players = players.map(BackupPlayerDTO.init(from:))
     dto.teams = teams.map(BackupTeamDTO.init(from:))
     dto.presets = presets.map(BackupPresetDTO.init(from:))
-    dto.variations = variations.map(BackupVariationDTO.init(from:))
 
     let encoder = JSONEncoder()
     encoder.dateEncodingStrategy = .iso8601
@@ -855,7 +864,6 @@ extension SwiftDataStorage {
       try context.delete(model: GameTypePreset.self)
       try context.delete(model: TeamProfile.self)
       try context.delete(model: PlayerProfile.self)
-      try context.delete(model: GameVariation.self)
       try context.save()
     }
 
@@ -867,9 +875,10 @@ extension SwiftDataStorage {
         name: p.name,
         notes: p.notes,
         isArchived: p.isArchived,
+        isGuest: p.isGuest,
         avatarImageData: nil,
         iconSymbolName: p.iconSymbolName,
-        accentColor: p.accentColor,
+        accentColor: p.accentColor ?? StoredRGBAColor.fromSeed(p.id),
         skillLevel: p.skillLevel,
         preferredHand: p.preferredHand,
         createdDate: p.createdDate,
@@ -888,7 +897,7 @@ extension SwiftDataStorage {
         isArchived: t.isArchived,
         avatarImageData: nil,
         iconSymbolName: t.iconSymbolName,
-        accentColor: t.accentColor,
+        accentColor: t.accentColor ?? StoredRGBAColor.fromSeed(t.id),
         players: t.playerIds.compactMap { playerById[$0] },
         suggestedGameType: t.suggestedGameType,
         createdDate: t.createdDate,
@@ -896,37 +905,6 @@ extension SwiftDataStorage {
       )
       teamById[team.id] = team
       context.insert(team)
-    }
-
-    var variationById: [UUID: GameVariation] = [:]
-    for v in dto.variations {
-      let variation = GameVariation(
-        id: v.id,
-        name: v.name,
-        gameType: v.gameType,
-        teamSize: v.teamSize,
-        numberOfTeams: v.numberOfTeams,
-        winningScore: v.winningScore,
-        winByTwo: v.winByTwo,
-        maxScore: v.maxScore,
-        kitchenRule: v.kitchenRule,
-        doubleBounceRule: v.doubleBounceRule,
-        servingRotation: v.servingRotation,
-        sideSwitchingRule: v.sideSwitchingRule,
-        scoringType: v.scoringType,
-        timeLimit: v.timeLimit,
-        maxRallies: v.maxRallies,
-        isDefault: v.isDefault,
-        isCustom: v.isCustom,
-        isCommunity: v.isCommunity,
-        isPublished: v.isPublished,
-        gameDescription: v.gameDescription,
-        tags: v.tags
-      )
-      variation.createdDate = v.createdDate
-      variation.lastModified = v.lastModified
-      variationById[variation.id] = variation
-      context.insert(variation)
     }
 
     // Presets
@@ -951,7 +929,6 @@ extension SwiftDataStorage {
       let game = Game(
         id: g.id,
         gameType: g.gameType,
-        gameVariation: g.gameVariationId.flatMap { variationById[$0] },
         score1: g.score1,
         score2: g.score2,
         isCompleted: g.isCompleted,
@@ -968,6 +945,11 @@ extension SwiftDataStorage {
         winByTwo: g.winByTwo,
         kitchenRule: g.kitchenRule,
         doubleBounceRule: g.doubleBounceRule,
+        sideSwitchingRule: g.sideSwitchingRule,
+        servingRotation: g.servingRotation,
+        scoringType: g.scoringType,
+        timeLimit: g.timeLimit,
+        maxRallies: g.maxRallies,
         notes: g.notes
       )
       game.completedDate = g.completedDate

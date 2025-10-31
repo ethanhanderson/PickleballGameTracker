@@ -62,9 +62,12 @@ struct EventButtonsCard: View {
         // Fallback: synthesize UI-only players if roster lookup fails
         let required = max(1, min(game.effectiveTeamSize, 2))
         if required == 1 {
-            return [PlayerProfile(name: teamName)]
+            return [PlayerProfile(name: teamName, accentColor: StoredRGBAColor.fromSeed(UUID()))]
         } else {
-            return [PlayerProfile(name: "Player 1"), PlayerProfile(name: "Player 2")]
+            return [
+                PlayerProfile(name: "Player 1", accentColor: StoredRGBAColor.fromSeed(UUID())),
+                PlayerProfile(name: "Player 2", accentColor: StoredRGBAColor.fromSeed(UUID()))
+            ]
         }
     }
 

@@ -8,6 +8,7 @@ struct LiveView: View {
     @Environment(LiveGameStateManager.self) private var activeGameStateManager
     @Environment(\.modelContext) private var modelContext
     @Environment(SwiftDataGameManager.self) private var gameManager
+    @Environment(LiveSyncCoordinator.self) private var syncCoordinator
     let onDismiss: (() -> Void)?
     var animation: Namespace.ID?
 
@@ -35,14 +36,12 @@ struct LiveView: View {
                 formattedElapsedTime: activeGameStateManager
                     .formattedElapsedTimeWithCentiseconds,
                 isTimerPaused: !activeGameStateManager.isTimerRunning,
-                isGameActive: activeGameStateManager.isGameActive,
+                isGameLive: activeGameStateManager.isGameLive,
                 isResetting: isResetting,
                 isToggling: isToggling,
                 pulseAnimation: pulseAnimation,
                 resetTrigger: resetTrigger,
-                playPauseTrigger: playPauseTrigger,
-                onResetTimer: resetTimer,
-                onToggleTimer: toggleTimer
+                playPauseTrigger: playPauseTrigger
             )
 
             ForEach(game.teamsWithLabels(context: modelContext), id: \.teamNumber) { teamConfig in
@@ -50,18 +49,18 @@ struct LiveView: View {
                     game: game,
                     teamNumber: teamConfig.teamNumber,
                     teamName: teamConfig.teamName,
-                    isGameActive: activeGameStateManager.isGameActive,
+                    isGameLive: activeGameStateManager.isGameLive,
                     currentTimestamp: activeGameStateManager.elapsedTime,
                     onEventLogged: handleEventLogged
                 )
-                .tint(teamTintColor(for: teamConfig.teamName))
+                .tint(game.teamTintColor(for: teamConfig.teamNumber, context: modelContext))
             }
             
             Spacer()
 
             GameControlButton(
                 game: game,
-                isGamePaused: !activeGameStateManager.isGameActive,
+                isGamePaused: !activeGameStateManager.isGameLive,
                 isGameInitial: activeGameStateManager.isGameInitial,
                 isToggling: isToggling,
                 isResetting: isResetting,
@@ -73,29 +72,33 @@ struct LiveView: View {
         .padding(.top, DesignSystem.Spacing.md)
         .padding(.horizontal, DesignSystem.Spacing.lg)
         .task {
-            activeGameStateManager.setCurrentGame(game)
+            await activeGameStateManager.setCurrentGame(game)
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                HStack(spacing: DesignSystem.Spacing.sm) {
-                    Image(systemName: game.gameType.iconName)
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundStyle(
-                            game.gameType.color.gradient
-                        )
-                        .shadow(
-                            color: game.gameType.color
-                                .opacity(0.3),
-                            radius: 2,
-                            x: 0,
-                            y: 1
-                        )
+                VStack(spacing: 2) {
+                    HStack(spacing: DesignSystem.Spacing.sm) {
+                        Image(systemName: game.gameType.iconName)
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundStyle(
+                                game.gameType.color.gradient
+                            )
+                            .shadow(
+                                color: game.gameType.color
+                                    .opacity(0.3),
+                                radius: 2,
+                                x: 0,
+                                y: 1
+                            )
 
-                    Text(game.gameType.displayName)
-                        .font(.title3)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.primary)
+                        Text(game.gameType.displayName)
+                            .font(.title3)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.primary)
+                    }
+                    
+                    // Role badge removed per sync v2 (no leader/follower UI)
                 }
             }
 
@@ -109,38 +112,7 @@ struct LiveView: View {
         .tint(game.gameType.color)
     }
 
-    private func toggleTimer() {
-        guard !isToggling && !isResetting else { return }
-
-        Task { @MainActor in
-            isToggling = true
-            defer { isToggling = false }
-            playPauseTrigger.toggle()
-            activeGameStateManager.toggleTimer()
-            try? await Task.sleep(for: .milliseconds(100))
-        }
-    }
-
-    private func resetTimer() {
-        guard !isResetting && !isToggling else { return }
-
-        Task { @MainActor in
-            isResetting = true
-            defer {
-                pulseAnimation = false
-                isResetting = false
-            }
-
-            // Reset the timer and update game creation date
-            resetTrigger.toggle()
-            pulseAnimation = true
-            activeGameStateManager.resetElapsedTime()
-            game.createdDate = Date()
-
-            // Small delay for animation
-            try? await Task.sleep(for: .milliseconds(250))
-        }
-    }
+    // Timer bezel controls removed — timer is controlled only via GameControlButton
 
     private func toggleGame() {
         guard !isToggling && !isResetting else { return }
@@ -154,6 +126,21 @@ struct LiveView: View {
             defer { isToggling = false }
             try? await activeGameStateManager.toggleGameState()
             try? await Task.sleep(for: .milliseconds(100))
+            let state = game.gameState
+            let elapsed = activeGameStateManager.elapsedTime
+            Task { @MainActor in
+                try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
+                    gameId: game.id,
+                    timestamp: elapsed,
+                    operation: .setGameState(state)
+                ))
+                // Also publish precise timer state for tight sync
+                try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
+                    gameId: game.id,
+                    timestamp: elapsed,
+                    operation: .setElapsedTime(elapsed: elapsed, isRunning: activeGameStateManager.isTimerRunning)
+                ))
+            }
         }
     }
 
@@ -199,6 +186,13 @@ struct LiveView: View {
                     )
                 }
             }
+            Task { @MainActor in
+                try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
+                    gameId: game.id,
+                    timestamp: event.timestamp,
+                    operation: .switchServer
+                ))
+            }
         } else {
             // For non-serving events, just update the game
             Task { @MainActor in
@@ -207,30 +201,54 @@ struct LiveView: View {
         }
 
         // Could add additional haptic feedback, analytics, etc. here
+        Task { @MainActor in
+            switch event.eventType {
+            case .playerScored:
+                try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
+                    gameId: game.id,
+                    timestamp: event.timestamp,
+                    operation: .score(team: event.teamAffected ?? game.currentServer)
+                ))
+            case .scoreUndone:
+                try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
+                    gameId: game.id,
+                    timestamp: event.timestamp,
+                    operation: .undoLastPoint
+                ))
+            case .serviceFault:
+                try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
+                    gameId: game.id,
+                    timestamp: event.timestamp,
+                    operation: .serviceFault
+                ))
+            case .gamePaused:
+                try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
+                    gameId: game.id,
+                    timestamp: event.timestamp,
+                    operation: .setGameState(.paused)
+                ))
+            case .gameResumed:
+                try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
+                    gameId: game.id,
+                    timestamp: event.timestamp,
+                    operation: .setGameState(.playing)
+                ))
+            case .gameCompleted:
+                try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
+                    gameId: game.id,
+                    timestamp: event.timestamp,
+                    operation: .setGameState(.completed)
+                ))
+            default:
+                break
+            }
+        }
     }
 }
 
 // MARK: - Color Helpers
 
-private extension LiveView {
-    func teamTintColor(for teamName: String) -> Color {
-        // Try team match first
-        if let team = try? modelContext.fetch(FetchDescriptor<TeamProfile>(predicate: #Predicate { $0.name == teamName })).first {
-            return team.primaryColor
-        }
-        // Try player match
-        if let player = try? modelContext.fetch(FetchDescriptor<PlayerProfile>(predicate: #Predicate { $0.name == teamName })).first {
-            return player.primaryColor
-        }
-        // Fallback to game-provided tint helper
-        if teamName == game.teamsWithLabels(context: modelContext).first?.teamName {
-            return game.teamTintColor(for: 1)
-        } else if teamName == game.teamsWithLabels(context: modelContext).dropFirst().first?.teamName {
-            return game.teamTintColor(for: 2)
-        }
-        return Color.accentColor
-    }
-}
+private extension LiveView { }
 
 #Preview {
     let container = PreviewContainers.liveGame()
@@ -252,7 +270,7 @@ private extension LiveView {
     let (gameManager, liveGameManager) = PreviewContainers.managers(for: container)
     let ctx = container.mainContext
     let fetched = (try? ctx.fetch(FetchDescriptor<Game>())) ?? []
-    let game = fetched.first(where: { $0.gameVariation?.teamSize == 1 }) ?? fetched.first ?? Game(gameType: .recreational)
+    let game = fetched.first(where: { $0.effectiveTeamSize == 1 && !$0.isCompleted }) ?? fetched.first(where: { !$0.isCompleted }) ?? Game(gameType: .recreational)
 
     NavigationStack {
         LiveView(game: game)
@@ -267,7 +285,7 @@ private extension LiveView {
     let (gameManager, liveGameManager) = PreviewContainers.managers(for: container)
     let ctx = container.mainContext
     let fetched = (try? ctx.fetch(FetchDescriptor<Game>())) ?? []
-    let game = fetched.first(where: { $0.gameVariation?.teamSize ?? $0.gameType.defaultTeamSize > 1 }) ?? fetched.first ?? Game(gameType: .recreational)
+    let game = fetched.first(where: { $0.effectiveTeamSize > 1 && !$0.isCompleted }) ?? fetched.first(where: { !$0.isCompleted }) ?? Game(gameType: .recreational)
 
     NavigationStack {
         LiveView(game: game)

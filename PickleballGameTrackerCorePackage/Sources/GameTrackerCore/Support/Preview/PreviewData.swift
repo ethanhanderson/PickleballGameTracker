@@ -179,7 +179,7 @@ public struct PreviewGameData {
     teams: [TeamProfile]
   ) throws -> ModelContainer {
     let schema = Schema([
-      Game.self, GameVariation.self, GameSummary.self, PlayerProfile.self, TeamProfile.self,
+      Game.self, GameRules.self, GameSummary.self, PlayerProfile.self, TeamProfile.self,
       GameTypePreset.self,
     ])
     let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -201,7 +201,7 @@ public struct PreviewGameData {
   {
     // Include full schema needed by previews that touch roster/search screens
     let schema = Schema([
-      Game.self, GameVariation.self, GameSummary.self, PlayerProfile.self, TeamProfile.self,
+      Game.self, GameRules.self, GameSummary.self, PlayerProfile.self, TeamProfile.self,
       GameTypePreset.self,
     ])
     let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -222,7 +222,7 @@ public struct PreviewGameData {
   /// Creates a model container with comprehensive test data
   public static func createFullPreviewContainer() throws -> ModelContainer {
     let schema = Schema([
-      Game.self, GameVariation.self, GameSummary.self, PlayerProfile.self, TeamProfile.self,
+      Game.self, GameRules.self, GameSummary.self, PlayerProfile.self, TeamProfile.self,
       GameTypePreset.self,
     ])
     let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -370,7 +370,7 @@ public struct PreviewGameData {
     includeArchived: Bool = false
   ) throws -> RosterPreviewContext {
     let schema = Schema([
-      Game.self, GameVariation.self, GameSummary.self, PlayerProfile.self, TeamProfile.self,
+      Game.self, GameRules.self, GameSummary.self, PlayerProfile.self, TeamProfile.self,
       GameTypePreset.self,
     ])
     let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -413,7 +413,9 @@ public struct PreviewGameData {
     let gameManager = SwiftDataGameManager(storage: storage)
     let active = LiveGameStateManager.production(storage: storage)
     active.configure(gameManager: gameManager)
-    active.setCurrentGame(game)
+    Task { @MainActor in
+      await active.setCurrentGame(game)
+    }
     return LiveGamePreviewContext(
       container: container,
       game: game,
@@ -451,23 +453,12 @@ public struct PreviewGameData {
       let shuffled = players.shuffled()
       let p1 = shuffled[0]
       let p2 = shuffled[1]
-      let variation = GameVariation(
-        name: "\(p1.name) vs \(p2.name)",
-        gameType: .recreational,
-        teamSize: 1,
-        winningScore: 11,
-        winByTwo: true,
-        kitchenRule: true,
-        doubleBounceRule: true,
-        servingRotation: .standard,
-        sideSwitchingRule: .never,
-        scoringType: .sideOut
-      )
+      let rules = GameType.recreational.defaultRules
       let matchup = MatchupSelection(
         teamSize: 1,
         mode: .players(sideA: [p1.id], sideB: [p2.id])
       )
-      let game = try await gameManager.createGame(variation: variation, matchup: matchup)
+      let game = try await gameManager.createGame(type: .recreational, rules: rules, matchup: matchup)
       game.participantMode = .players
       game.side1PlayerIds = [p1.id]
       game.side2PlayerIds = [p2.id]
@@ -479,23 +470,12 @@ public struct PreviewGameData {
       let shuffled = teams.shuffled()
       let t1 = shuffled[0]
       let t2 = shuffled[1]
-      let variation = GameVariation(
-        name: "\(t1.name) vs \(t2.name)",
-        gameType: .recreational,
-        teamSize: 2,
-        winningScore: 11,
-        winByTwo: true,
-        kitchenRule: true,
-        doubleBounceRule: true,
-        servingRotation: .standard,
-        sideSwitchingRule: .never,
-        scoringType: .sideOut
-      )
+      let rules = GameType.recreational.defaultRules
       let matchup = MatchupSelection(
         teamSize: 2,
         mode: .teams(team1Id: t1.id, team2Id: t2.id)
       )
-      let game = try await gameManager.createGame(variation: variation, matchup: matchup)
+      let game = try await gameManager.createGame(type: .recreational, rules: rules, matchup: matchup)
       game.participantMode = .teams
       game.side1TeamId = t1.id
       game.side2TeamId = t2.id
@@ -504,8 +484,7 @@ public struct PreviewGameData {
     }
 
     // Fallback: no roster available - create a simple active game without participants
-    let variation = GameVariation(name: "Practice Game", gameType: .training, teamSize: 1)
-    let game = try await gameManager.createGame(variation: variation)
+    let game = try await gameManager.createGame(type: .training)
     game.gameState = .playing
     return game
   }

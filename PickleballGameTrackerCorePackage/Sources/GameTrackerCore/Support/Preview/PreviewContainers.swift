@@ -66,6 +66,9 @@ public enum PreviewContainers {
                 .withHistory(playerGames: 12, teamGames: 6, days: 30)
                 .withActiveGame(state: .playing)
                 .seed()
+
+            // Ensure at least one completed game with participants exists for each game type
+            ensureResumeableHistory(context: context, store: store)
         }
     }
     
@@ -124,6 +127,9 @@ public enum PreviewContainers {
                 .withHistory(playerGames: 2, teamGames: 1, days: 7)
                 .withActiveGame(state: .playing)
                 .seed()
+
+            // Ensure at least one completed game with participants exists for each game type
+            ensureResumeableHistory(context: context, store: store)
         }
     }
     
@@ -143,6 +149,9 @@ public enum PreviewContainers {
                 .withVariations(count: 10)
                 .withHistory(playerGames: 20, teamGames: 10, days: 30)
                 .seed()
+
+            // Ensure at least one completed game with participants exists for each game type
+            ensureResumeableHistory(context: context, store: store)
         }
     }
     
@@ -249,7 +258,9 @@ public enum PreviewContainers {
                 sortBy: [SortDescriptor<Game>(\.createdDate, order: .reverse)]
             )
         ).first(where: { $0.gameState == .playing }) {
-            managers.liveGameManager.setCurrentGame(activeGame)
+            Task { @MainActor in
+                await managers.liveGameManager.setCurrentGame(activeGame)
+            }
         }
         
         return LiveGameSetup(
@@ -290,6 +301,71 @@ public enum PreviewContainers {
             liveGameManager: managers.liveGameManager,
             rosterManager: rosterManager
         )
+    }
+}
+
+// MARK: - Resumeable History Helpers
+
+private extension PreviewContainers {
+    static func ensureResumeableHistory(context: ModelContext, store: GameStore) {
+        for type in GameType.allCases {
+            let existing: [Game] = (try? context.fetch(
+                FetchDescriptor<Game>(
+                    predicate: #Predicate { $0.isCompleted && $0.gameType == type }
+                )
+            )) ?? []
+            guard existing.isEmpty else { continue }
+
+            // Fetch roster
+            let players: [PlayerProfile] = (try? context.fetch(
+                FetchDescriptor<PlayerProfile>(predicate: #Predicate { !$0.isArchived })
+            )) ?? []
+            let teams: [TeamProfile] = (try? context.fetch(
+                FetchDescriptor<TeamProfile>(predicate: #Predicate { !$0.isArchived })
+            )) ?? []
+
+            // Prefer teams for doubles-leaning types; otherwise players
+            if type.defaultTeamSize > 1, teams.count >= 2 {
+                let t1 = teams.randomElement()!
+                var t2 = teams.randomElement()!
+                var guardCount = 0
+                while t2.id == t1.id && guardCount < 5 { t2 = teams.randomElement()!; guardCount += 1 }
+
+                let generated = CompletedGameFactory(context: context)
+                    .assignTeams(t1, t2)
+                    .gameType(type)
+                    .timestamp(hoursAgo: 0)
+                    .generateWithDate()
+
+                context.insert(generated.game)
+                try? store.complete(generated.game, at: generated.completionDate)
+                continue
+            }
+
+            if players.count >= 2 {
+                let shuffled = players.shuffled()
+                let p1 = shuffled[0]
+                let p2 = shuffled[1]
+
+                let generated = CompletedGameFactory(context: context)
+                    .assignPlayers(p1, p2)
+                    .gameType(type)
+                    .timestamp(hoursAgo: 0)
+                    .generateWithDate()
+
+                context.insert(generated.game)
+                try? store.complete(generated.game, at: generated.completionDate)
+                continue
+            }
+
+            // Fallback: create a basic anonymous game for the type (last-resort)
+            let generated = CompletedGameFactory()
+                .gameType(type)
+                .timestamp(hoursAgo: 0)
+                .generateWithDate()
+            context.insert(generated.game)
+            try? store.complete(generated.game, at: generated.completionDate)
+        }
     }
 }
 

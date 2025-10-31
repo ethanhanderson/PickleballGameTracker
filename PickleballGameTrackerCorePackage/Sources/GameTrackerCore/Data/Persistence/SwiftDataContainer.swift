@@ -44,7 +44,7 @@ public final class SwiftDataContainer: Sendable {
       let storeURL = try createStoreURL()
 
       let schema = Schema([
-        Game.self, GameVariation.self, GameSummary.self, PlayerProfile.self, TeamProfile.self,
+        Game.self, GameSummary.self, PlayerProfile.self, TeamProfile.self,
         GameTypePreset.self, GameEvent.self,
       ])
       let configuration = ModelConfiguration(
@@ -59,23 +59,6 @@ public final class SwiftDataContainer: Sendable {
 
       // Configure container for optimal performance
       configureContainer(container)
-
-      // First-run seeding: if no variations exist, insert defaults
-      do {
-        let context = container.mainContext
-        let variationCount = try context.fetchCount(FetchDescriptor<GameVariation>())
-        if variationCount == 0 {
-          SwiftDataSeeding.seedDefaultVariations(into: context)
-          try context.save()
-          Log.event(
-            .saveSucceeded,
-            level: .info,
-            message: "Seeded default game variations on first run"
-          )
-        }
-      } catch {
-        Log.error(error, event: .saveFailed, metadata: ["phase": "firstRunSeed"])
-      }
 
       // Apply iOS file protection after files are created
       #if os(iOS)
@@ -134,7 +117,7 @@ public final class SwiftDataContainer: Sendable {
     do {
       // Try with in-memory storage as fallback
       let schema = Schema([
-        Game.self, GameVariation.self, GameSummary.self, PlayerProfile.self, TeamProfile.self,
+        Game.self, GameSummary.self, PlayerProfile.self, TeamProfile.self,
         GameTypePreset.self, GameEvent.self,
       ])
       let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
@@ -360,7 +343,7 @@ public final class SwiftDataContainer: Sendable {
     -> ModelContainer
   {
     let schema = Schema([
-      Game.self, GameVariation.self, GameSummary.self, PlayerProfile.self, TeamProfile.self,
+      Game.self, GameSummary.self, PlayerProfile.self, TeamProfile.self,
       GameTypePreset.self, GameEvent.self,
     ])
     let configuration = ModelConfiguration(

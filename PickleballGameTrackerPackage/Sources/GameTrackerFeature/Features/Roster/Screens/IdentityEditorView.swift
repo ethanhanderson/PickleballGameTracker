@@ -386,7 +386,7 @@ struct IdentityEditorView: View {
         } else if let iconName = player.iconSymbolName {
           avatarType = .icon
           selectedIconName = iconName
-          selectedIconColor = player.iconTintColorValue ?? .green
+          selectedIconColor = player.accentColor
         }
       } else {
         nameFocused = true
@@ -409,7 +409,7 @@ struct IdentityEditorView: View {
         } else if let iconName = team.iconSymbolName {
           avatarType = .icon
           selectedIconName = iconName
-          selectedIconColor = team.iconTintColorValue ?? .green
+          selectedIconColor = team.accentColor
         }
       } else {
         nameFocused = true
@@ -473,11 +473,11 @@ struct IdentityEditorView: View {
           case .photo:
             p.avatarImageData = selectedPhotoData
             p.iconSymbolName = nil
-            p.accentColor = nil
+            // Keep existing accent color for photo avatars
           case .icon:
             p.avatarImageData = nil
             p.iconSymbolName = selectedIconName.isEmpty ? nil : selectedIconName
-            p.accentColor = selectedIconName.isEmpty ? nil : selectedIconColor
+            p.accentColorStored = StoredRGBAColor(selectedIconColor)
           }
         }
         Log.event(
@@ -514,11 +514,11 @@ struct IdentityEditorView: View {
           case .photo:
             player.avatarImageData = selectedPhotoData
             player.iconSymbolName = nil
-            player.accentColor = nil
+            player.accentColorStored = StoredRGBAColor(selectedIconColor)
           case .icon:
             player.avatarImageData = nil
             player.iconSymbolName = selectedIconName.isEmpty ? nil : selectedIconName
-            player.accentColor = selectedIconName.isEmpty ? nil : selectedIconColor
+            player.accentColorStored = StoredRGBAColor(selectedIconColor)
           }
         }
         Log.event(
@@ -562,11 +562,11 @@ struct IdentityEditorView: View {
           case .photo:
             t.avatarImageData = selectedPhotoData
             t.iconSymbolName = nil
-            t.accentColor = nil
+            // Keep existing accent color for photo avatars
           case .icon:
             t.avatarImageData = nil
             t.iconSymbolName = selectedIconName.isEmpty ? nil : selectedIconName
-            t.accentColor = selectedIconName.isEmpty ? nil : selectedIconColor
+            t.accentColorStored = StoredRGBAColor(selectedIconColor)
           }
         }
         Log.event(
@@ -604,11 +604,21 @@ struct IdentityEditorView: View {
         case .photo:
           team.avatarImageData = selectedPhotoData
           team.iconSymbolName = nil
-          team.accentColor = nil
+          // Keep existing accent color for photo avatars
         case .icon:
           team.avatarImageData = nil
           team.iconSymbolName = selectedIconName.isEmpty ? nil : selectedIconName
-          team.accentColor = selectedIconName.isEmpty ? nil : selectedIconColor
+          team.accentColorStored = StoredRGBAColor(selectedIconColor)
+        }
+        switch avatarType {
+        case .photo:
+          team.avatarImageData = selectedPhotoData
+          team.iconSymbolName = nil
+          team.accentColorStored = StoredRGBAColor(selectedIconColor)
+        case .icon:
+          team.avatarImageData = nil
+          team.iconSymbolName = selectedIconName.isEmpty ? nil : selectedIconName
+          team.accentColorStored = StoredRGBAColor(selectedIconColor)
         }
         try manager.updateTeam(team) { _ in }
         Log.event(

@@ -128,7 +128,7 @@ public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
     }
   }
 
-  // Default scoring settings
+  // Default scoring settings (kept for backward compatibility)
   public var defaultWinningScore: Int {
     switch self {
     case .recreational: return 11
@@ -149,7 +149,7 @@ public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
     }
   }
 
-  // All game types follow official pickleball rules
+  // All game types follow official pickleball rules (kept for backward compatibility)
   public var defaultKitchenRule: Bool {
     switch self {
     case .recreational, .tournament, .training, .social, .custom:
@@ -172,6 +172,12 @@ public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
     case .social: return .never  // In-game logic handles switching for social
     case .custom: return .never  // Default to never; user variations can override
     }
+  }
+  
+  /// Returns the default GameRules for this game type
+  /// Note: This creates a new GameRules instance each time. For persisted rules, use GameRules.createDefaultRules(for:)
+  public var defaultRules: GameRules {
+    return GameRules.createDefaultRules(for: self)
   }
 
   // Team configuration
@@ -296,6 +302,9 @@ extension GameType {
 
   /// Most commonly used game types
   public static let recommendedTypes: [GameType] = [.recreational, .training]
+
+  /// Subset appropriate for quick-start on watchOS
+  public static let watchSupportedCases: [GameType] = [.recreational, .training]
 }
 
 // MARK: - Game State Enums

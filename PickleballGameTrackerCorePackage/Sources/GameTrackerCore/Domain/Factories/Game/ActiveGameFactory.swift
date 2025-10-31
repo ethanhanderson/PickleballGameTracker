@@ -35,7 +35,7 @@ public struct ActiveGameFactory {
     // MARK: - Configuration Properties
 
     private var _gameType: GameType?
-    private var _gameVariation: GameVariation?
+    private var _rules: GameRules?
     private var _score1: Int?
     private var _score2: Int?
     private var _currentServer: Int?
@@ -55,7 +55,7 @@ public struct ActiveGameFactory {
 
     /// Creates a new factory instance.
     ///
-    /// - Parameter context: Optional ModelContext for accessing variations and roster
+    /// - Parameter context: Optional ModelContext for accessing roster
     public init(context: ModelContext? = nil) {
         self._context = context
     }
@@ -68,10 +68,9 @@ public struct ActiveGameFactory {
         return copy
     }
 
-    public func variation(_ variation: GameVariation) -> Self {
+    public func rules(_ rules: GameRules) -> Self {
         var copy = self
-        copy._gameVariation = variation
-        copy._gameType = variation.gameType
+        copy._rules = rules
         return copy
     }
 
@@ -201,15 +200,15 @@ public struct ActiveGameFactory {
 
     public func generate() -> Game {
         let gameType = _gameType ?? [.recreational, .tournament, .training].randomElement()!
-        let variation = _gameVariation
-        let winningScore = _winningScore ?? variation?.winningScore ?? 11
+        let rules = _rules
+        let winningScore = _winningScore ?? rules?.winningScore ?? gameType.defaultWinningScore
 
         let score1 = _score1 ?? Int.random(in: 0...10)
         let score2 = _score2 ?? Int.random(in: 0...10)
 
         let game: Game
-        if let variation = variation {
-            game = Game(gameVariation: variation)
+        if let rules = rules {
+            game = Game(gameType: gameType, rules: rules)
         } else {
             game = Game(gameType: gameType)
         }
@@ -218,7 +217,7 @@ public struct ActiveGameFactory {
         game.score2 = min(score2, winningScore)
         game.gameState = _gameState ?? .playing
         game.currentServer = _currentServer ?? [1, 2].randomElement()!
-        game.serverNumber = _serverNumber ?? (game.gameVariation?.teamSize ?? 2 >= 2 ? [1, 2].randomElement()! : 1)
+        game.serverNumber = _serverNumber ?? (gameType.defaultTeamSize >= 2 ? [1, 2].randomElement()! : 1)
         game.serverPosition = _serverPosition ?? ((score1 + score2).isMultiple(of: 2) ? .right : .left)
         game.sideOfCourt = _sideOfCourt ?? .side1
         game.isFirstServiceSequence = _isFirstServiceSequence ?? true

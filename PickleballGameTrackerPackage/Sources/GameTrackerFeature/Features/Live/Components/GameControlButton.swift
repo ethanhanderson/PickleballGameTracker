@@ -70,6 +70,7 @@ struct GameControlButton: View {
         .foregroundStyle(.primary)
         .tint(mappedColor.opacity(0.45))
         .disabled(isToggling || isResetting)
+        .opacity(1.0)
         .accessibilityIdentifier("GameControlButton.primary")
         .accessibilityLabel(Text(buttonText))
     }

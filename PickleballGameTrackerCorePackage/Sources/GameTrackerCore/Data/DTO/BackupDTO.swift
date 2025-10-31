@@ -20,7 +20,6 @@ public struct BackupFileDTO: Codable, Sendable {
   public var players: [BackupPlayerDTO]
   public var teams: [BackupTeamDTO]
   public var presets: [BackupPresetDTO]
-  public var variations: [BackupVariationDTO]
 
   public init(
     version: Int = 1,
@@ -28,8 +27,7 @@ public struct BackupFileDTO: Codable, Sendable {
     games: [BackupGameDTO] = [],
     players: [BackupPlayerDTO] = [],
     teams: [BackupTeamDTO] = [],
-    presets: [BackupPresetDTO] = [],
-    variations: [BackupVariationDTO] = []
+    presets: [BackupPresetDTO] = []
   ) {
     self.version = version
     self.createdAt = createdAt
@@ -37,14 +35,12 @@ public struct BackupFileDTO: Codable, Sendable {
     self.players = players
     self.teams = teams
     self.presets = presets
-    self.variations = variations
   }
 }
 
 public struct BackupGameDTO: Codable, Sendable, Identifiable {
   public let id: UUID
   public let gameType: GameType
-  public let gameVariationId: UUID?
   public let score1: Int
   public let score2: Int
   public let isCompleted: Bool
@@ -63,6 +59,11 @@ public struct BackupGameDTO: Codable, Sendable, Identifiable {
   public let winByTwo: Bool
   public let kitchenRule: Bool
   public let doubleBounceRule: Bool
+  public let sideSwitchingRule: SideSwitchingRule
+  public let servingRotation: ServingRotation
+  public let scoringType: ScoringType
+  public let timeLimit: TimeInterval?
+  public let maxRallies: Int?
   public let notes: String?
   public let totalRallies: Int
   public let team1Id: UUID?
@@ -73,7 +74,6 @@ public struct BackupGameDTO: Codable, Sendable, Identifiable {
   public init(from game: Game) {
     self.id = game.id
     self.gameType = game.gameType
-    self.gameVariationId = game.gameVariation?.id
     self.score1 = game.score1
     self.score2 = game.score2
     self.isCompleted = game.isCompleted
@@ -92,10 +92,13 @@ public struct BackupGameDTO: Codable, Sendable, Identifiable {
     self.winByTwo = game.winByTwo
     self.kitchenRule = game.kitchenRule
     self.doubleBounceRule = game.doubleBounceRule
+    self.sideSwitchingRule = game.sideSwitchingRule
+    self.servingRotation = game.servingRotation
+    self.scoringType = game.scoringType
+    self.timeLimit = game.timeLimit
+    self.maxRallies = game.maxRallies
     self.notes = game.notes
     self.totalRallies = game.totalRallies
-    // Current Game model does not track team/player relationships directly.
-    // Preserve DTO shape for forward compatibility with nil/empty placeholders.
     self.team1Id = nil
     self.team2Id = nil
     self.team1PlayerIds = []
@@ -108,6 +111,7 @@ public struct BackupPlayerDTO: Codable, Sendable, Identifiable {
   public let name: String
   public let notes: String?
   public let isArchived: Bool
+  public let isGuest: Bool
   public let iconSymbolName: String?
   public let accentColor: StoredRGBAColor?
   public let skillLevel: PlayerSkillLevel
@@ -120,6 +124,7 @@ public struct BackupPlayerDTO: Codable, Sendable, Identifiable {
     self.name = player.name
     self.notes = player.notes
     self.isArchived = player.isArchived
+    self.isGuest = player.isGuest
     self.iconSymbolName = player.iconSymbolName
     self.accentColor = player.accentColorStored
     self.skillLevel = player.skillLevel
@@ -181,54 +186,3 @@ public struct BackupPresetDTO: Codable, Sendable, Identifiable {
   }
 }
 
-public struct BackupVariationDTO: Codable, Sendable, Identifiable {
-  public let id: UUID
-  public let name: String
-  public let gameType: GameType
-  public let teamSize: Int
-  public let numberOfTeams: Int
-  public let winningScore: Int
-  public let winByTwo: Bool
-  public let maxScore: Int?
-  public let kitchenRule: Bool
-  public let doubleBounceRule: Bool
-  public let servingRotation: ServingRotation
-  public let sideSwitchingRule: SideSwitchingRule
-  public let scoringType: ScoringType
-  public let timeLimit: TimeInterval?
-  public let maxRallies: Int?
-  public let isDefault: Bool
-  public let isCustom: Bool
-  public let isCommunity: Bool
-  public let isPublished: Bool
-  public let createdDate: Date
-  public let lastModified: Date
-  public let gameDescription: String?
-  public let tags: [String]
-
-  public init(from variation: GameVariation) {
-    self.id = variation.id
-    self.name = variation.name
-    self.gameType = variation.gameType
-    self.teamSize = variation.teamSize
-    self.numberOfTeams = variation.numberOfTeams
-    self.winningScore = variation.winningScore
-    self.winByTwo = variation.winByTwo
-    self.maxScore = variation.maxScore
-    self.kitchenRule = variation.kitchenRule
-    self.doubleBounceRule = variation.doubleBounceRule
-    self.servingRotation = variation.servingRotation
-    self.sideSwitchingRule = variation.sideSwitchingRule
-    self.scoringType = variation.scoringType
-    self.timeLimit = variation.timeLimit
-    self.maxRallies = variation.maxRallies
-    self.isDefault = variation.isDefault
-    self.isCustom = variation.isCustom
-    self.isCommunity = variation.isCommunity
-    self.isPublished = variation.isPublished
-    self.createdDate = variation.createdDate
-    self.lastModified = variation.lastModified
-    self.gameDescription = variation.gameDescription
-    self.tags = variation.tags
-  }
-}

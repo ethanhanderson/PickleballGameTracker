@@ -15,10 +15,18 @@ public struct RosterStore: Sendable {
 
   // MARK: - Players
   public func createPlayer(name: String, configure: (PlayerProfile) -> Void = { _ in }) throws -> PlayerProfile {
-    let player = PlayerProfile(name: name)
+    let newId = UUID()
+    let player = PlayerProfile(
+      id: newId,
+      name: name,
+      accentColor: StoredRGBAColor.fromSeed(newId)
+    )
     configure(player)
     try playerRepo.insert(player)
     try playerRepo.save()
+    
+    
+    
     return player
   }
 
@@ -26,20 +34,42 @@ public struct RosterStore: Sendable {
     mutate(player)
     player.lastModified = Date()
     try playerRepo.save()
+    
+    
   }
 
   public func archivePlayer(_ player: PlayerProfile) throws {
     player.archive()
     try playerRepo.save()
+    
+    
   }
 
   public func deletePlayer(_ player: PlayerProfile) throws {
     try playerRepo.delete(player)
     try playerRepo.save()
+    
+    
   }
 
   public func players(includeArchived: Bool = false) throws -> [PlayerProfile] {
-    let predicate: Predicate<PlayerProfile> = includeArchived ? #Predicate { $0.isGuest == false } : #Predicate { $0.isArchived == false && $0.isGuest == false }
+    try players(includeArchived: includeArchived, includeGuests: false)
+  }
+
+  /// Fetch players with optional inclusion of guests and archived players
+  public func players(includeArchived: Bool, includeGuests: Bool) throws -> [PlayerProfile] {
+    let predicate: Predicate<PlayerProfile> = {
+      switch (includeArchived, includeGuests) {
+      case (true, true):
+        return #Predicate { _ in true }
+      case (true, false):
+        return #Predicate { $0.isGuest == false }
+      case (false, true):
+        return #Predicate { $0.isArchived == false }
+      case (false, false):
+        return #Predicate { $0.isArchived == false && $0.isGuest == false }
+      }
+    }()
     let fd = FetchDescriptor<PlayerProfile>(predicate: predicate, sortBy: [SortDescriptor(\.lastModified, order: .reverse)])
     return try playerRepo.fetch(fd)
   }
@@ -71,9 +101,18 @@ public struct RosterStore: Sendable {
 
   // MARK: - Teams
   public func createTeam(name: String, players: [PlayerProfile]) throws -> TeamProfile {
-    let team = TeamProfile(name: name, players: players)
+    let newId = UUID()
+    let team = TeamProfile(
+      id: newId,
+      name: name,
+      accentColor: StoredRGBAColor.fromSeed(newId),
+      players: players
+    )
     try teamRepo.insert(team)
     try teamRepo.save()
+    
+    
+    
     return team
   }
 
@@ -81,16 +120,22 @@ public struct RosterStore: Sendable {
     mutate(team)
     team.lastModified = Date()
     try teamRepo.save()
+    
+    
   }
 
   public func archiveTeam(_ team: TeamProfile) throws {
     team.archive()
     try teamRepo.save()
+    
+    
   }
 
   public func deleteTeam(_ team: TeamProfile) throws {
     try teamRepo.delete(team)
     try teamRepo.save()
+    
+    
   }
 
   public func teams(includeArchived: Bool = false) throws -> [TeamProfile] {
@@ -112,6 +157,9 @@ public struct RosterStore: Sendable {
     let preset = GameTypePreset(name: name, gameType: gameType, team1: team1, team2: team2)
     try presetRepo.insert(preset)
     try presetRepo.save()
+    
+    
+    
     return preset
   }
 
@@ -119,16 +167,22 @@ public struct RosterStore: Sendable {
     mutate(preset)
     preset.lastModified = Date()
     try presetRepo.save()
+    
+    
   }
 
   public func archivePreset(_ preset: GameTypePreset) throws {
     preset.archive()
     try presetRepo.save()
+    
+    
   }
 
   public func deletePreset(_ preset: GameTypePreset) throws {
     try presetRepo.delete(preset)
     try presetRepo.save()
+    
+    
   }
 
   public func presets(includeArchived: Bool = false) throws -> [GameTypePreset] {

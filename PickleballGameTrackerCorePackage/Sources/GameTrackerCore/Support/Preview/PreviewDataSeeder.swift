@@ -145,7 +145,7 @@ public enum PreviewDataSeeder {
   }
   
   public static func seedCatalogData(into context: ModelContext) {
-    SwiftDataSeeding.seedCommonVariations(into: context)
+    // No catalog data to seed - variations are planned for v0.6
   }
   
   public static func seedHistoryData(into context: ModelContext, store: GameStore) {
@@ -195,39 +195,30 @@ public enum PreviewDataSeeder {
       let p1 = shuffled[0]
       let p2 = shuffled[1]
 
-      let variation: GameVariation
-      if let existing = try! context.fetch(FetchDescriptor<GameVariation>()).first(where: { $0.name == "\(p1.name) vs \(p2.name)" }) {
-        variation = existing
-      } else {
-        variation = GameVariationFactory.forMatchup(players: [p1, p2], gameType: .recreational)
-      }
-
       let game = ActiveGameFactory(context: context)
-        .variation(variation)
+        .gameType(.recreational)
         .midGame()
         .state(.playing)
         .server(team: [1, 2].randomElement()!, player: 1)
         .generate()
+      game.participantMode = .players
+      game.side1PlayerIds = [p1.id]
+      game.side2PlayerIds = [p2.id]
       context.insert(game)
     } else if activeTeams.count >= 2 {
       let shuffled = activeTeams.shuffled()
       let t1 = shuffled[0]
       let t2 = shuffled[1]
 
-      let variation: GameVariation
-      let allVariations = try! context.fetch(FetchDescriptor<GameVariation>())
-      if let existing = allVariations.first(where: { $0.name == "\(t1.name) vs \(t2.name)" }) {
-        variation = existing
-      } else {
-        variation = GameVariationFactory.forMatchup(teams: [t1, t2], gameType: .recreational)
-      }
-
       let game = ActiveGameFactory(context: context)
-        .variation(variation)
+        .gameType(.recreational)
         .midGame()
         .state(.playing)
         .server(team: [1, 2].randomElement()!, player: [1, 2].randomElement()!)
         .generate()
+      game.participantMode = .teams
+      game.side1TeamId = t1.id
+      game.side2TeamId = t2.id
       context.insert(game)
     }
   }
@@ -262,49 +253,30 @@ public enum PreviewDataSeeder {
   
   public static func containerWithSampleData() -> ModelContainer {
     SwiftDataContainer.createPreviewContainer { context in
-      SwiftDataSeeding.seedCommonVariations(into: context)
-
-      if let variation = try? context.fetch(
-        FetchDescriptor<GameVariation>(predicate: #Predicate { $0.name == "Recreational Doubles" })
-      ).first {
-        let game = Game(gameVariation: variation)
-        game.score1 = 7
-        game.score2 = 5
-        context.insert(game)
-      }
+      let game = Game(gameType: .recreational)
+      game.score1 = 7
+      game.score2 = 5
+      context.insert(game)
     }
   }
 
   public static func container() -> ModelContainer {
     SwiftDataContainer.createPreviewContainer { context in
-      SwiftDataSeeding.seedCommonVariations(into: context)
+      let g1 = Game(gameType: .recreational)
+      g1.score1 = 6
+      g1.score2 = 4
+      context.insert(g1)
 
-      let rec = try? context.fetch(
-        FetchDescriptor<GameVariation>(predicate: #Predicate { $0.name == "Recreational Doubles" })
-      ).first
-      let tour = try? context.fetch(
-        FetchDescriptor<GameVariation>(predicate: #Predicate { $0.name == "Tournament Doubles" })
-      ).first
+      let g2 = Game(gameType: .recreational)
+      g2.score1 = 10
+      g2.score2 = 9
+      context.insert(g2)
 
-      if let rec {
-        let g1 = Game(gameVariation: rec)
-        g1.score1 = 6
-        g1.score2 = 4
-        context.insert(g1)
-
-        let g2 = Game(gameVariation: rec)
-        g2.score1 = 10
-        g2.score2 = 9
-        context.insert(g2)
-      }
-
-      if let tour {
-        let g3 = Game(gameVariation: tour)
-        g3.score1 = 15
-        g3.score2 = 13
-        g3.completeGame()
-        context.insert(g3)
-      }
+      let g3 = Game(gameType: .tournament)
+      g3.score1 = 15
+      g3.score2 = 13
+      g3.completeGame()
+      context.insert(g3)
     }
   }
 

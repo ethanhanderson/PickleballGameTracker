@@ -9,6 +9,7 @@ struct DeepLinkDestinationView: View {
   @Environment(\.modelContext) private var modelContext
   @Environment(SwiftDataGameManager.self) private var gameManager
   @Environment(LiveGameStateManager.self) private var activeGameStateManager
+  @Environment(LiveSyncCoordinator.self) private var syncCoordinator
   let destination: DeepLinkDestination?
 
   var body: some View {
@@ -17,22 +18,43 @@ struct DeepLinkDestinationView: View {
       if let gameType = GameType(rawValue: id) {
         GameDetailView(
           gameType: gameType,
-          onStartGame: { variation, matchup in
+          onStartGame: { gameType, rules, matchup in
             Task { @MainActor in
               do {
-                let newGame: Game
-                if case .players(let a, let b) = matchup.mode, a.isEmpty && b.isEmpty {
-                  newGame = try await gameManager.createGame(variation: variation)
-                } else {
-                  newGame = try await gameManager.createGame(variation: variation, matchup: matchup)
-                }
-                activeGameStateManager.setCurrentGame(newGame)
+                let config = GameStartConfiguration(
+                  gameType: gameType,
+                  matchup: matchup,
+                  rules: rules
+                )
+                let newGame = try await activeGameStateManager.startNewGame(with: config)
+
                 Log.event(
                   .viewAppear,
                   level: .info,
                   message: "Deep link → started game",
                   context: .current(gameId: newGame.id)
                 )
+
+                // Standardize live presentation trigger
+                NotificationCenter.default.post(
+                  name: Notification.Name("OpenLiveGameRequested"),
+                  object: nil
+                )
+
+                // Mirror game start on companion
+                let rosterBuilder = RosterSnapshotBuilder(storage: SwiftDataStorage.shared)
+                if let roster = try? rosterBuilder.build(includeArchived: false) {
+                  try? await syncCoordinator.publishRoster(roster)
+                }
+                let cfgWithId = GameStartConfiguration(
+                  gameId: newGame.id,
+                  gameType: config.gameType,
+                  teamSize: config.teamSize,
+                  participants: config.participants,
+                  notes: config.notes,
+                  rules: config.rules
+                )
+                try? await syncCoordinator.publishStart(cfgWithId)
               } catch {
                 Log.error(
                   error,
@@ -61,6 +83,81 @@ struct DeepLinkDestinationView: View {
 
     case .statistics(let gameId, let gameTypeId):
       StatisticsDeepLinkRouter(gameId: gameId, gameTypeId: gameTypeId)
+
+    case .setup(let gameTypeId):
+      if let gameType = GameType(rawValue: gameTypeId) {
+        SetupView(
+          gameType: gameType,
+          onStartGame: { gameType, rules, matchup in
+            Task { @MainActor in
+              do {
+                let config = GameStartConfiguration(
+                  gameType: gameType,
+                  matchup: matchup,
+                  rules: rules
+                )
+                let game = try await activeGameStateManager.startNewGame(with: config)
+                
+                Log.event(
+                  .viewAppear,
+                  level: .info,
+                  message: "Deep link → setup completed",
+                  context: .current(gameId: game.id)
+                )
+                
+                // Standardize live presentation trigger
+                NotificationCenter.default.post(
+                  name: Notification.Name("OpenLiveGameRequested"),
+                  object: nil
+                )
+
+                // Mirror game start on companion
+                let rosterBuilder = RosterSnapshotBuilder(storage: SwiftDataStorage.shared)
+                if let roster = try? rosterBuilder.build(includeArchived: false) {
+                  try? await syncCoordinator.publishRoster(roster)
+                }
+                let cfg = GameStartConfiguration(
+                  gameId: game.id,
+                  gameType: game.gameType,
+                  teamSize: TeamSize(playersPerSide: game.effectiveTeamSize) ?? .doubles,
+                  participants: {
+                    switch game.participantMode {
+                    case .players:
+                      return Participants(side1: .players(game.side1PlayerIds), side2: .players(game.side2PlayerIds))
+                    case .teams:
+                      return Participants(side1: .team(game.side1TeamId!), side2: .team(game.side2TeamId!))
+                    case .anonymous:
+                      return Participants(side1: .players([]), side2: .players([]))
+                    }
+                  }(),
+                  rules: try? GameRules.createValidated(
+                    winningScore: game.winningScore,
+                    winByTwo: game.winByTwo,
+                    kitchenRule: game.kitchenRule,
+                    doubleBounceRule: game.doubleBounceRule,
+                    servingRotation: game.servingRotation,
+                    sideSwitchingRule: game.sideSwitchingRule,
+                    scoringType: game.scoringType,
+                    timeLimit: game.timeLimit,
+                    maxRallies: game.maxRallies
+                  )
+                )
+                try? await syncCoordinator.publishStart(cfg)
+              } catch {
+                Log.error(
+                  error,
+                  event: .saveFailed,
+                  metadata: ["phase": "deepLinkSetup"]
+                )
+              }
+            }
+          }
+        )
+        .navigationTitle("Setup \(gameType.displayName)")
+        .navigationBarTitleDisplayMode(.inline)
+      } else {
+        DeepLinkErrorView(message: "Game Type not found.")
+      }
 
     case .none:
       DeepLinkErrorView(message: "Invalid link.")

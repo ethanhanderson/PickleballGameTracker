@@ -4,35 +4,6 @@ import SwiftUI
 
 @MainActor
 public enum SwiftDataSeeding {
-  public static func seedDefaultVariations(into context: ModelContext) {
-    let variations = GameVariation.createDefaultVariations()
-    for v in variations { context.insert(v) }
-  }
-
-  public static func seedCommonVariations(into context: ModelContext) {
-    let variations = [
-      try! GameVariationFactory()
-        .name("Recreational Doubles")
-        .gameType(.recreational)
-        .teamSize(2)
-        .winningScore(11)
-        .winByTwo(true)
-        .generate(),
-      
-      try! GameVariationFactory()
-        .name("Tournament Doubles")
-        .gameType(.tournament)
-        .teamSize(2)
-        .winningScore(15)
-        .winByTwo(true)
-        .generate()
-    ]
-    
-    for variation in variations {
-      context.insert(variation)
-    }
-  }
-
   public static func seedGames(from templates: [Game], into context: ModelContext) {
     for template in templates {
       let g = Game(gameType: template.gameType)

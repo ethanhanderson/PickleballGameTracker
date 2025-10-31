@@ -315,9 +315,9 @@ public enum PreviewEnvironment {
             if let desiredState = configuration.gameState {
               switch desiredState {
               case .playing:
-                active.setCurrentGame(firstGame)
-                // Ensure timer stopped before applying elapsed
-                active.resetTimer()
+                await active.setCurrentGame(firstGame)
+                // Ensure timer reset before applying elapsed
+                active.setElapsedTime(0)
                 // Apply timer configuration
                 if let initial = configuration.initialElapsedTime {
                   active.setElapsedTime(initial)
@@ -332,10 +332,10 @@ public enum PreviewEnvironment {
                 } else {
                   // Keep game in playing state but timer not running
                   firstGame.gameState = .playing
-                  active.setCurrentGame(firstGame)
+                  await active.setCurrentGame(firstGame)
                 }
               case .paused:
-                active.setCurrentGame(firstGame)
+                await active.setCurrentGame(firstGame)
                 if let initial = configuration.initialElapsedTime {
                   active.setElapsedTime(initial)
                 } else if configuration.randomizeTimer {
@@ -348,7 +348,7 @@ public enum PreviewEnvironment {
                 try? await active.pauseGame()
               case .initial, .completed, .serving:
                 firstGame.gameState = desiredState
-                active.setCurrentGame(firstGame)
+                await active.setCurrentGame(firstGame)
                 if let initial = configuration.initialElapsedTime {
                   active.setElapsedTime(initial)
                 } else if configuration.randomizeTimer {
@@ -360,7 +360,7 @@ public enum PreviewEnvironment {
               }
             } else {
               // No explicit desired state; still set current and optional timer
-              active.setCurrentGame(firstGame)
+              await active.setCurrentGame(firstGame)
               if let initial = configuration.initialElapsedTime {
                 active.setElapsedTime(initial)
               } else if configuration.randomizeTimer {
@@ -546,7 +546,7 @@ extension PreviewEnvironment.Context {
     // Ensure there's a live game in the container; if none, create a simple one
     let allGames = try container.mainContext.fetch(FetchDescriptor<Game>())
     if let liveGame = allGames.first(where: { $0.gameState == .playing }) {
-      activeGameStateManager.setCurrentGame(liveGame)
+      await activeGameStateManager.setCurrentGame(liveGame)
       if liveGame.gameState == .initial {
         try await activeGameStateManager.startGame()
       }
@@ -556,7 +556,7 @@ extension PreviewEnvironment.Context {
       game.gameState = .playing
       container.mainContext.insert(game)
       try container.mainContext.save()
-      activeGameStateManager.setCurrentGame(game)
+      await activeGameStateManager.setCurrentGame(game)
     }
   }
 
@@ -577,7 +577,7 @@ extension PreviewEnvironment.Context {
     guard let firstGame = allGames.first else { return }
 
     // Set current game
-    activeGameStateManager.setCurrentGame(firstGame)
+    await activeGameStateManager.setCurrentGame(firstGame)
 
     // Apply elapsed time if requested
     if let initialElapsedTime {

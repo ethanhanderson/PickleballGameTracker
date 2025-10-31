@@ -11,6 +11,10 @@
 		F8110A7A2E5998A9005BCBDF /* PickleballGameTrackerWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = F8110A5A2E5998A8005BCBDF /* PickleballGameTrackerWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		F84055FE2E5BC90C00C975C5 /* GameTrackerFeature in Frameworks */ = {isa = PBXBuildFile; productRef = F84055FD2E5BC90C00C975C5 /* GameTrackerFeature */; };
 		F84056002E5BC94C00C975C5 /* GameTrackerWatchFeature in Frameworks */ = {isa = PBXBuildFile; productRef = F84055FF2E5BC94C00C975C5 /* GameTrackerWatchFeature */; };
+		F89814052EB54637009693A3 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F89814042EB54637009693A3 /* WidgetKit.framework */; };
+		F89814072EB54637009693A3 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F89814062EB54637009693A3 /* SwiftUI.framework */; };
+		F89814142EB54638009693A3 /* PickleballGameTrackerWidgetExtensionExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = F89814022EB54637009693A3 /* PickleballGameTrackerWidgetExtensionExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		F89814262EB548BF009693A3 /* GameTrackerCore in Frameworks */ = {isa = PBXBuildFile; productRef = F89814252EB548BF009693A3 /* GameTrackerCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -35,6 +39,13 @@
 			remoteGlobalIDString = F8110A592E5998A8005BCBDF;
 			remoteInfo = "PickleballGameTrackerWatchApp Watch App";
 		};
+		F89814122EB54638009693A3 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8B41F63D2DEDD0D5001A66F9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F89814012EB54637009693A3;
+			remoteInfo = PickleballGameTrackerWidgetExtensionExtension;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -49,6 +60,17 @@
 			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F89814192EB54638009693A3 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				F89814142EB54638009693A3 /* PickleballGameTrackerWidgetExtensionExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -56,6 +78,9 @@
 		8B41F65C2DEDD0D6001A66F9 /* Pickleball Game Tracker.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Pickleball Game Tracker.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		F8110A5A2E5998A8005BCBDF /* PickleballGameTrackerWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PickleballGameTrackerWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F8110A702E5998A9005BCBDF /* PickleballGameTrackerWatchUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PickleballGameTrackerWatchUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F89814022EB54637009693A3 /* PickleballGameTrackerWidgetExtensionExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PickleballGameTrackerWidgetExtensionExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		F89814042EB54637009693A3 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = /System/Library/Frameworks/WidgetKit.framework; sourceTree = "<absolute>"; };
+		F89814062EB54637009693A3 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = /System/Library/Frameworks/SwiftUI.framework; sourceTree = "<absolute>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -75,6 +100,13 @@
 				Info.plist,
 			);
 			target = 8B41F6442DEDD0D5001A66F9 /* PickleballGameTracker */;
+		};
+		F89814182EB54638009693A3 /* Exceptions for "PickleballGameTrackerWidgetExtension" folder in "PickleballGameTrackerWidgetExtensionExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = F89814012EB54637009693A3 /* PickleballGameTrackerWidgetExtensionExtension */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -108,6 +140,14 @@
 		F8110AAF2E5999EB005BCBDF /* PickleballGameTrackerWatchUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = PickleballGameTrackerWatchUITests;
+			sourceTree = "<group>";
+		};
+		F89814082EB54637009693A3 /* PickleballGameTrackerWidgetExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				F89814182EB54638009693A3 /* Exceptions for "PickleballGameTrackerWidgetExtension" folder in "PickleballGameTrackerWidgetExtensionExtension" target */,
+			);
+			path = PickleballGameTrackerWidgetExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -144,6 +184,16 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F89813FF2EB54637009693A3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F89814072EB54637009693A3 /* SwiftUI.framework in Frameworks */,
+				F89814052EB54637009693A3 /* WidgetKit.framework in Frameworks */,
+				F89814262EB548BF009693A3 /* GameTrackerCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -155,6 +205,8 @@
 				8BD71C052DEE41D800CEDD92 /* Config */,
 				8B41F6472DEDD0D5001A66F9 /* PickleballGameTracker */,
 				8B41F65F2DEDD0D6001A66F9 /* PickleballGameTrackerUITests */,
+				F89814082EB54637009693A3 /* PickleballGameTrackerWidgetExtension */,
+				F89814032EB54637009693A3 /* Frameworks */,
 				8B41F6462DEDD0D5001A66F9 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -166,8 +218,18 @@
 				8B41F65C2DEDD0D6001A66F9 /* Pickleball Game Tracker.xctest */,
 				F8110A5A2E5998A8005BCBDF /* PickleballGameTrackerWatch.app */,
 				F8110A702E5998A9005BCBDF /* PickleballGameTrackerWatchUITests.xctest */,
+				F89814022EB54637009693A3 /* PickleballGameTrackerWidgetExtensionExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		F89814032EB54637009693A3 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				F89814042EB54637009693A3 /* WidgetKit.framework */,
+				F89814062EB54637009693A3 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -181,11 +243,13 @@
 				8B41F6422DEDD0D5001A66F9 /* Frameworks */,
 				8B41F6432DEDD0D5001A66F9 /* Resources */,
 				F8110A7E2E5998A9005BCBDF /* Embed Watch Content */,
+				F89814192EB54638009693A3 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				F8110A792E5998A9005BCBDF /* PBXTargetDependency */,
+				F89814132EB54638009693A3 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				8B41F6472DEDD0D5001A66F9 /* PickleballGameTracker */,
@@ -270,6 +334,29 @@
 			productReference = F8110A702E5998A9005BCBDF /* PickleballGameTrackerWatchUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		F89814012EB54637009693A3 /* PickleballGameTrackerWidgetExtensionExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F89814152EB54638009693A3 /* Build configuration list for PBXNativeTarget "PickleballGameTrackerWidgetExtensionExtension" */;
+			buildPhases = (
+				F89813FE2EB54637009693A3 /* Sources */,
+				F89813FF2EB54637009693A3 /* Frameworks */,
+				F89814002EB54637009693A3 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				F89814082EB54637009693A3 /* PickleballGameTrackerWidgetExtension */,
+			);
+			name = PickleballGameTrackerWidgetExtensionExtension;
+			packageProductDependencies = (
+				F89814252EB548BF009693A3 /* GameTrackerCore */,
+			);
+			productName = PickleballGameTrackerWidgetExtensionExtension;
+			productReference = F89814022EB54637009693A3 /* PickleballGameTrackerWidgetExtensionExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -277,7 +364,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2600;
+				LastSwiftUpdateCheck = 2610;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					8B41F6442DEDD0D5001A66F9 = {
@@ -293,6 +380,9 @@
 					F8110A6F2E5998A9005BCBDF = {
 						CreatedOnToolsVersion = 26.0;
 						TestTargetID = F8110A592E5998A8005BCBDF;
+					};
+					F89814012EB54637009693A3 = {
+						CreatedOnToolsVersion = 26.1;
 					};
 				};
 			};
@@ -318,6 +408,7 @@
 				8B41F65B2DEDD0D6001A66F9 /* PickleballGameTrackerUITests */,
 				F8110A592E5998A8005BCBDF /* PickleballGameTrackerWatch */,
 				F8110A6F2E5998A9005BCBDF /* PickleballGameTrackerWatchUITests */,
+				F89814012EB54637009693A3 /* PickleballGameTrackerWidgetExtensionExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -345,6 +436,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		F8110A6E2E5998A9005BCBDF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F89814002EB54637009693A3 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -382,6 +480,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F89813FE2EB54637009693A3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -399,6 +504,11 @@
 			isa = PBXTargetDependency;
 			target = F8110A592E5998A8005BCBDF /* PickleballGameTrackerWatch */;
 			targetProxy = F8110A782E5998A9005BCBDF /* PBXContainerItemProxy */;
+		};
+		F89814132EB54638009693A3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F89814012EB54637009693A3 /* PickleballGameTrackerWidgetExtensionExtension */;
+			targetProxy = F89814122EB54638009693A3 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -542,6 +652,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Pickleball Game Tracker";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports";
 				INFOPLIST_KEY_NSCameraUsageDescription = "The app needs access to your device's camera to take pictures for players or your account avatars.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -574,6 +685,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Pickleball Game Tracker";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports";
 				INFOPLIST_KEY_NSCameraUsageDescription = "The app needs access to your device's camera to take pictures for players or your account avatars.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -734,6 +846,90 @@
 			};
 			name = Release;
 		};
+		F89814162EB54638009693A3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = SMWC5A39X7;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PickleballGameTrackerWidgetExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = PickleballGameTrackerWidgetExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ehadev.PickleballGameTracker.PickleballGameTrackerWidgetExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+				XROS_DEPLOYMENT_TARGET = 26.1;
+			};
+			name = Debug;
+		};
+		F89814172EB54638009693A3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = SMWC5A39X7;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PickleballGameTrackerWidgetExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = PickleballGameTrackerWidgetExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ehadev.PickleballGameTracker.PickleballGameTrackerWidgetExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+				XROS_DEPLOYMENT_TARGET = 26.1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -782,6 +978,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		F89814152EB54638009693A3 /* Build configuration list for PBXNativeTarget "PickleballGameTrackerWidgetExtensionExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F89814162EB54638009693A3 /* Debug */,
+				F89814172EB54638009693A3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -807,6 +1012,10 @@
 		F84055FF2E5BC94C00C975C5 /* GameTrackerWatchFeature */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = GameTrackerWatchFeature;
+		};
+		F89814252EB548BF009693A3 /* GameTrackerCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = GameTrackerCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -1,4 +1,4 @@
-# Build iOS target
+# Debug iOS target
 
 Call the tool `mcp_xcodebuildmcp_build_sim` with the following parameters:
 
@@ -14,7 +14,6 @@ Call the tool `mcp_xcodebuildmcp_build_sim` with the following parameters:
 
 ## Debugging Process
 
-1. Read the errors from the tool call output, categorize them, and pick a file to target changes for (if possible).
-2. Get a comprehensive understanding of what the file needs to do by scanning the file, the related code, and the docs.
-3. Find any relevent plan files that may give additional content as to what the code may be a part of.
-4. Once you see what the file is supposed to be doing, update the code to fix the errors so the file can function properly.
+1. Read the errors and warnings from the tool call output, categorize them, and pick a file to target changes for (if possible).
+2. Get a comprehensive understanding of what the file needs to do by scanning the file, and the related code.
+3. Once you see what the file is supposed to be doing, update the code to fix the errors and warnings so the file can function properly.

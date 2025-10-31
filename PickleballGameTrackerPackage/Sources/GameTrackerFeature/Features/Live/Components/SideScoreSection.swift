@@ -7,7 +7,7 @@ struct SideScoreSection: View {
     @Bindable var game: Game
     let teamNumber: Int
     let teamName: String
-    let isGameActive: Bool
+    let isGameLive: Bool
     let currentTimestamp: TimeInterval
     let onEventLogged: ((GameEvent) -> Void)?
     @Environment(\.modelContext) private var modelContext
@@ -17,27 +17,20 @@ struct SideScoreSection: View {
         game: Game,
         teamNumber: Int,
         teamName: String,
-        isGameActive: Bool,
+        isGameLive: Bool,
         currentTimestamp: TimeInterval,
         onEventLogged: ((GameEvent) -> Void)? = nil
     ) {
         self.game = game
         self.teamNumber = teamNumber
         self.teamName = teamName
-        self.isGameActive = isGameActive
+        self.isGameLive = isGameLive
         self.currentTimestamp = currentTimestamp
         self.onEventLogged = onEventLogged
     }
 
     private var teamTintColor: Color {
-        // Use roster colors where available, fall back to game tint
-        if let team = try? modelContext.fetch(FetchDescriptor<TeamProfile>(predicate: #Predicate { $0.name == teamName })).first {
-            return team.primaryColor
-        }
-        if let player = try? modelContext.fetch(FetchDescriptor<PlayerProfile>(predicate: #Predicate { $0.name == teamName })).first {
-            return player.primaryColor
-        }
-        return game.teamTintColor(for: teamNumber)
+        game.teamTintColor(for: teamNumber, context: modelContext)
     }
 
     var body: some View {
@@ -46,7 +39,7 @@ struct SideScoreSection: View {
                 game: game,
                 teamNumber: teamNumber,
                 teamName: teamName,
-                isGameActive: isGameActive,
+                isGameLive: isGameLive,
                 showTapIndicator: game.gameState == .playing || game.gameState == .paused,
                 tintOverride: teamTintColor
             )
@@ -55,7 +48,7 @@ struct SideScoreSection: View {
                 value: teamNumber == 1 ? game.score1 : game.score2
             )
 
-            if isGameActive && game.currentServer == teamNumber && game.gameState == .playing {
+            if isGameLive && game.currentServer == teamNumber && game.gameState == .playing {
                 EventButtonsCard(
                     game: game,
                     currentTimestamp: currentTimestamp,
@@ -85,7 +78,7 @@ private struct SideScorePreviewHost: View {
                     game: game,
                     teamNumber: teamConfig.teamNumber,
                     teamName: teamConfig.teamName,
-                    isGameActive: true,
+                    isGameLive: true,
                     currentTimestamp: 60.0
                 )
             }
@@ -97,7 +90,7 @@ private struct SideScorePreviewHost: View {
     let container = PreviewContainers.liveGame()
     let (gameManager, _) = PreviewContainers.managers(for: container)
     let context = container.mainContext
-    let game: Game = (try? context.fetch(FetchDescriptor<Game>()).first(where: { $0.gameVariation?.teamSize == 1 }))
+    let game: Game = (try? context.fetch(FetchDescriptor<Game>()).first(where: { $0.effectiveTeamSize == 1 }))
         ?? ((try? context.fetch(FetchDescriptor<Game>()))?.first ?? Game(gameType: .recreational))
 
     SideScorePreviewHost(game: game)
@@ -109,7 +102,7 @@ private struct SideScorePreviewHost: View {
     let container = PreviewContainers.liveGame()
     let (gameManager, _) = PreviewContainers.managers(for: container)
     let context = container.mainContext
-    let game: Game = (try? context.fetch(FetchDescriptor<Game>()).first(where: { ($0.gameVariation?.teamSize ?? $0.gameType.defaultTeamSize) > 1 }))
+    let game: Game = (try? context.fetch(FetchDescriptor<Game>()).first(where: { $0.effectiveTeamSize > 1 }))
         ?? ((try? context.fetch(FetchDescriptor<Game>()))?.first ?? Game(gameType: .recreational))
 
     SideScorePreviewHost(game: game)

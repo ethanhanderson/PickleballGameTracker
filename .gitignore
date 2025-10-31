@@ -69,3 +69,7 @@ fastlane/test_output
 
 Makefile
 .log
+
+# xcode-build-server files
+buildServer.json
+.compile

@@ -88,7 +88,7 @@ public struct CompletedGameFactory {
     // MARK: - Configuration
     
     private var _gameType: GameType?
-    private var _gameVariation: GameVariation?
+    private var _rules: GameRules?
     private var _score1: Int?
     private var _score2: Int?
     private var _winningScore: Int?
@@ -131,17 +131,16 @@ public struct CompletedGameFactory {
         return copy
     }
     
-    /// Sets a specific game variation for the generated game.
+    /// Sets custom rules for the generated game.
     ///
-    /// The variation's rules and settings will be used for the game. If not specified,
+    /// The rules will be used for the game. If not specified,
     /// standard rules for the game type will be used.
     ///
-    /// - Parameter variation: A GameVariation instance with custom rules
+    /// - Parameter rules: A GameRules instance with custom rules
     /// - Returns: Self for method chaining
-    public func variation(_ variation: GameVariation) -> Self {
+    public func rules(_ rules: GameRules) -> Self {
         var copy = self
-        copy._gameVariation = variation
-        copy._gameType = variation.gameType
+        copy._rules = rules
         return copy
     }
     
@@ -396,9 +395,9 @@ public struct CompletedGameFactory {
     /// - Returns: A GeneratedGame containing the game and its intended completion date
     public func generateWithDate() -> GeneratedGame {
         let gameType = _gameType ?? GameType.allCases.randomElement()!
-        let variation = _gameVariation
-        let winningScore = _winningScore ?? variation?.winningScore ?? 11
-        let winByTwo = _winByTwo ?? variation?.winByTwo ?? true
+        let rules = _rules
+        let winningScore = _winningScore ?? rules?.winningScore ?? gameType.defaultWinningScore
+        let winByTwo = _winByTwo ?? rules?.winByTwo ?? gameType.defaultWinByTwo
         
         let (score1, score2) = generateScores(winningScore: winningScore, winByTwo: winByTwo)
         let completedDate = generateCompletedDate()
@@ -406,8 +405,8 @@ public struct CompletedGameFactory {
         let duration = _duration ?? estimateDuration(score1: score1, score2: score2, rallies: rallies)
         
         let game: Game
-        if let variation = variation {
-            game = Game(gameVariation: variation)
+        if let rules = rules {
+            game = Game(gameType: gameType, rules: rules)
         } else {
             game = Game(gameType: gameType)
         }
@@ -561,11 +560,6 @@ public struct CompletedGameFactory {
         guard let context = _context else { return }
         
         if let p1 = _player1, let p2 = _player2 {
-            let variation = GameVariationFactory.forMatchup(
-                players: [p1, p2],
-                gameType: _gameType ?? game.gameType
-            )
-            game.gameVariation = variation
             game.participantMode = .players
             game.side1PlayerIds = [p1.id]
             game.side2PlayerIds = [p2.id]
@@ -573,11 +567,6 @@ public struct CompletedGameFactory {
         }
         
         if let t1 = _team1, let t2 = _team2 {
-            let variation = GameVariationFactory.forMatchup(
-                teams: [t1, t2],
-                gameType: _gameType ?? game.gameType
-            )
-            game.gameVariation = variation
             game.participantMode = .teams
             game.side1TeamId = t1.id
             game.side2TeamId = t2.id
@@ -598,11 +587,6 @@ public struct CompletedGameFactory {
             let p1 = shuffled[0]
             let p2 = shuffled[1]
             
-            let variation = GameVariationFactory.forMatchup(
-                players: [p1, p2],
-                gameType: _gameType ?? game.gameType
-            )
-            game.gameVariation = variation
             game.participantMode = .players
             game.side1PlayerIds = [p1.id]
             game.side2PlayerIds = [p2.id]
@@ -623,11 +607,6 @@ public struct CompletedGameFactory {
             let t1 = shuffled[0]
             let t2 = shuffled[1]
             
-            let variation = GameVariationFactory.forMatchup(
-                teams: [t1, t2],
-                gameType: _gameType ?? game.gameType
-            )
-            game.gameVariation = variation
             game.participantMode = .teams
             game.side1TeamId = t1.id
             game.side2TeamId = t2.id

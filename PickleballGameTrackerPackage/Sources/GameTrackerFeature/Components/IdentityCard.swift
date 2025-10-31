@@ -85,9 +85,9 @@ struct IdentityCard: View {
     var iconTintColor: Color {
       switch self {
       case .player(let player, _):
-        return player.iconTintColorValue ?? .blue
+        return player.accentColor
       case .team(let team):
-        return team.iconTintColorValue ?? .green
+        return team.accentColor
       }
     }
 

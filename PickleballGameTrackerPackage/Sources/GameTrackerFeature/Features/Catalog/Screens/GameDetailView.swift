@@ -11,12 +11,9 @@ import SwiftUI
 @MainActor
 struct GameDetailView: View {
   let gameType: GameType
-  let onStartGame: (GameVariation, MatchupSelection) -> Void
+  let onStartGame: (GameType, GameRules?, MatchupSelection) -> Void
   @Environment(LiveGameStateManager.self) private var activeGameStateManager
-  
-  // Query all completed games for finding recent games of this type
-  @Query(filter: #Predicate<Game> { $0.isCompleted })
-  private var allCompletedGames: [Game]
+  @Environment(LiveSyncCoordinator.self) private var syncCoordinator
 
   @State private var winningScore: Int = 11
   @State private var winByTwo: Bool = true
@@ -35,29 +32,25 @@ struct GameDetailView: View {
   @State private var showNavigationTitle = false
 
   @State private var showingLiveGameConflict = false
-  @State private var pendingGameVariation: GameVariation?
+  @State private var pendingGameRules: GameRules?
   @State private var pendingMatchup: MatchupSelection?
+  @State private var pendingLastGameStart = false
   @State private var showingSetupSheet = false
-  @State private var showingLastGamePreview = false
-  @State private var lastGame: Game?
 
   init(
     gameType: GameType,
-    onStartGame: @escaping (GameVariation, MatchupSelection) -> Void
+    onStartGame: @escaping (GameType, GameRules?, MatchupSelection) -> Void
   ) {
     self.gameType = gameType
     self.onStartGame = onStartGame
 
-    self._winningScore = State(initialValue: gameType.defaultWinningScore)
-    self._winByTwo = State(initialValue: gameType.defaultWinByTwo)
-    self._kitchenRule = State(initialValue: gameType.defaultKitchenRule)
-    self._doubleBounceRule = State(
-      initialValue: gameType.defaultDoubleBounceRule
-    )
-    self._servingRotation = State(initialValue: .standard)
-    self._sideSwitchingRule = State(
-      initialValue: gameType.defaultSideSwitchingRule
-    )
+    let defaultRules = gameType.defaultRules
+    self._winningScore = State(initialValue: defaultRules.winningScore)
+    self._winByTwo = State(initialValue: defaultRules.winByTwo)
+    self._kitchenRule = State(initialValue: defaultRules.kitchenRule)
+    self._doubleBounceRule = State(initialValue: defaultRules.doubleBounceRule)
+    self._servingRotation = State(initialValue: defaultRules.servingRotation)
+    self._sideSwitchingRule = State(initialValue: defaultRules.sideSwitchingRule)
   }
 
   var body: some View {
@@ -90,7 +83,7 @@ struct GameDetailView: View {
           .foregroundStyle(gameType.color)
           .disabled(isCreatingGame)
 
-          Button(action: loadLastGame) {
+          Button(action: handleLastGameStart) {
             Label {
               Text("Last Game")
             } icon: {
@@ -105,6 +98,42 @@ struct GameDetailView: View {
           .tint(Color(UIColor.secondarySystemBackground).opacity(0.4))
           .foregroundStyle(gameType.color)
           .disabled(isCreatingGame)
+          .confirmationDialog(
+            "An active game is in progress",
+            isPresented: $showingLiveGameConflict,
+            titleVisibility: .visible
+          ) {
+            Button("End current game and start new", role: .destructive) {
+              Task { @MainActor in
+                do {
+                  try await activeGameStateManager.completeCurrentGame()
+                } catch {
+                  Log.error(
+                    error,
+                    event: .saveFailed,
+                    metadata: ["phase": "completeBeforeStart"]
+                  )
+                }
+                
+                if pendingLastGameStart {
+                  await performLastGameStart()
+                  pendingLastGameStart = false
+                } else if let rules = pendingGameRules, let matchup = pendingMatchup {
+                  onStartGame(gameType, rules, matchup)
+                  pendingGameRules = nil
+                  pendingMatchup = nil
+                }
+              }
+            }
+            
+            Button("Keep current game", role: .cancel) {
+              pendingGameRules = nil
+              pendingMatchup = nil
+              pendingLastGameStart = false
+            }
+          } message: {
+            Text("You already have a game running. What would you like to do?")
+          }
         }
         .padding(.bottom, DesignSystem.Spacing.sm)
 
@@ -149,20 +178,17 @@ struct GameDetailView: View {
         GamePresetPickerView(gameType: gameType) { preset in
           Task { @MainActor in
             do {
-              let variation = try await createGameVariation(
-                usePresetValues: true,
-                isCustom: false
-              )
-              // Preset start without roster selection: start as preset-only using players/teams unspecified
-              let matchup = MatchupSelection(teamSize: variation.teamSize, mode: .players(sideA: [], sideB: []))
-              if activeGameStateManager.hasActiveGame {
-                pendingGameVariation = variation
+              let rules = try createGameRules(usePresetValues: true)
+              let teamSize = gameType.defaultTeamSize
+              let matchup = MatchupSelection(teamSize: teamSize, mode: .players(sideA: [], sideB: []))
+              if activeGameStateManager.hasLiveGame {
+                pendingGameRules = rules
                 pendingMatchup = matchup
                 showingLiveGameConflict = true
               } else {
-                onStartGame(variation, matchup)
+                onStartGame(gameType, rules, matchup)
               }
-            } catch let error as GameVariationError {
+            } catch let error as GameRulesError {
               errorMessage = error.localizedDescription
               if let suggestion = error.recoverySuggestion {
                 errorMessage += "\n\n" + suggestion
@@ -176,55 +202,11 @@ struct GameDetailView: View {
     .sheet(isPresented: $showingSetupSheet) {
       SetupView(
         gameType: gameType,
-        onStartGame: { variation, matchup in
+        onStartGame: { gameType, rules, matchup in
           showingSetupSheet = false
-          handleGameStart(variation, matchup: matchup)
+          handleGameStart(gameType, rules: rules, matchup: matchup)
         }
       )
-    }
-    .sheet(isPresented: $showingLastGamePreview) {
-      if let lastGame {
-        LastGamePreview(
-          game: lastGame,
-          gameType: gameType,
-          onStartGame: { startRecentGame() }
-        )
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
-      }
-    }
-    .confirmationDialog(
-      "An active game is in progress",
-      isPresented: $showingLiveGameConflict,
-      titleVisibility: .visible
-    ) {
-      Button("End current game and start new", role: .destructive) {
-        guard let variation = pendingGameVariation,
-              let matchup = pendingMatchup
-        else { return }
-        
-        Task { @MainActor in
-          do {
-            try await activeGameStateManager.completeCurrentGame()
-          } catch {
-            Log.error(
-              error,
-              event: .saveFailed,
-              metadata: ["phase": "completeBeforeStart"]
-            )
-          }
-          onStartGame(variation, matchup)
-          pendingGameVariation = nil
-          pendingMatchup = nil
-        }
-      }
-      
-      Button("Keep current game", role: .cancel) {
-        pendingGameVariation = nil
-        pendingMatchup = nil
-      }
-    } message: {
-      Text("You already have a game running. What would you like to do?")
     }
     .toolbar {
       ToolbarItem(placement: .principal) {
@@ -245,145 +227,126 @@ struct GameDetailView: View {
     }
   }
 
-  private func handleGameStart(_ variation: GameVariation, matchup: MatchupSelection) {
+  private func handleGameStart(_ gameType: GameType, rules: GameRules?, matchup: MatchupSelection) {
     isCreatingGame = true
 
     Task { @MainActor in
       isCreatingGame = false
 
-      if activeGameStateManager.hasActiveGame {
-        pendingGameVariation = variation
+      if activeGameStateManager.hasLiveGame {
+        pendingGameRules = rules
         pendingMatchup = matchup
         showingLiveGameConflict = true
       } else {
-        onStartGame(variation, matchup)
+        onStartGame(gameType, rules, matchup)
       }
     }
   }
 
-  private func loadLastGame() {
-    let recentGames = allCompletedGames
-      .filter { $0.gameType == gameType }
-      .sorted {
-        ($0.completedDate ?? $0.lastModified)
-          > ($1.completedDate ?? $1.lastModified)
-      }
-
-    guard let foundGame = recentGames.first else {
-      errorMessage = "No recent games found for this game type"
-      showingError = true
-      return
-    }
-
-    lastGame = foundGame
-    showingLastGamePreview = true
-  }
-
-  private func startRecentGame() {
-    guard let lastGame else { return }
-    
+  private func handleLastGameStart() {
     isCreatingGame = true
 
     Task { @MainActor in
-      do {
-        Log.event(
-          .actionTapped,
-          level: .info,
-          message: "Starting game based on last game",
-          context: .current(gameId: lastGame.id),
-          metadata: ["lastGameScore": lastGame.formattedScore]
-        )
+      defer { isCreatingGame = false }
 
-        let variation = try GameVariation.createValidated(
-          name: "Recent Game - \(gameType.displayName)",
-          gameType: gameType,
-          teamSize: lastGame.effectiveTeamSize,
-          winningScore: lastGame.winningScore,
-          winByTwo: lastGame.winByTwo,
-          kitchenRule: lastGame.kitchenRule,
-          doubleBounceRule: lastGame.doubleBounceRule,
-          servingRotation: lastGame.gameVariation?.servingRotation
-            ?? .standard,
-          sideSwitchingRule: lastGame.gameVariation?.sideSwitchingRule
-            ?? .at6Points,
-          isCustom: true
-        )
-
-        isCreatingGame = false
-
-        let matchup = MatchupSelection(
-          teamSize: lastGame.effectiveTeamSize,
-          mode: .players(sideA: [], sideB: [])
-        )
-
-        if activeGameStateManager.hasActiveGame {
-          pendingGameVariation = variation
-          pendingMatchup = matchup
-          showingLiveGameConflict = true
-        } else {
-          onStartGame(variation, matchup)
-        }
-      } catch let error as GameVariationError {
-        isCreatingGame = false
-        errorMessage = error.localizedDescription
-        if let suggestion = error.recoverySuggestion {
-          errorMessage += "\n\n" + suggestion
-        }
-        showingError = true
+      if activeGameStateManager.hasLiveGame {
+        pendingLastGameStart = true
+        showingLiveGameConflict = true
+        return
       }
+
+      await performLastGameStart()
+    }
+  }
+  
+  private func performLastGameStart() async {
+    do {
+      let game = try await activeGameStateManager.startLastGame(of: gameType)
+
+      Log.event(
+        .viewAppear,
+        level: .info,
+        message: "Last game started",
+        context: .current(gameId: game.id),
+        metadata: ["gameType": gameType.rawValue]
+      )
+
+      NotificationCenter.default.post(
+        name: Notification.Name("OpenLiveGameRequested"),
+        object: nil
+      )
+
+      // Mirror game start on companion
+      // 1) Publish roster snapshot first to ensure identities exist
+      let rosterBuilder = RosterSnapshotBuilder(storage: SwiftDataStorage.shared)
+      if let roster = try? rosterBuilder.build(includeArchived: false) {
+        try? await syncCoordinator.publishRoster(roster)
+      }
+      // 2) Publish start configuration with gameId for id alignment
+      let config = GameStartConfiguration(
+        gameId: game.id,
+        gameType: game.gameType,
+        teamSize: TeamSize(playersPerSide: game.effectiveTeamSize) ?? .doubles,
+        participants: {
+          switch game.participantMode {
+          case .players:
+            return Participants(side1: .players(game.side1PlayerIds), side2: .players(game.side2PlayerIds))
+          case .teams:
+            return Participants(side1: .team(game.side1TeamId!), side2: .team(game.side2TeamId!))
+          case .anonymous:
+            return Participants(side1: .players([]), side2: .players([]))
+          }
+        }(),
+        rules: try? GameRules.createValidated(
+          winningScore: game.winningScore,
+          winByTwo: game.winByTwo,
+          kitchenRule: game.kitchenRule,
+          doubleBounceRule: game.doubleBounceRule,
+          servingRotation: game.servingRotation,
+          sideSwitchingRule: game.sideSwitchingRule,
+          scoringType: game.scoringType,
+          timeLimit: game.timeLimit,
+          maxRallies: game.maxRallies
+        )
+      )
+      try? await syncCoordinator.publishStart(config)
+    } catch let error as GameRulesError {
+      errorMessage = error.localizedDescription
+      if let suggestion = error.recoverySuggestion {
+        errorMessage += "\n\n" + suggestion
+      }
+      showingError = true
+    } catch {
+      Log.error(
+        error,
+        event: .saveFailed,
+        metadata: ["phase": "startLastGame"]
+      )
+      errorMessage = "Failed to start last game: \(error.localizedDescription)"
+      showingError = true
     }
   }
 
-  private func createGameVariation(
+  private func createGameRules(
     usePresetValues: Bool = false,
-    team1: TeamProfile? = nil,
-    team2: TeamProfile? = nil,
-    teamSize: Int? = nil,
-    isCustom: Bool = false
-  ) async throws(GameVariationError) -> GameVariation {
+    teamSize: Int? = nil
+  ) throws(GameRulesError) -> GameRules {
 
     if usePresetValues {
-      return try GameVariation.createValidated(
-        name: "\(gameType.displayName) Game",
-        gameType: gameType,
-        teamSize: gameType.defaultTeamSize,
-        winningScore: gameType.defaultWinningScore,
-        winByTwo: gameType.defaultWinByTwo,
-        kitchenRule: gameType.defaultKitchenRule,
-        doubleBounceRule: gameType.defaultDoubleBounceRule,
-        servingRotation: .standard,
-        sideSwitchingRule: gameType.defaultSideSwitchingRule,
-        isCustom: false
-      )
+      return gameType.defaultRules
     } else {
-      var effectiveTeamSize = gameType.defaultTeamSize
-
-      if let providedTeamSize = teamSize {
-        effectiveTeamSize = providedTeamSize
-      }
-
-      return try GameVariation.createValidated(
-        name: generateGameName(team1: team1, team2: team2),
-        gameType: gameType,
-        teamSize: effectiveTeamSize,
+      // GameRules doesn't include teamSize - that's determined by matchup
+      // Just return the rules based on the form values
+      let rules = GameRules(
         winningScore: winningScore,
         winByTwo: winByTwo,
         kitchenRule: kitchenRule,
         doubleBounceRule: doubleBounceRule,
         servingRotation: servingRotation,
         sideSwitchingRule: sideSwitchingRule,
-        isCustom: isCustom
+        scoringType: .sideOut
       )
-    }
-  }
-
-  private func generateGameName(team1: TeamProfile?, team2: TeamProfile?)
-    -> String
-  {
-    if let team1 = team1, let team2 = team2 {
-      return "\(team1.name) vs \(team2.name)"
-    } else {
-      return "\(gameType.displayName) Game"
+      return rules
     }
   }
 }
@@ -396,12 +359,12 @@ struct GameDetailView: View {
   return NavigationStack {
     GameDetailView(
       gameType: .recreational,
-      onStartGame: { variation, matchup in
+      onStartGame: { gameType, rules, matchup in
         Log.event(
           .actionTapped,
           level: .debug,
           message: "Start from preview",
-          metadata: ["variation": variation.name, "teamSize": String(matchup.teamSize)]
+          metadata: ["gameType": gameType.rawValue, "teamSize": String(matchup.teamSize)]
         )
       }
     )

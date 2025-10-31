@@ -17,12 +17,31 @@ import SwiftData
 public final class SwiftDataGameManager: Sendable {
 
   public let storage: any SwiftDataStorageProtocol
+  
 
   // Delegate reference for active game coordination
   public weak var activeGameDelegate: (any LiveGameCoordinator)?
 
   public init(storage: any SwiftDataStorageProtocol = SwiftDataStorage.shared) {
     self.storage = storage
+  }
+
+  // MARK: - Game Queries
+
+  /// Find the most recent completed game of the specified type.
+  ///
+  /// Used for "Last Game" quick-start feature to reuse participants and rules.
+  ///
+  /// - Parameter type: The game type to search for
+  /// - Returns: The most recently completed game, or nil if none found
+  public func mostRecentCompletedGame(of type: GameType) async throws -> Game? {
+    let completedGames = try await storage.loadCompletedGames()
+    
+    let matchingGames = completedGames
+      .filter { $0.gameType == type }
+      .sorted { ($0.completedDate ?? $0.createdDate) > ($1.completedDate ?? $1.createdDate) }
+    
+    return matchingGames.first
   }
 
   // MARK: - Game Creation
@@ -42,33 +61,39 @@ public final class SwiftDataGameManager: Sendable {
     return newGame
   }
 
-  /// Create a new game with a specific variation
-  public func createGame(variation: GameVariation) async throws -> Game {
-    let newGame = Game(gameVariation: variation)
+  /// Create a new game with custom rules
+  public func createGame(type: GameType, rules: GameRules) async throws -> Game {
+    let newGame = Game(gameType: type, rules: rules)
     try await storage.saveGame(newGame)
 
     Log.event(
       .saveSucceeded,
       level: .info,
-      message: "Game created from variation",
+      message: "Game created with custom rules",
       context: .current(gameId: newGame.id),
-      metadata: ["variation": variation.name]
+      metadata: ["type": type.displayName]
     )
     return newGame
   }
 
-  /// Create a new game from a variation and a matchup selection (players or teams)
+  /// Create a new game with custom rules and a matchup selection (players or teams)
   public func createGame(
-    variation: GameVariation,
+    type: GameType,
+    rules: GameRules,
     matchup: MatchupSelection
   ) async throws -> Game {
     let newGame = Game(
-      gameType: variation.gameType,
-      gameVariation: variation,
-      winningScore: variation.winningScore,
-      winByTwo: variation.winByTwo,
-      kitchenRule: variation.kitchenRule,
-      doubleBounceRule: variation.doubleBounceRule
+      gameType: type,
+      rules: rules,
+      winningScore: rules.winningScore,
+      winByTwo: rules.winByTwo,
+      kitchenRule: rules.kitchenRule,
+      doubleBounceRule: rules.doubleBounceRule,
+      sideSwitchingRule: rules.sideSwitchingRule,
+      servingRotation: rules.servingRotation,
+      scoringType: rules.scoringType,
+      timeLimit: rules.timeLimit,
+      maxRallies: rules.maxRallies
     )
 
     // Store participant data from matchup
@@ -90,7 +115,7 @@ public final class SwiftDataGameManager: Sendable {
       level: .info,
       message: "Game created with matchup",
       context: .current(gameId: newGame.id),
-      metadata: ["variation": variation.name, "teamSize": String(matchup.teamSize)]
+      metadata: ["type": type.displayName, "teamSize": String(matchup.teamSize)]
     )
     return newGame
   }
@@ -651,6 +676,8 @@ public enum GameError: Error, LocalizedError, Sendable {
   case cannotChangeServeWhenNotPlaying
   case illegalServerChangeDuringPlay
   case illegalServingPlayerChangeDuringPlay
+  case notSessionParticipant
+  case invalidEventPayload
 
   public var errorDescription: String? {
     switch self {
@@ -676,6 +703,10 @@ public enum GameError: Error, LocalizedError, Sendable {
       return "Server can't be changed during active play. Pause the game to adjust serving."
     case .illegalServingPlayerChangeDuringPlay:
       return "Serving player can't be changed during active play. Pause the game to adjust."
+    case .notSessionParticipant:
+      return "Only session participants can perform this action"
+    case .invalidEventPayload:
+      return "Invalid event payload"
     }
   }
 }

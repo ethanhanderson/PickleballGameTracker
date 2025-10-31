@@ -279,7 +279,7 @@ extension AvatarView {
     self.init(
       avatarImageData: player.avatarImageData,
       iconSymbolName: player.iconSymbolName,
-      iconTintColor: player.iconTintColorValue,
+      iconTintColor: player.accentColor,
       style: style,
       isArchived: isArchived || player.isArchived
     )
@@ -298,7 +298,7 @@ extension AvatarView {
     self.init(
       avatarImageData: team.avatarImageData,
       iconSymbolName: team.iconSymbolName,
-      iconTintColor: team.iconTintColorValue,
+      iconTintColor: team.accentColor,
       style: style,
       isArchived: isArchived || team.isArchived
     )
