@@ -33,7 +33,6 @@ struct GamePresetPickerView: View {
             } label: {
               HStack(spacing: DesignSystem.Spacing.sm) {
                 Image(systemName: "text.badge.plus")
-                  .tint(.accentColor)
                 VStack(alignment: .leading, spacing: 2) {
                   Text(preset.name)
                     .font(.body)
@@ -58,4 +57,14 @@ struct GamePresetPickerView: View {
   }
 }
 
+#Preview {
+  let container = PreviewContainers.standard()
+  
+  GamePresetPickerView(
+    gameType: .recreational,
+    onSelect: { _ in }
+  )
+  .modelContainer(container)
+  .tint(.green)
+}
 

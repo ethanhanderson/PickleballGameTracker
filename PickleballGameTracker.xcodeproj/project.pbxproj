@@ -365,7 +365,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2610;
-				LastUpgradeCheck = 2600;
+				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					8B41F6442DEDD0D5001A66F9 = {
 						CreatedOnToolsVersion = 16.3;
@@ -649,7 +649,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PickleballGameTracker/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Pickleball Game Tracker";
+				INFOPLIST_KEY_CFBundleDisplayName = Pickleball;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports";
 				INFOPLIST_KEY_NSCameraUsageDescription = "The app needs access to your device's camera to take pictures for players or your account avatars.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
@@ -682,7 +682,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PickleballGameTracker/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Pickleball Game Tracker";
+				INFOPLIST_KEY_CFBundleDisplayName = Pickleball;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports";
 				INFOPLIST_KEY_NSCameraUsageDescription = "The app needs access to your device's camera to take pictures for players or your account avatars.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
@@ -741,7 +741,7 @@
 				DEVELOPMENT_TEAM = SMWC5A39X7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = PickleballGameTrackerWatchApp;
+				INFOPLIST_KEY_CFBundleDisplayName = Pickleball;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.ehadev.PickleballGameTracker;
 				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = YES;
@@ -777,7 +777,7 @@
 				DEVELOPMENT_TEAM = SMWC5A39X7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = PickleballGameTrackerWatchApp;
+				INFOPLIST_KEY_CFBundleDisplayName = Pickleball;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.ehadev.PickleballGameTracker;
 				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = YES;
@@ -853,6 +853,7 @@
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = SMWC5A39X7;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -895,6 +896,7 @@
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = SMWC5A39X7;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;

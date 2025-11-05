@@ -1,11 +1,3 @@
-//
-//  LiveGameStateManager.swift
-//  SharedGameCore
-//
-//  Centralized live game state manager replacing ActiveGameStateManager,
-//  GameSessionManager, and TimerManager.
-//
-
 import Foundation
 @preconcurrency import SwiftData
 import SwiftUI
@@ -44,28 +36,31 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
   private let timer = TimerManager()
   private let sessionStore = LiveSessionStore.shared
   
-  // Weak reference to sync coordinator for checking if another device is tracking
   @ObservationIgnored
   private weak var syncCoordinator: LiveSyncCoordinator?
 
-  // Delegate proxy to keep compiler happy with weak reference on SwiftDataGameManager
   @ObservationIgnored
   private lazy var _delegateProxy: DelegateProxy = DelegateProxy(owner: self)
 
   // MARK: - State
 
   public private(set) var currentGame: Game?
+  public private(set) var currentGameTypeSnapshot: GameType?
   public private(set) var isGameLive: Bool = false
   public private(set) var isGameInitial: Bool = true
   public private(set) var currentServeNumber: Int = 1
+  private var isCompletingGame: Bool = false
 
   public var hasLiveGame: Bool {
     currentGame != nil && currentGame?.isCompleted == false
   }
 
-  // Sync removed
+  /// Check if the current game will be deleted (not saved) when ended
+  public var willDeleteCurrentGameOnCompletion: Bool {
+    guard let game = currentGame else { return false }
+    return game.isUnused(elapsedTime: elapsedTime)
+  }
 
-  // Timer state properties - these need to be stored to trigger UI updates
   public private(set) var isTimerRunning: Bool = false
   public private(set) var elapsedTime: TimeInterval = 0
   public private(set) var formattedElapsedTime: String = "00:00"
@@ -77,10 +72,10 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
   public var formattedElapsedTimeWithCentisecondsProxy: String { timer.formattedElapsedTimeWithCentiseconds }
 
   // MARK: - Derived UI Helpers
-  public var currentGameTypeDisplayName: String? { currentGame?.gameType.displayName }
+  public var currentGameTypeDisplayName: String? { currentGameTypeSnapshot?.displayName }
   public var currentScore: String? { currentGame?.formattedScore }
-  public var currentGameTypeIcon: String? { currentGame?.gameType.iconName }
-  public var currentGameTypeColor: Color? { currentGame?.gameType.color }
+  public var currentGameTypeIcon: String? { currentGameTypeSnapshot?.iconName }
+  public var currentGameTypeColor: Color? { currentGameTypeSnapshot?.color }
 
   public init() {
     timer.setTimerUpdateCallback { [weak self] in
@@ -101,32 +96,38 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
     self.syncCoordinator = syncCoordinator
   }
 
-  // Sync configuration removed
-
   // MARK: - Lifecycle
 
   public func setCurrentGame(_ game: Game) async {
-    if let existing = currentGame, existing.id != game.id {
+    let resolved: Game
+    if let gm = _gameManager, let reloaded = try? await gm.storage.loadGame(id: game.id) {
+      resolved = reloaded
+    } else {
+      resolved = game
+    }
+
+    if let existing = currentGame, existing.id != resolved.id {
       timer.stop()
       timer.reset()
       currentServeNumber = 1
+      updateTimerProperties()
     }
-    currentGame = game
-    isGameInitial = (game.gameState == .initial)
-    isGameLive = (game.gameState == .playing)
+    currentGame = resolved
+    currentGameTypeSnapshot = resolved.gameType
+    isGameInitial = (resolved.gameState == .initial)
+    isGameLive = (resolved.gameState == .playing)
     
     if let gm = _gameManager {
       gm.activeGameDelegate = _delegateProxy
     }
 
-    // Persist session for fast resume
     persistSession()
+    updateTimerProperties()
   }
-  
-  // Sync session initialization removed
 
   public func clearCurrentGame() {
     currentGame = nil
+    currentGameTypeSnapshot = nil
     isGameLive = false
     isGameInitial = true
     currentServeNumber = 1
@@ -183,19 +184,12 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
   public func startLastGame(of type: GameType) async throws -> Game {
     guard let gm = _gameManager else { throw GameError.noActiveGame }
     
-    // Find most recent completed game of this type
     guard let lastGame = try await gm.mostRecentCompletedGame(of: type) else {
       throw GameRulesError.invalidConfiguration(
         "No completed \(type.displayName) game found. Please use full setup."
       )
     }
     
-    // Determine team size
-    guard let teamSize = TeamSize(playersPerSide: lastGame.effectiveTeamSize) else {
-      throw GameRulesError.invalidTeamSize(lastGame.effectiveTeamSize)
-    }
-    
-    // Build participants - require exact match, no anonymous fallback
     let participants: Participants
     switch lastGame.participantMode {
     case .players:
@@ -220,13 +214,24 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
         side2: .team(team2Id)
       )
       
-    case .anonymous:
-      throw GameRulesError.invalidConfiguration(
-        "Last game was anonymous. Please use full setup."
-      )
+    
     }
     
-    // Create rules preserving settings from last game
+    let teamSizeValue: Int = {
+      switch (participants.side1, participants.side2) {
+      case (.players(let a), .players(let b)):
+        return min(a.count, b.count)
+      case (.team, .team):
+        let snapshot = lastGame.teamSize
+        return snapshot > 0 ? snapshot : type.defaultTeamSize
+      default:
+        return type.defaultTeamSize
+      }
+    }()
+    guard let teamSize = TeamSize(playersPerSide: teamSizeValue) else {
+      throw GameRulesError.invalidTeamSize(teamSizeValue)
+    }
+    
     let rules = try GameRules.createValidated(
       winningScore: lastGame.winningScore,
       winByTwo: lastGame.winByTwo,
@@ -239,7 +244,6 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
       maxRallies: lastGame.maxRallies
     )
     
-    // Build configuration and start
     let config = GameStartConfiguration(
       gameType: type,
       teamSize: teamSize,
@@ -258,12 +262,6 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
   public func startGameFromCompleted(_ lastGame: Game) async throws -> Game {
     guard _gameManager != nil else { throw GameError.noActiveGame }
 
-    // Determine team size from the last game
-    guard let teamSize = TeamSize(playersPerSide: lastGame.effectiveTeamSize) else {
-      throw GameRulesError.invalidTeamSize(lastGame.effectiveTeamSize)
-    }
-
-    // Build participants from the last game - require exact match
     let participants: Participants
     switch lastGame.participantMode {
     case .players:
@@ -284,8 +282,22 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
         side2: .team(team2Id)
       )
       
-    case .anonymous:
-      throw GameRulesError.invalidConfiguration("Cannot restart anonymous game")
+    
+    }
+
+    let teamSizeValue: Int = {
+      switch (participants.side1, participants.side2) {
+      case (.players(let a), .players(let b)):
+        return min(a.count, b.count)
+      case (.team, .team):
+        let snapshot = lastGame.teamSize
+        return snapshot > 0 ? snapshot : lastGame.gameType.defaultTeamSize
+      default:
+        return lastGame.gameType.defaultTeamSize
+      }
+    }()
+    guard let teamSize = TeamSize(playersPerSide: teamSizeValue) else {
+      throw GameRulesError.invalidTeamSize(teamSizeValue)
     }
 
     // Create rules preserving settings from last game
@@ -301,7 +313,6 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
       maxRallies: lastGame.maxRallies
     )
 
-    // Build configuration
     let config = GameStartConfiguration(
       gameType: lastGame.gameType,
       teamSize: teamSize,
@@ -317,41 +328,14 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
   public func startNewGame(with config: GameStartConfiguration) async throws -> Game {
     guard let gm = _gameManager else { throw GameError.noActiveGame }
 
-    // Reset timer for new game
     timer.stop()
     timer.reset()
+    updateTimerProperties()
 
-    // Detect anonymous players flow (no persisted participant IDs)
-    let isAnonymousPlayers: Bool = {
-      switch (config.participants.side1, config.participants.side2) {
-      case (.players(let a), .players(let b)):
-        return a.isEmpty && b.isEmpty
-      default:
-        return false
-      }
-    }()
+    try validateStartConfiguration(config)
 
-    // Validate invariants unless we are using anonymous players fallback
-    if !isAnonymousPlayers {
-      try validateStartConfiguration(config)
-    }
-
-    // Get rules from config or use game type defaults
     let rules = config.rules ?? config.gameType.defaultRules
 
-    // Anonymous players flow: create without a matchup and mark participants as players with empty arrays
-    if isAnonymousPlayers {
-      let game = try await gm.createGame(type: config.gameType, rules: rules)
-      game.notes = config.notes
-      game.participantMode = .players
-      game.side1PlayerIds = []
-      game.side2PlayerIds = []
-      try await gm.updateGame(game)
-      await setCurrentGame(game)
-      return game
-    }
-
-    // Build a MatchupSelection from participants for non-anonymous starts
     let matchup: MatchupSelection
     switch (config.participants.side1, config.participants.side2) {
     case (.players(let a), .players(let b)):
@@ -362,7 +346,6 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
       throw GameRulesError.invalidConfiguration("Participants shape does not match team size")
     }
 
-    // Persist via manager; set as current
     let game = try await gm.createGame(type: config.gameType, rules: rules, matchup: matchup)
     game.notes = config.notes
     await setCurrentGame(game)
@@ -403,7 +386,6 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
     case .completed: throw GameError.gameAlreadyCompleted
     case .serving: try await resumeGame()
     }
-    // Ensure delegate binding
     gm.activeGameDelegate = _delegateProxy
   }
 
@@ -429,11 +411,9 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
   public func pauseGame() async throws {
     guard let game = currentGame, let gm = _gameManager else { throw GameError.noActiveGame }
     
-    game.gameState = .paused
-    isGameLive = false
+    try await gm.pauseGame(game)
     game.logEvent(.gamePaused, at: elapsedTime)
     try await gm.updateGame(game)
-    timer.pause()
     updateTimerProperties()
     persistSession()
   }
@@ -441,42 +421,79 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
   public func resumeGame() async throws {
     guard let game = currentGame, let gm = _gameManager else { throw GameError.noActiveGame }
     
-    game.gameState = .playing
-    isGameLive = true
+    try await gm.resumeGame(game)
     game.logEvent(.gameResumed, at: elapsedTime)
     try await gm.updateGame(game)
-    timer.resume()
     updateTimerProperties()
     persistSession()
   }
 
   public func completeCurrentGame() async throws {
+    guard !isCompletingGame else { return }
+    isCompletingGame = true
+    defer { isCompletingGame = false }
+
     guard let game = currentGame, let gm = _gameManager else { throw GameError.noActiveGame }
-    try await gm.completeGame(game)
-    game.logEvent(.gameCompleted, at: elapsedTime)
+    if game.isCompleted {
+      clearCurrentGame()
+      #if canImport(ActivityKit)
+      if #available(iOS 16.1, watchOS 9.1, *) {
+        await endLiveActivity()
+      }
+      #endif
+      return
+    }
+    
+    let willBeDeleted = game.isUnused(elapsedTime: elapsedTime)
+    
+    if !willBeDeleted {
+      game.logEvent(.gameCompleted, at: elapsedTime)
+    }
+    
+    let wasRunning = timer.isRunning
     timer.stop()
+    
+    do {
+      try await gm.completeGame(game, elapsedTime: elapsedTime)
+    } catch {
+      if wasRunning { timer.resume() }
+      updateTimerProperties()
+      throw error
+    }
+    
+    clearCurrentGame()
     
     #if canImport(ActivityKit)
     if #available(iOS 16.1, watchOS 9.1, *) {
       await endLiveActivity()
     }
     #endif
-    
-    clearCurrentGame()
   }
 
   // MARK: - Scoring
 
   public func scorePoint(for team: Int) async throws {
     guard let game = currentGame, let gm = _gameManager else { throw GameError.noActiveGame }
-    try await gm.scorePoint(for: team, in: game)
-    game.logEvent(.playerScored, at: elapsedTime, teamAffected: team)
+    try await gm.scorePointAndLogEvent(for: team, in: game, at: elapsedTime)
     
     #if canImport(ActivityKit)
     if #available(iOS 16.1, watchOS 9.1, *) {
       await updateLiveActivity(for: game)
     }
     #endif
+  }
+
+  /// Score a point using an explicit timestamp captured by the caller.
+  /// This ensures the same timestamp is used for both local persistence and outbound sync.
+  public func scorePoint(for team: Int, at timestamp: TimeInterval) async throws {
+    guard let game = currentGame, let gm = _gameManager else { throw GameError.noActiveGame }
+    try await gm.scorePointAndLogEvent(for: team, in: game, at: timestamp)
+    
+#if canImport(ActivityKit)
+    if #available(iOS 16.1, watchOS 9.1, *) {
+      await updateLiveActivity(for: game)
+    }
+#endif
   }
 
   public func undoLastPoint() async throws {
@@ -501,8 +518,6 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
     try await gm.resetGame(game)
     currentServeNumber = 1
     timer.reset()
-
-    // TODO: Send full snapshot after reset
   }
 
   // MARK: - Serving
@@ -530,8 +545,9 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
 
   public func handleServiceFault() async throws {
     guard let game = currentGame, let gm = _gameManager else { throw GameError.noActiveGame }
+    let faultTeam = game.currentServer
     try await gm.handleServiceFault(in: game)
-    game.logEvent(.serviceFault, at: elapsedTime, teamAffected: game.currentServer)
+    game.logEvent(.serviceFault, at: elapsedTime, teamAffected: faultTeam)
   }
 
   public func handleNonServingTeamTap(on tappedTeam: Int) async throws {
@@ -620,7 +636,6 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
     guard let gm = _gameManager else { return }
     guard currentGame == nil else { return }
     
-    // First, try to resume from session store if available
     if let state = sessionStore.load() {
       if let game = try? await gm.storage.loadGame(id: state.gameId), game.isCompleted == false {
         await restoreGame(game, elapsedTime: state.elapsedTime, wasTimerRunning: state.isTimerRunning)
@@ -628,7 +643,6 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
       }
     }
     
-    // If no session store or session game not found, check database for active games
     await attemptRestoreActiveGameFromDatabase()
   }
   
@@ -662,30 +676,20 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
     do {
       let activeGames = try await gm.storage.loadActiveGames()
       
-      // Prioritize games in .playing state
       let playingGame = activeGames.first { $0.gameState == .playing }
       let gameToRestore = playingGame ?? activeGames.first
       
       guard let game = gameToRestore, !game.isCompleted else { return }
       
-      // Estimate elapsed time from game events
-      // Events store timestamp as elapsed time when they occurred
       let estimatedElapsedTime: TimeInterval
       if let lastEvent = game.eventsByTimestamp.first {
-        // Use the timestamp from the most recent event
-        // For paused games, this represents when it was paused
-        // For playing games, this is the last recorded elapsed time
         estimatedElapsedTime = lastEvent.timestamp
       } else if let duration = game.duration {
-        // Fallback to stored duration if available
         estimatedElapsedTime = duration
       } else {
-        // No events or duration: start at 0 for new games
         estimatedElapsedTime = 0
       }
       
-      // For paused games, restore without starting timer
-      // For playing games, check if another device is tracking
       let shouldStartTimer = game.gameState == .playing
       let anotherDeviceTracking = syncCoordinator?.isAnotherDeviceActivelyTracking() ?? false
       
@@ -725,37 +729,30 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
     }
   }
 
-  /// Persist session state without pausing the game
-  /// Used when app goes to background but continues running
   public func persistSessionOnly() async {
     persistSession()
   }
 
-  /// Handle app termination
-  /// Pauses the game and persists state if no other device is actively tracking
   public func handleAppWillTerminate() async {
     guard let game = currentGame else { return }
     guard !game.isCompleted else { return }
     
-    // Check if another device is actively tracking
     let anotherDeviceTracking = syncCoordinator?.isAnotherDeviceActivelyTracking() ?? false
     
     if !anotherDeviceTracking && isGameLive && game.gameState == .playing {
-      // Only pause if we're the only device tracking
       try? await pauseGame()
       persistSession()
     } else {
-      // Just persist current state without pausing (another device is tracking)
       persistSession()
     }
   }
-  
-  // All sync helper and transport-related functions removed
 
   // MARK: - LiveGameCoordinator
 
   public func incrementServeNumber() { currentServeNumber += 1 }
-  public func triggerServeChangeHaptic() { HapticFeedbackService.shared.serveChange() }
+  public func triggerServeChangeHaptic() {
+    HapticFeedbackService.shared.serveChange(isGamePlaying: isGameLive)
+  }
   public func gameStateDidChange(to gameState: GameState) {
     switch gameState {
     case .playing:
@@ -786,7 +783,9 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
     }
   }
   public func gameDidComplete(_ game: Game) { 
-    currentGame = game
+    Task { @MainActor in
+      await setCurrentGame(game)
+    }
     
     #if canImport(ActivityKit)
     if #available(iOS 16.1, watchOS 9.1, *) {
@@ -799,7 +798,9 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
   
   public func gameDidUpdate(_ game: Game) { 
     if currentGame?.id == game.id { 
-      currentGame = game
+      Task { @MainActor in
+        await setCurrentGame(game)
+      }
       
       #if canImport(ActivityKit)
       if #available(iOS 16.1, watchOS 9.1, *) {
@@ -812,16 +813,15 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
   }
   
   public func gameDidDelete(_ game: Game) { 
-    if currentGame?.id == game.id { 
-      #if canImport(ActivityKit)
-      if #available(iOS 16.1, watchOS 9.1, *) {
-        Task { @MainActor in
-          await endLiveActivity()
-        }
+    clearCurrentGame()
+    
+    #if canImport(ActivityKit)
+    if #available(iOS 16.1, watchOS 9.1, *) {
+      Task { @MainActor in
+        await endLiveActivity()
       }
-      #endif
-      clearCurrentGame()
-    } 
+    }
+    #endif
   }
   
   public func validateStateConsistency() -> Bool { timer.validateState() }

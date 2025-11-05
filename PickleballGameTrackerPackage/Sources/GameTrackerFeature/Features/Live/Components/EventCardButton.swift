@@ -29,8 +29,8 @@ struct EventCardButton: View {
                     .font(.headline)
                     .foregroundStyle(.primary)
             }
-            .frame(maxWidth: .infinity)
         }
+        .buttonSizing(.flexible)
         .controlSize(.large)
         .buttonStyle(.glassProminent)
         .tint(tintColor.opacity(0.2))

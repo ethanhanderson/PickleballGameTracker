@@ -9,10 +9,12 @@ struct LiveToolbar: ToolbarContent {
     let game: Game
     let gameManager: SwiftDataGameManager
     let activeGameStateManager: LiveGameStateManager
+    let onEndGame: () async -> Void
     @Binding var showEventsHistory: Bool
 
     @Environment(\.dismiss) private var dismiss
     @State private var showEndGameConfirmation = false
+    @State private var isEndingGame = false
 
     var body: some ToolbarContent {
         ToolbarItemGroup {
@@ -49,29 +51,23 @@ struct LiveToolbar: ToolbarContent {
                 isPresented: $showEndGameConfirmation,
                 titleVisibility: .visible
             ) {
-                Button("End", role: .destructive) {
-                    endGame()
-                }
+                Button("End", role: .destructive) { endGame() }
+                    .disabled(isEndingGame)
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("End this game? It will be saved to your history and included in your statistics.")
+                Text("End this game? It will be saved to your history unless no activity occurred.")
             }
         }
     }
 
     private func endGame() {
+        guard !isEndingGame else { return }
+        isEndingGame = true
+        dismiss()
+
         Task { @MainActor in
-            do {
-                try await activeGameStateManager.completeCurrentGame()
-                dismiss()
-            } catch {
-                Log.error(
-                    error,
-                    event: .saveFailed,
-                    context: .current(gameId: game.id),
-                    metadata: ["action": "endGame"]
-                )
-            }
+            await onEndGame()
+            isEndingGame = false
         }
     }
 }

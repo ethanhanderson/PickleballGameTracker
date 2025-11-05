@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SwiftUI
 
 public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
   case recreational = "recreational"
@@ -384,8 +385,7 @@ public enum GameStateColor: String, CaseIterable, Codable, Sendable {
   case attention = "attention"        // Orange - attention needed
   case active = "active"              // Green - currently active
   case success = "success"            // Green - completed successfully
-  case inactive = "inactive"          // Gray - paused/inactive
-
+  case inactive = "inactive"          // Orange - paused/inactive
 
   public var displayName: String {
     switch self {
@@ -399,6 +399,21 @@ public enum GameStateColor: String, CaseIterable, Codable, Sendable {
       return "Success"
     case .inactive:
       return "Inactive"
+    }
+  }
+
+  public var color: Color {
+    switch self {
+    case .readyToStart:
+      return .blue
+    case .attention:
+      return .orange
+    case .active:
+      return .green
+    case .success:
+      return .green
+    case .inactive:
+      return .orange
     }
   }
 }

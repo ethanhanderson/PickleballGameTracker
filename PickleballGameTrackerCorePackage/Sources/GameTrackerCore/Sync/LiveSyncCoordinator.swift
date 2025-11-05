@@ -1,8 +1,3 @@
-//
-//  LiveSyncCoordinator.swift
-//  GameTrackerCore
-//
-
 import Foundation
 import Observation
 
@@ -19,13 +14,25 @@ public final class LiveSyncCoordinator {
   private var lastTimerSetReceivedAt: Date = .distantPast
   private let timerPulseInterval: TimeInterval = 1.0       // 1 Hz pulses
   private let timerDriftThreshold: TimeInterval = 0.25     // snap if > 250ms off
+  // Store last received elapsed (authoritative from peer) and a window to force-snap on resume
+  private var lastTimerElapsedAdjustedReceived: TimeInterval? = nil
+  private var pendingForceSnapUntil: Date? = nil
   
   // Server sync: LWW timestamp tracking for conflict resolution
   private var lastServerSetReceivedAt: Date = .distantPast
   private var lastServerValueReceived: Int? = nil
+  // Track last time we applied any serve mutation (faults, switches) to avoid rapid flip-flops
+  private var lastServeMutationAppliedAt: Date = .distantPast
+
+  // Roster sync: track what watch knows about (phone side only)
+  private var knownWatchRoster: (players: [UUID: Date], teams: [UUID: Date], presets: [UUID: Date]) = ([:], [:], [:])
+  private var hasReceivedInventory: Bool = false
+  private var inventorySentThisSession: Bool = false
+  public var reachability: SyncReachability = .unavailable
 
   public init(service: any SyncService) {
     self.service = service
+    self.reachability = service.currentReachability
 
     // Wire default inbound handlers to dispatch on main actor
     self.service.onReceiveLiveSnapshot = { [weak self] snapshot in
@@ -53,30 +60,61 @@ public final class LiveSyncCoordinator {
       }
     }
 
-    // Reachability: when transport becomes reachable and no current game, request status
+    // Start request handler: request phone to present Setup and start game
+    // Note: WatchConnectivityTransport schedules a push notification when receiving the request
+    // AppNavigationView will either open immediately (if app is active and no sheets) or let notification show
+    self.service.onReceiveStartRequest = { request in
+      Task { @MainActor in
+        NotificationCenter.default.post(
+          name: Notification.Name("OpenSetupRequested"),
+          object: nil,
+          userInfo: [
+            "gameType": request.gameType,
+            "gameTypeId": request.gameType.rawValue
+          ]
+        )
+      }
+    }
+
+    // Reachability: when transport becomes reachable, send inventory (watch) or handle status (phone)
     self.service.onReachabilityChanged = { [weak self] reach in
       Task { @MainActor in
         guard let self else { return }
-        if reach == .reachable, self.liveManager?.currentGame == nil {
-          try? await self.requestLiveStatus()
-          Log.event(
-            .loadStarted,
-            level: .debug,
-            message: "sync.reachability.requestLiveStatus",
-            metadata: nil
-          )
+        self.reachability = reach
+        if reach == .reachable {
+          // Watch side: send inventory on first reachability (has gameManager but not storage)
+          if self.gameManager != nil && self.storage == nil && !self.inventorySentThisSession {
+            try? await self.sendRosterInventory()
+            self.inventorySentThisSession = true
+          }
+          // Phone side: if no current game, request status
+          if self.liveManager?.currentGame == nil && self.storage != nil {
+            try? await self.requestLiveStatus()
+            Log.event(
+              .loadStarted,
+              level: .debug,
+              message: "sync.reachability.requestLiveStatus",
+              metadata: nil
+            )
+          }
         }
       }
     }
-    // Live status request handler: if we have an active game, publish roster and snapshot
+    // Live status request handler: if we have an active game, send roster diff then snapshot
     self.service.onReceiveLiveStatusRequest = { [weak self] in
       Task { @MainActor in
         guard let self, let live = self.liveManager, let current = live.currentGame else { return }
-        if let storage = self.storage {
-          let rb = RosterSnapshotBuilder(storage: storage)
-          if let roster = try? rb.build(includeArchived: false, includeGuests: true) {
-            try? await self.publishRoster(roster)
+        // If no inventory received yet, fallback to old snapshot path for backward compatibility
+        if !self.hasReceivedInventory {
+          if let storage = self.storage {
+            let rb = RosterSnapshotBuilder(storage: storage)
+            if let roster = try? rb.build(includeArchived: false, includeGuests: true) {
+              try? await self.publishRoster(roster)
+            }
           }
+        } else {
+          // Use new inventory→upsert flow
+          try? await self.sendRosterDiff()
         }
         let snapshot = GameSnapshotBuilder.make(
           from: current,
@@ -88,6 +126,7 @@ public final class LiveSyncCoordinator {
     }
 
     // Respond to roster requests if storage is bound (phone acts as source of truth)
+    // Fallback to old snapshot path for backward compatibility
     self.service.onReceiveRosterRequest = { [weak self] in
       Task { @MainActor in
         guard let self else { return }
@@ -126,6 +165,51 @@ public final class LiveSyncCoordinator {
           )
         } catch {
           Log.error(error, event: .saveFailed, metadata: ["phase": "onReceiveRosterRequest"])
+        }
+      }
+    }
+
+    // Roster inventory handler: update known watch state and compute/send diff
+    self.service.onReceiveRosterInventory = { [weak self] inventory in
+      Task { @MainActor in
+        guard let self else { return }
+        self.knownWatchRoster = (inventory.players, inventory.teams, inventory.presets)
+        self.hasReceivedInventory = true
+        Log.event(
+          .loadSucceeded,
+          level: .debug,
+          message: "roster.inventory.received",
+          metadata: [
+            "players": "\(inventory.players.count)",
+            "teams": "\(inventory.teams.count)",
+            "presets": "\(inventory.presets.count)"
+          ]
+        )
+        // Compute diff and send upsert
+        try? await self.sendRosterDiff()
+      }
+    }
+
+    // Roster upsert handler: import into local store (watch side)
+    self.service.onReceiveRosterUpsert = { [weak self] upsert in
+      Task { @MainActor in
+        guard let self, let gm = self.gameManager else { return }
+        do {
+          if let storage = gm.storage as? SwiftDataStorage {
+            try await storage.importRosterUpsert(upsert)
+            Log.event(
+              .saveSucceeded,
+              level: .info,
+              message: "roster.upsert.applied",
+              metadata: [
+                "players": "\(upsert.players.count)",
+                "teams": "\(upsert.teams.count)",
+                "presets": "\(upsert.presets.count)"
+              ]
+            )
+          }
+        } catch {
+          Log.error(error, event: .saveFailed, metadata: ["phase": "onReceiveRosterUpsert"])
         }
       }
     }
@@ -203,6 +287,8 @@ public final class LiveSyncCoordinator {
   }
 
   public func publishStart(_ config: GameStartConfiguration) async throws {
+    // Ensure participants exist on watch before sending start config
+    try await ensureParticipantsOnWatch(for: config)
     try await service.sendStartConfiguration(config)
   }
 
@@ -226,6 +312,27 @@ public final class LiveSyncCoordinator {
     try await service.requestLiveStatus()
   }
 
+  public func requestStart(gameType: GameType) async throws {
+    try await service.sendStartRequest(StartGameRequestDTO(gameType: gameType))
+  }
+
+  public func sendRosterInventory() async throws {
+    guard let gm = gameManager, let storage = gm.storage as? SwiftDataStorage else { return }
+    let builder = RosterInventoryBuilder(storage: storage)
+    let inventory = try builder.build(includeArchived: false, includeGuests: true)
+    try await service.sendRosterInventory(inventory)
+    Log.event(
+      .saveSucceeded,
+      level: .info,
+      message: "roster.inventory.sent",
+      metadata: [
+        "players": "\(inventory.players.count)",
+        "teams": "\(inventory.teams.count)",
+        "presets": "\(inventory.presets.count)"
+      ]
+    )
+  }
+
   // MARK: - Binding helpers
   public func bind(storage: any SwiftDataStorageProtocol) {
     self.storage = storage
@@ -239,11 +346,36 @@ public final class LiveSyncCoordinator {
   }
 
   private func handle(startConfig: GameStartConfiguration) async {
-    guard let live = liveManager else { return }
-    // Attempt to start the game with provided configuration. If participants
-    // are missing locally, request roster and retry once after a brief delay.
+    guard let live = liveManager, let gm = gameManager else { return }
+    
+    // Verify participants exist locally before starting
+    let canStart = await verifyParticipantsLocally(for: startConfig, storage: gm.storage)
+    if !canStart {
+      Log.event(
+        .loadFailed,
+        level: .warn,
+        message: "start.config.blocked.missingParticipants",
+        metadata: ["gameType": startConfig.gameType.rawValue]
+      )
+      // Best-effort roster fetch then retry once
+      try? await requestRoster()
+      try? await Task.sleep(for: .milliseconds(500))
+      // Re-verify after fetch
+      let canStartAfterWait = await verifyParticipantsLocally(for: startConfig, storage: gm.storage)
+      if !canStartAfterWait {
+        Log.event(
+          .loadFailed,
+          level: .error,
+          message: "start.config.failed.participantsStillMissing",
+          metadata: ["gameType": startConfig.gameType.rawValue]
+        )
+        return
+      }
+    }
+    
+    // Attempt to start the game with provided configuration
     do {
-      if let gm = gameManager, let desiredId = startConfig.gameId {
+      if let desiredId = startConfig.gameId {
         if let existing = try? await gm.storage.loadGame(id: desiredId) {
           await live.setCurrentGame(existing)
         } else {
@@ -284,10 +416,37 @@ public final class LiveSyncCoordinator {
         message: "start.config.apply.failed",
         metadata: ["error": error.localizedDescription]
       )
-      // Best-effort roster fetch then retry once
-      try? await requestRoster()
-      try? await Task.sleep(for: .milliseconds(200))
-      _ = try? await live.startNewGame(with: startConfig)
+    }
+  }
+
+  private func verifyParticipantsLocally(for config: GameStartConfiguration, storage: any SwiftDataStorageProtocol) async -> Bool {
+    switch (config.participants.side1, config.participants.side2) {
+    case (.players(let a), .players(let b)):
+      for playerId in a + b {
+        if (try? storage.loadPlayer(id: playerId)) == nil {
+          return false
+        }
+      }
+      return true
+    case (.team(let t1), .team(let t2)):
+      guard let team1 = try? storage.loadTeam(id: t1),
+            let team2 = try? storage.loadTeam(id: t2) else {
+        return false
+      }
+      // Verify team members exist
+      for player in team1.players {
+        if (try? storage.loadPlayer(id: player.id)) == nil {
+          return false
+        }
+      }
+      for player in team2.players {
+        if (try? storage.loadPlayer(id: player.id)) == nil {
+          return false
+        }
+      }
+      return true
+    default:
+      return false
     }
   }
 
@@ -321,8 +480,6 @@ public final class LiveSyncCoordinator {
           let exists = (try? gm.storage.loadTeam(id: t2)) != nil
           if !exists { missingReferences = true }
         }
-      default:
-        break
       }
       if missingReferences {
         try? await requestRoster()
@@ -336,13 +493,19 @@ public final class LiveSyncCoordinator {
     // Apply snapshot onto model
     game.score1 = snapshot.score1
     game.score2 = snapshot.score2
-    game.currentServer = snapshot.currentServer
-    // Reset server LWW tracking on authoritative snapshot
-    lastServerSetReceivedAt = Date()
-    lastServerValueReceived = snapshot.currentServer
-    game.serverNumber = snapshot.serverNumber
-    game.serverPosition = snapshot.serverPosition
-    game.sideOfCourt = snapshot.sideOfCourt
+    // Avoid overriding recent serve changes while actively playing to prevent UI flip-flop
+    let isPlaying = (snapshot.gameState == .playing) && !game.isCompleted
+    let recentServeWindow: TimeInterval = 0.25
+    let shouldApplyServeStateFromSnapshot = (!isPlaying) || (Date().timeIntervalSince(lastServeMutationAppliedAt) > recentServeWindow)
+    if shouldApplyServeStateFromSnapshot {
+      game.currentServer = snapshot.currentServer
+      // Reset server LWW tracking on authoritative snapshot
+      lastServerSetReceivedAt = Date()
+      lastServerValueReceived = snapshot.currentServer
+      game.serverNumber = snapshot.serverNumber
+      game.serverPosition = snapshot.serverPosition
+      game.sideOfCourt = snapshot.sideOfCourt
+    }
     game.gameState = snapshot.gameState
     game.isFirstServiceSequence = snapshot.isFirstServiceSequence
 
@@ -391,8 +554,7 @@ public final class LiveSyncCoordinator {
     // Apply operation via game manager to preserve persistence behaviors
     switch delta.operation {
     case .score(let team):
-      try? await gm.scorePoint(for: team, in: game)
-      game.logEvent(.playerScored, at: delta.timestamp, teamAffected: team)
+      try? await gm.scorePointAndLogEvent(for: team, in: game, at: delta.timestamp)
 
     case .undoLastPoint:
       try? await gm.undoLastPoint(in: game)
@@ -404,6 +566,19 @@ public final class LiveSyncCoordinator {
     case .setGameState(let state):
       game.gameState = state
       try? await gm.updateGame(game)
+      // If transitioning to playing, pre-apply the most recent authoritative elapsed
+      // so the resume baseline matches the phone precisely.
+      if state == .playing {
+        // Arm a brief window to force-snap subsequent elapsed updates as well
+        pendingForceSnapUntil = Date().addingTimeInterval(1.0)
+        if let live = liveManager,
+           let adjusted = lastTimerElapsedAdjustedReceived,
+           Date().timeIntervalSince(lastTimerSetReceivedAt) < 2.0 {
+          live.setElapsedTime(adjusted)
+        }
+      } else {
+        pendingForceSnapUntil = nil
+      }
       // Keep timer/UI consistent with lifecycle on receivers
       if let live = liveManager {
         live.gameStateDidChange(to: state)
@@ -425,7 +600,10 @@ public final class LiveSyncCoordinator {
       }
 
     case .switchServer:
-      try? await gm.switchServer(in: game)
+      if delta.createdAt > lastServeMutationAppliedAt {
+        lastServeMutationAppliedAt = delta.createdAt
+        try? await gm.switchServer(in: game)
+      }
 
     case .setServer(let team):
       // LWW: accept only if this delta is newer than our last applied server update
@@ -433,6 +611,7 @@ public final class LiveSyncCoordinator {
         lastServerSetReceivedAt = delta.createdAt
         lastServerValueReceived = team
         try? await gm.setServer(to: team, in: game)
+        lastServeMutationAppliedAt = delta.createdAt
       } else {
         // Older delta received - log conflict but don't apply
         Log.event(
@@ -450,17 +629,33 @@ public final class LiveSyncCoordinator {
       }
 
     case .switchServingPlayer:
-      try? await gm.switchServingPlayer(in: game)
+      if delta.createdAt > lastServeMutationAppliedAt {
+        lastServeMutationAppliedAt = delta.createdAt
+        try? await gm.switchServingPlayer(in: game)
+      }
 
     case .startSecondServe:
-      try? await gm.startSecondServeForCurrentTeam(in: game)
+      if delta.createdAt > lastServeMutationAppliedAt {
+        lastServeMutationAppliedAt = delta.createdAt
+        try? await gm.startSecondServeForCurrentTeam(in: game)
+      }
 
-    case .serviceFault:
-      try? await gm.handleServiceFault(in: game)
-      game.logEvent(.serviceFault, at: delta.timestamp, teamAffected: game.currentServer)
+    case .fault(let event, let team):
+      if delta.createdAt > lastServeMutationAppliedAt {
+        lastServeMutationAppliedAt = delta.createdAt
+        // First, log with the pre-change team attribution
+        game.logEvent(event, at: delta.timestamp, teamAffected: team)
+        // Then, advance serve locally if applicable
+        if event.typicallyChangesServe {
+          try? await gm.handleServiceFault(in: game)
+        }
+      }
 
     case .nonServingTeamTap(let team):
-      try? await gm.handleNonServingTeamTap(on: team, in: game)
+      if delta.createdAt > lastServeMutationAppliedAt {
+        lastServeMutationAppliedAt = delta.createdAt
+        try? await gm.handleNonServingTeamTap(on: team, in: game)
+      }
 
     case .reset:
       // Timer reset functionality removed; ignore legacy reset deltas gracefully
@@ -475,8 +670,12 @@ public final class LiveSyncCoordinator {
           let isPlaying = (game.gameState == .playing) && !game.isCompleted
           let lag = max(0, Date().timeIntervalSince(delta.createdAt))
           let adjustedElapsed = isPlaying ? (elapsed + lag) : elapsed
+          // Record last adjusted elapsed from peer regardless of drift
+          lastTimerElapsedAdjustedReceived = adjustedElapsed
+          // Force-snap if we're within the post-resume window; otherwise use drift threshold
+          let shouldForceSnap = (pendingForceSnapUntil?.timeIntervalSinceNow ?? -1) > 0
           let drift = abs(live.elapsedTime - adjustedElapsed)
-          if drift > timerDriftThreshold {
+          if shouldForceSnap || drift > timerDriftThreshold {
             live.setElapsedTime(adjustedElapsed)
           }
           // Do not start/pause timers here; timer state is controlled by gameState changes
@@ -499,6 +698,176 @@ public final class LiveSyncCoordinator {
   public var onReceiveRosterSnapshot: (@Sendable (RosterSnapshotDTO) -> Void)? {
     get { service.onReceiveRosterSnapshot }
     set { service.onReceiveRosterSnapshot = newValue }
+  }
+
+  // MARK: - Roster Sync Helpers
+
+  private func sendRosterDiff() async throws {
+    guard let storage = storage else { return }
+    let builder = RosterSnapshotBuilder(storage: storage)
+    let fullRoster = try builder.build(includeArchived: false, includeGuests: true)
+
+    // Compute diff: items missing on watch or with newer lastModified
+    var playersToSend: [BackupPlayerDTO] = []
+    for player in fullRoster.players {
+      if let watchModified = knownWatchRoster.players[player.id] {
+        if player.lastModified > watchModified {
+          playersToSend.append(player)
+        }
+      } else {
+        playersToSend.append(player)
+      }
+    }
+
+    var teamsToSend: [BackupTeamDTO] = []
+    for team in fullRoster.teams {
+      if let watchModified = knownWatchRoster.teams[team.id] {
+        if team.lastModified > watchModified {
+          teamsToSend.append(team)
+        }
+      } else {
+        teamsToSend.append(team)
+      }
+    }
+
+    var presetsToSend: [BackupPresetDTO] = []
+    for preset in fullRoster.presets {
+      if let watchModified = knownWatchRoster.presets[preset.id] {
+        if preset.lastModified > watchModified {
+          presetsToSend.append(preset)
+        }
+      } else {
+        presetsToSend.append(preset)
+      }
+    }
+
+    if !playersToSend.isEmpty || !teamsToSend.isEmpty || !presetsToSend.isEmpty {
+      let upsert = RosterUpsertDTO(
+        players: playersToSend,
+        teams: teamsToSend,
+        presets: presetsToSend
+      )
+      try await service.sendRosterUpsert(upsert)
+      // Update known state after sending
+      for player in playersToSend {
+        knownWatchRoster.players[player.id] = player.lastModified
+      }
+      for team in teamsToSend {
+        knownWatchRoster.teams[team.id] = team.lastModified
+      }
+      for preset in presetsToSend {
+        knownWatchRoster.presets[preset.id] = preset.lastModified
+      }
+      Log.event(
+        .saveSucceeded,
+        level: .info,
+        message: "roster.upsert.sent",
+        metadata: [
+          "players": "\(playersToSend.count)",
+          "teams": "\(teamsToSend.count)",
+          "presets": "\(presetsToSend.count)"
+        ]
+      )
+    }
+  }
+
+  private func ensureParticipantsOnWatch(for config: GameStartConfiguration) async throws {
+    guard let storage = storage else { return }
+
+    // Collect all participant IDs
+    var requiredPlayerIds: Set<UUID> = []
+    var requiredTeamIds: Set<UUID> = []
+
+    switch (config.participants.side1, config.participants.side2) {
+    case (.players(let a), .players(let b)):
+      requiredPlayerIds = Set(a + b)
+    case (.team(let t1), .team(let t2)):
+      requiredTeamIds = [t1, t2]
+    default:
+      break
+    }
+
+    // Check if any are missing or stale
+    var needsUpsert = false
+    var missingPlayerIds: Set<UUID> = []
+    var missingTeamIds: Set<UUID> = []
+
+    for playerId in requiredPlayerIds {
+      if let watchModified = knownWatchRoster.players[playerId] {
+        // Check if phone version is newer
+        if let phonePlayer = try? storage.loadPlayer(id: playerId) {
+          if phonePlayer.lastModified > watchModified {
+            needsUpsert = true
+            missingPlayerIds.insert(playerId)
+          }
+        }
+      } else {
+        // Missing entirely
+        needsUpsert = true
+        missingPlayerIds.insert(playerId)
+      }
+    }
+
+    for teamId in requiredTeamIds {
+      if let watchModified = knownWatchRoster.teams[teamId] {
+        if let phoneTeam = try? storage.loadTeam(id: teamId) {
+          if phoneTeam.lastModified > watchModified {
+            needsUpsert = true
+            missingTeamIds.insert(teamId)
+          }
+        }
+      } else {
+        needsUpsert = true
+        missingTeamIds.insert(teamId)
+      }
+    }
+
+    // Also need to include team members if sending teams
+    if !missingTeamIds.isEmpty {
+      for teamId in missingTeamIds {
+        if let team = try? storage.loadTeam(id: teamId) {
+          for player in team.players {
+            if knownWatchRoster.players[player.id] == nil {
+              missingPlayerIds.insert(player.id)
+              needsUpsert = true
+            }
+          }
+        }
+      }
+    }
+
+    if needsUpsert {
+      let builder = RosterSnapshotBuilder(storage: storage)
+      let fullRoster = try builder.build(includeArchived: false, includeGuests: true)
+
+      let playersToSend = fullRoster.players.filter { missingPlayerIds.contains($0.id) }
+      let teamsToSend = fullRoster.teams.filter { missingTeamIds.contains($0.id) }
+
+      let upsert = RosterUpsertDTO(
+        players: playersToSend,
+        teams: teamsToSend,
+        presets: []
+      )
+      try await service.sendRosterUpsert(upsert)
+
+      // Update known state
+      for player in playersToSend {
+        knownWatchRoster.players[player.id] = player.lastModified
+      }
+      for team in teamsToSend {
+        knownWatchRoster.teams[team.id] = team.lastModified
+      }
+
+      Log.event(
+        .saveSucceeded,
+        level: .info,
+        message: "roster.upsert.sent.beforeStart",
+        metadata: [
+          "players": "\(playersToSend.count)",
+          "teams": "\(teamsToSend.count)"
+        ]
+      )
+    }
   }
 
   // MARK: - Timer Pulse Helpers

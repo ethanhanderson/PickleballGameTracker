@@ -824,6 +824,143 @@ extension SwiftDataStorage {
     try await importBackup(data, mode: mode)
   }
 
+  public func importRosterUpsert(_ upsert: RosterUpsertDTO) async throws {
+    let context = modelContainer.mainContext
+    let start = Date()
+
+    // Load existing entities by id for upsert
+    var existingPlayers: [UUID: PlayerProfile] = [:]
+    for playerId in upsert.players.map({ $0.id }) {
+      if let existing = try? loadPlayer(id: playerId) {
+        existingPlayers[playerId] = existing
+      }
+    }
+
+    var existingTeams: [UUID: TeamProfile] = [:]
+    for teamId in upsert.teams.map({ $0.id }) {
+      if let existing = try? loadTeam(id: teamId) {
+        existingTeams[teamId] = existing
+      }
+    }
+
+    var existingPresets: [UUID: GameTypePreset] = [:]
+    for presetId in upsert.presets.map({ $0.id }) {
+      if let existing = try? loadPreset(id: presetId) {
+        existingPresets[presetId] = existing
+      }
+    }
+
+    // Build player map for team references
+    var playerById: [UUID: PlayerProfile] = existingPlayers
+
+    // Upsert players
+    for p in upsert.players {
+      if let existing = existingPlayers[p.id] {
+        existing.name = p.name
+        existing.notes = p.notes
+        existing.isArchived = p.isArchived
+        existing.isGuest = p.isGuest
+        existing.iconSymbolName = p.iconSymbolName
+        existing.accentColorStored = p.accentColor ?? StoredRGBAColor.fromSeed(p.id)
+        existing.skillLevel = p.skillLevel
+        existing.preferredHand = p.preferredHand
+        existing.createdDate = p.createdDate
+        existing.lastModified = p.lastModified
+      } else {
+        let player = PlayerProfile(
+          id: p.id,
+          name: p.name,
+          notes: p.notes,
+          isArchived: p.isArchived,
+          isGuest: p.isGuest,
+          avatarImageData: nil,
+          iconSymbolName: p.iconSymbolName,
+          accentColor: p.accentColor ?? StoredRGBAColor.fromSeed(p.id),
+          skillLevel: p.skillLevel,
+          preferredHand: p.preferredHand,
+          createdDate: p.createdDate,
+          lastModified: p.lastModified
+        )
+        playerById[player.id] = player
+        context.insert(player)
+      }
+    }
+
+    // Upsert teams
+    for t in upsert.teams {
+      if let existing = existingTeams[t.id] {
+        existing.name = t.name
+        existing.notes = t.notes
+        existing.isArchived = t.isArchived
+        existing.iconSymbolName = t.iconSymbolName
+        existing.accentColorStored = t.accentColor ?? StoredRGBAColor.fromSeed(t.id)
+        existing.players = t.playerIds.compactMap { playerById[$0] }
+        existing.suggestedGameType = t.suggestedGameType
+        existing.createdDate = t.createdDate
+        existing.lastModified = t.lastModified
+      } else {
+        let team = TeamProfile(
+          id: t.id,
+          name: t.name,
+          notes: t.notes,
+          isArchived: t.isArchived,
+          avatarImageData: nil,
+          iconSymbolName: t.iconSymbolName,
+          accentColor: t.accentColor ?? StoredRGBAColor.fromSeed(t.id),
+          players: t.playerIds.compactMap { playerById[$0] },
+          suggestedGameType: t.suggestedGameType,
+          createdDate: t.createdDate,
+          lastModified: t.lastModified
+        )
+        existingTeams[team.id] = team
+        context.insert(team)
+      }
+    }
+
+    // Upsert presets
+    for pr in upsert.presets {
+      if let existing = existingPresets[pr.id] {
+        existing.name = pr.name
+        existing.notes = pr.notes
+        existing.isArchived = pr.isArchived
+        existing.gameType = pr.gameType
+        existing.team1 = pr.team1Id.flatMap { existingTeams[$0] }
+        existing.team2 = pr.team2Id.flatMap { existingTeams[$0] }
+        existing.accentColorStored = pr.accentColor
+        existing.createdDate = pr.createdDate
+        existing.lastModified = pr.lastModified
+      } else {
+        let preset = GameTypePreset(
+          id: pr.id,
+          name: pr.name,
+          notes: pr.notes,
+          isArchived: pr.isArchived,
+          gameType: pr.gameType,
+          team1: pr.team1Id.flatMap { existingTeams[$0] },
+          team2: pr.team2Id.flatMap { existingTeams[$0] },
+          accentColor: pr.accentColor,
+          createdDate: pr.createdDate,
+          lastModified: pr.lastModified
+        )
+        context.insert(preset)
+      }
+    }
+
+    try context.save()
+    let ms = Int(Date().timeIntervalSince(start) * 1000)
+    Log.event(
+      .saveSucceeded,
+      level: .info,
+      message: "Imported roster upsert",
+      metadata: [
+        "players": "\(upsert.players.count)",
+        "teams": "\(upsert.teams.count)",
+        "presets": "\(upsert.presets.count)",
+        "latencyMs": "\(ms)"
+      ]
+    )
+  }
+
   public func exportBackup() async throws -> Data {
     let context = modelContainer.mainContext
     let start = Date()

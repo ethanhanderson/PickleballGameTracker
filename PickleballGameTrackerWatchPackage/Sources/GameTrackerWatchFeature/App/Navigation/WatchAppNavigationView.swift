@@ -38,17 +38,31 @@ public struct WatchAppNavigationView: View {
     
     public var body: some View {
         Group {
-            if shouldShowLiveGame {
-                if let liveGame = liveGameStateManager.currentGame {
-                    WatchLiveView(
-                        game: liveGame,
-                        onCompleted: {
-                            liveGameStateManager.clearCurrentGame()
-                        }
-                    )
-                }
+            if shouldShowLiveGame, let liveGame = liveGameStateManager.currentGame {
+                WatchLiveView(
+                    game: liveGame,
+                    onCompleted: {
+                        liveGameStateManager.clearCurrentGame()
+                    }
+                )
             } else {
-                WatchCatalogView()
+        switch syncCoordinator.reachability {
+        case .reachable:
+          WatchCatalogView()
+        case .connecting:
+          WatchMessageView(
+            icon: "iphone",
+            message: "Connecting to iPhone…",
+            showSpinner: true,
+            color: .blue
+          )
+        case .unavailable:
+          WatchMessageView(
+            icon: "iphone.slash",
+            message: "Not connected to iPhone",
+            color: .orange
+          )
+        }
             }
         }
         .task {

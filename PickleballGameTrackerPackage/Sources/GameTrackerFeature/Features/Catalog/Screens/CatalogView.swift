@@ -1,13 +1,9 @@
 import GameTrackerCore
-import SwiftData
 import SwiftUI
 
 @MainActor
 struct CatalogView: View {
-    @Namespace var animation
-    @Environment(\.modelContext) private var modelContext
     @State private var navigationState = AppNavigationState()
-    @State private var showSettingsSheet = false
 
     var body: some View {
         NavigationStack(path: $navigationState.navigationPath) {
@@ -58,17 +54,6 @@ struct CatalogView: View {
             .navigationTitle("Games")
             .toolbarTitleDisplayMode(.inlineLarge)
             .viewContainerBackground()
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showSettingsSheet = true
-                    } label: {
-                        Label("Settings", systemImage: "gear")
-                    }
-                    .accessibilityIdentifier("catalog.settings")
-                }
-                .matchedTransitionSource(id: "settings", in: animation)
-            }
             .navigationDestination(for: GameSectionDestination.self) {
                 destination in
                 NavigationDestinationFactory.createDestination(
@@ -77,20 +62,11 @@ struct CatalogView: View {
                 )
             }
         }
-        .tint(.accentColor)
-        .sheet(isPresented: $showSettingsSheet) {
-            NavigationStack { MaintenanceView() }
-                .navigationTransition(
-                    .zoom(sourceID: "settings", in: animation)
-                )
-                .tint(.accentColor)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-        }
     }
 }
 
 #Preview {
     CatalogView()
+        .tint(.green)
         .modelContainer(PreviewContainers.standard())
 }

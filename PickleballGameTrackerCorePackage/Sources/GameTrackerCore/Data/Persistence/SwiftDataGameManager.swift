@@ -1,10 +1,3 @@
-//
-//  SwiftDataGameManager.swift
-//  SharedGameCore
-//
-//  Created by Ethan Anderson on 7/9/25.
-//
-
 import Foundation
 import SwiftData
 
@@ -24,6 +17,14 @@ public final class SwiftDataGameManager: Sendable {
 
   public init(storage: any SwiftDataStorageProtocol = SwiftDataStorage.shared) {
     self.storage = storage
+  }
+
+  // Resolve a Game to the storage container's live context
+  private func resolveTrackedGame(_ game: Game) async -> Game {
+    if let tracked = try? await storage.loadGame(id: game.id) {
+      return tracked
+    }
+    return game
   }
 
   // MARK: - Game Queries
@@ -108,6 +109,11 @@ public final class SwiftDataGameManager: Sendable {
       newGame.side2TeamId = team2Id
     }
 
+    // Snapshot the effective team size at creation so future logic does not rely
+    // on transformable enum decoding or guesses from participant arrays.
+    // This avoids mismatches when resuming the "Last Game" quick start.
+    newGame.teamSize = matchup.teamSize
+
     try await storage.saveGame(newGame)
 
     Log.event(
@@ -124,6 +130,7 @@ public final class SwiftDataGameManager: Sendable {
 
   /// Score a point for the specified team in the given game
   public func scorePoint(for team: Int, in game: Game) async throws {
+    let game = await resolveTrackedGame(game)
     guard !game.isCompleted else { throw GameError.gameAlreadyCompleted }
     guard team == 1 || team == 2 else { throw GameError.invalidTeam }
     // Enforce: scoring only allowed when actively playing
@@ -138,9 +145,10 @@ public final class SwiftDataGameManager: Sendable {
 
     // Serve sequence tracking
     if previousServer != game.currentServer { activeGameDelegate?.incrementServeNumber() }
-    // Detect side switching for logging/haptics
+    // Detect side switching for logging/haptics (only when game is playing)
     if previousSide != game.sideOfCourt {
       Log.event(.sidesSwitched, level: .info, context: .current(gameId: game.id))
+      // Game state is already validated as .playing above, so haptic will trigger
       activeGameDelegate?.triggerServeChangeHaptic()
     }
 
@@ -173,8 +181,23 @@ public final class SwiftDataGameManager: Sendable {
       metadata: ["team": "\(team)", "score": game.formattedScore])
   }
 
+  /// Score a point for the specified team and log a playerScored event
+  /// This method combines scoring with event logging and ensures both are persisted immediately
+  public func scorePointAndLogEvent(
+    for team: Int,
+    in game: Game,
+    at timestamp: TimeInterval,
+    customDescription: String? = nil
+  ) async throws {
+    let game = await resolveTrackedGame(game)
+    try await scorePoint(for: team, in: game)
+    game.logEvent(.playerScored, at: timestamp, teamAffected: team, description: customDescription)
+    try await updateGame(game)
+  }
+
   /// Undo the last point in the given game
   public func undoLastPoint(in game: Game) async throws {
+    let game = await resolveTrackedGame(game)
     guard game.totalRallies > 0 else {
       throw GameError.noPointsToUndo
     }
@@ -199,6 +222,7 @@ public final class SwiftDataGameManager: Sendable {
 
   /// Decrement score for a specific team without changing serving team
   public func decrementScore(for team: Int, in game: Game) async throws {
+    let game = await resolveTrackedGame(game)
     guard !game.isCompleted else { throw GameError.gameAlreadyCompleted }
     guard team == 1 || team == 2 else { throw GameError.invalidTeam }
     // Enforce: score adjustment only allowed when actively playing
@@ -245,6 +269,7 @@ public final class SwiftDataGameManager: Sendable {
 
   /// Change the game state to paused
   public func pauseGame(_ game: Game) async throws {
+    let game = await resolveTrackedGame(game)
     guard !game.isCompleted else {
       throw GameError.gameAlreadyCompleted
     }
@@ -260,6 +285,7 @@ public final class SwiftDataGameManager: Sendable {
 
   /// Change the game state to playing
   public func resumeGame(_ game: Game) async throws {
+    let game = await resolveTrackedGame(game)
     guard !game.isCompleted else {
       throw GameError.gameAlreadyCompleted
     }
@@ -274,9 +300,29 @@ public final class SwiftDataGameManager: Sendable {
   }
 
   /// Complete the specified game
-  public func completeGame(_ game: Game) async throws {
+  /// If the game is unused (less than 5 minutes, no scores, no meaningful events),
+  /// it will be deleted instead of saved.
+  public func completeGame(_ game: Game, elapsedTime: TimeInterval? = nil) async throws {
+    let game = await resolveTrackedGame(game)
     guard !game.isCompleted else {
       throw GameError.gameAlreadyCompleted
+    }
+
+    // Capture game ID before any operations that might delete/detach the object
+    let gameId = game.id
+
+    // Check if game is unused and should be deleted instead of saved
+    if let elapsedTime = elapsedTime, game.isUnused(elapsedTime: elapsedTime) {
+      Log.event(
+        .deleteRequested, level: .info, context: .current(gameId: gameId),
+        metadata: ["reason": "unusedGame", "elapsedTime": "\(elapsedTime)"])
+      
+      try await deleteGame(game)
+      
+      Log.event(
+        .deleteSucceeded, level: .info, context: .current(gameId: gameId),
+        metadata: ["reason": "unusedGame"])
+      return
     }
 
     game.completeGame()
@@ -299,6 +345,7 @@ public final class SwiftDataGameManager: Sendable {
     }
 
     // Notify delegate if this was the active game
+    activeGameDelegate?.gameStateDidChange(to: .completed)
     activeGameDelegate?.gameDidComplete(game)
 
     Log.event(
@@ -308,6 +355,7 @@ public final class SwiftDataGameManager: Sendable {
 
   /// Reset the specified game to initial state
   public func resetGame(_ game: Game) async throws {
+    let game = await resolveTrackedGame(game)
     game.resetGame()
     try await updateGame(game)
 
@@ -320,6 +368,7 @@ public final class SwiftDataGameManager: Sendable {
 
   /// Update an existing game in storage
   public func updateGame(_ game: Game) async throws {
+    let game = await resolveTrackedGame(game)
     do {
       game.lastModified = Date()
       try await storage.updateGame(game)
@@ -340,12 +389,28 @@ public final class SwiftDataGameManager: Sendable {
 
   /// Delete a game from storage
   public func deleteGame(_ game: Game) async throws {
-    try await storage.deleteGame(id: game.id)
+    let game = await resolveTrackedGame(game)
+    // Capture game ID and check if it's the active game BEFORE deletion
+    // to avoid accessing detached object properties
+    let gameId = game.id
+    let isActiveGame = activeGameDelegate?.currentGame?.id == gameId
+    
+    try await storage.deleteGame(id: gameId)
 
     // Notify delegate if this was the active game
-    activeGameDelegate?.gameDidDelete(game)
+    // CRITICAL: game object is now detached from context after deletion.
+    // Any access to properties (even indirectly) will trigger fault resolution errors.
+    // The delegate method gameDidDelete is designed to not access properties,
+    // but we must ensure no SwiftData operations happen on the detached object.
+    if isActiveGame {
+      // Call delegate on main actor
+      // The game parameter is passed for protocol compliance but must not be accessed
+      await MainActor.run {
+        activeGameDelegate?.gameDidDelete(game)
+      }
+    }
 
-    Log.event(.deleteSucceeded, level: .info, context: .current(gameId: game.id))
+    Log.event(.deleteSucceeded, level: .info, context: .current(gameId: gameId))
   }
 
   // MARK: - Statistics
@@ -446,6 +511,7 @@ public final class SwiftDataGameManager: Sendable {
 
   /// Manually switch the serving team in the given game
   public func switchServer(in game: Game) async throws {
+    let game = await resolveTrackedGame(game)
     guard !game.isCompleted else { throw GameError.gameAlreadyCompleted }
     // Enforce: serving team can only be changed during active play
     guard game.gameState == .playing else { throw GameError.cannotChangeServeWhenNotPlaying }
@@ -477,6 +543,7 @@ public final class SwiftDataGameManager: Sendable {
 
   /// Manually set the serving team in the given game (only during active play)
   public func setServer(to team: Int, in game: Game) async throws {
+    let game = await resolveTrackedGame(game)
     guard !game.isCompleted else { throw GameError.gameAlreadyCompleted }
     guard team == 1 || team == 2 else { throw GameError.invalidTeam }
     // Enforce: serving team can only be changed during active play
@@ -506,6 +573,7 @@ public final class SwiftDataGameManager: Sendable {
 
   /// Switch the serving player within the current serving team (for doubles)
   public func switchServingPlayer(in game: Game) async throws {
+    let game = await resolveTrackedGame(game)
     guard !game.isCompleted else {
       throw GameError.gameAlreadyCompleted
     }
@@ -534,6 +602,7 @@ public final class SwiftDataGameManager: Sendable {
 
   /// Handle a service fault by advancing the serve according to game rules
   public func handleServiceFault(in game: Game) async throws {
+    let game = await resolveTrackedGame(game)
     guard !game.isCompleted else {
       throw GameError.gameAlreadyCompleted
     }
@@ -554,6 +623,7 @@ public final class SwiftDataGameManager: Sendable {
 
   /// Set the serving player within the current serving team
   public func setServingPlayer(to player: Int, in game: Game) async throws {
+    let game = await resolveTrackedGame(game)
     guard !game.isCompleted else {
       throw GameError.gameAlreadyCompleted
     }
@@ -586,6 +656,7 @@ public final class SwiftDataGameManager: Sendable {
   /// This is permitted convenience behavior to advance from first to second server
   /// without logging a specific fault event from the quick actions.
   public func startSecondServeForCurrentTeam(in game: Game) async throws {
+    let game = await resolveTrackedGame(game)
     guard !game.isCompleted else { throw GameError.gameAlreadyCompleted }
     guard game.effectiveTeamSize > 1 else { throw GameError.invalidOperation }
     // Only allow during active play
@@ -624,6 +695,7 @@ public final class SwiftDataGameManager: Sendable {
   ///   - Singles: switches serve to tapped team (no scoring), resets to first server
   ///   - Doubles: advances serve as a fault: first → second, or side-out to other team
   public func handleNonServingTeamTap(on tappedTeam: Int, in game: Game) async throws {
+    let game = await resolveTrackedGame(game)
     guard !game.isCompleted else { throw GameError.gameAlreadyCompleted }
     guard tappedTeam == 1 || tappedTeam == 2 else { throw GameError.invalidTeam }
     guard game.gameState == .playing else { throw GameError.cannotScoreWhenPaused }

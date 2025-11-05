@@ -89,7 +89,11 @@ struct WatchLiveView: View {
           }
           Button("Cancel", role: .cancel) {}
         } message: {
-          Text("End this game? It will be saved to your history and included in your statistics.")
+          if liveGameStateManager.willDeleteCurrentGameOnCompletion {
+            Text("End this game? It will not be saved since no scores or events have been logged.")
+          } else {
+            Text("End this game? It will be saved to your history and included in your statistics.")
+          }
         }
         .sheet(isPresented: $showingSettings) {
           WatchLiveSettingsView(
@@ -98,9 +102,12 @@ struct WatchLiveView: View {
             liveGameStateManager: liveGameStateManager
           )
         }
-        .onChange(of: game.isCompleted) { _, isCompleted in
-          if isCompleted {
-            Task { await handleGameCompletion() }
+        .onChange(of: liveGameStateManager.currentGame?.id) { _, newId in
+          // If the current game is cleared externally, dismiss safely
+          if newId == nil {
+            Task { @MainActor in
+              dismiss()
+            }
           }
         }
       } else {
@@ -151,18 +158,28 @@ struct WatchLiveView: View {
       return
     }
 
-    scoreClickTrigger.toggle()
+    let timestamp = liveGameStateManager.elapsedTime
+    let isGamePlaying = liveGameStateManager.isGameLive
+
+    // Only trigger haptic feedback when game is actively playing
+    if isGamePlaying {
+      scoreClickTrigger.toggle()
+    }
 
     Task {
       do {
-        try await liveGameStateManager.scorePoint(for: team)
+        try await liveGameStateManager.scorePoint(for: team, at: timestamp)
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-          scoreSuccessTrigger.toggle()
+        // Only trigger success haptic when game is actively playing
+        if isGamePlaying {
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            scoreSuccessTrigger.toggle()
+          }
         }
 
         if game.isCompleted {
-          await handleGameCompletion()
+          let gameId = game.id
+          await handleGameCompletion(gameId: gameId)
         }
       } catch {
         Log.error(
@@ -171,14 +188,17 @@ struct WatchLiveView: View {
           context: .current(gameId: game.id),
           metadata: ["platform": "watchOS"]
         )
-        scoreFailureTrigger.toggle()
+        // Only trigger error haptic when game is actively playing
+        if isGamePlaying {
+          scoreFailureTrigger.toggle()
+        }
       }
     }
     Task { @MainActor in
       guard let game = self.game else { return }
       try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
         gameId: game.id,
-        timestamp: liveGameStateManager.elapsedTime,
+        timestamp: timestamp,
         operation: .score(team: team)
       ))
     }
@@ -189,16 +209,20 @@ struct WatchLiveView: View {
       return
     }
 
+    let timestamp = liveGameStateManager.elapsedTime
+    let isGamePlaying = liveGameStateManager.isGameLive
+
     let currentScore = team == 1 ? game.score1 : game.score2
     guard currentScore > 0 else { return }
 
-    decrementClickTrigger.toggle()
+    // Only trigger haptic feedback when game is actively playing
+    if isGamePlaying {
+      decrementClickTrigger.toggle()
+    }
 
     Task {
       do {
         try await liveGameStateManager.decrementScore(for: team)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-        }
       } catch {
         Log.error(
           error,
@@ -206,14 +230,17 @@ struct WatchLiveView: View {
           context: .current(gameId: game.id),
           metadata: ["platform": "watchOS"]
         )
-        scoreFailureTrigger.toggle()
+        // Only trigger error haptic when game is actively playing
+        if isGamePlaying {
+          scoreFailureTrigger.toggle()
+        }
       }
     }
     Task { @MainActor in
       guard let game = self.game else { return }
       try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
         gameId: game.id,
-        timestamp: liveGameStateManager.elapsedTime,
+        timestamp: timestamp,
         operation: .decrement(team: team)
       ))
     }
@@ -223,6 +250,8 @@ struct WatchLiveView: View {
     guard let game = game, !game.isCompleted else {
       return
     }
+
+    let timestamp = liveGameStateManager.elapsedTime
 
     Task {
       do {
@@ -240,7 +269,7 @@ struct WatchLiveView: View {
       guard let game = self.game else { return }
       try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
         gameId: game.id,
-        timestamp: liveGameStateManager.elapsedTime,
+        timestamp: timestamp,
         operation: .setServer(team: team)
       ))
     }
@@ -250,8 +279,9 @@ struct WatchLiveView: View {
     guard let game = game, !isToggling else { return }
 
     if game.isCompleted {
+      let gameId = game.id
       Task {
-        await handleGameCompletion()
+        await handleGameCompletion(gameId: gameId)
       }
       return
     }
@@ -297,17 +327,24 @@ struct WatchLiveView: View {
 
   private func completeGame() async {
     guard let game = game else { return }
-    
+
+    let gameId = game.id
+    let elapsed = liveGameStateManager.elapsedTime
+
     do {
       try await liveGameStateManager.completeCurrentGame()
       completeSuccessTrigger.toggle()
 
-      await handleGameCompletion()
+      // Immediately clear and dismiss to avoid rendering stale objects
+      await MainActor.run {
+        onCompleted?()
+        dismiss()
+      }
       // Publish completion so the paired device ends the live game
       Task { @MainActor in
         try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
-          gameId: game.id,
-          timestamp: liveGameStateManager.elapsedTime,
+          gameId: gameId,
+          timestamp: elapsed,
           operation: .setGameState(.completed)
         ))
       }
@@ -315,29 +352,23 @@ struct WatchLiveView: View {
       Log.error(
         error,
         event: .gameCompleted,
-        context: .current(gameId: game.id),
+        context: .current(gameId: gameId),
         metadata: ["platform": "watchOS"]
       )
       completeFailureTrigger.toggle()
     }
   }
 
-  private func handleGameCompletion() async {
-    guard let game = game, game.isCompleted else { return }
-
-    completionSuccessTrigger.toggle()
-
-    try? await Task.sleep(for: .milliseconds(800))
-
+  private func handleGameCompletion(gameId: UUID) async {
+    // Retained for external triggers; now performs immediate dismiss
     await MainActor.run {
       onCompleted?()
       dismiss()
     }
-
     Log.event(
       .gameCompleted,
       level: .info,
-      context: .current(gameId: game.id),
+      context: .current(gameId: gameId),
       metadata: ["platform": "watchOS"]
     )
   }
@@ -349,7 +380,9 @@ struct WatchLiveView: View {
   let setup = PreviewContainers.liveGameSetup()
   let ctx = setup.container.mainContext
   let fetched = (try? ctx.fetch(FetchDescriptor<Game>())) ?? []
-  let game = fetched.first(where: { $0.gameState == .playing }) ?? fetched.first ?? Game(gameType: .recreational)
+  let game = fetched.first(where: { $0.gameState == .playing })
+    ?? fetched.first
+    ?? { preconditionFailure("Preview requires at least one game") }()
 
   WatchLiveView(game: game)
     .modelContainer(setup.container)
@@ -361,7 +394,10 @@ struct WatchLiveView: View {
   let setup = PreviewContainers.liveGameSetup()
   let ctx = setup.container.mainContext
   let fetched = (try? ctx.fetch(FetchDescriptor<Game>())) ?? []
-  let game = fetched.first(where: { $0.effectiveTeamSize == 1 && !$0.isCompleted }) ?? fetched.first(where: { !$0.isCompleted }) ?? Game(gameType: .recreational)
+  let game = fetched.first(where: { $0.effectiveTeamSize == 1 && !$0.isCompleted })
+    ?? fetched.first(where: { !$0.isCompleted })
+    ?? fetched.first
+    ?? { preconditionFailure("Preview requires at least one game") }()
 
   WatchLiveView(game: game)
     .modelContainer(setup.container)
@@ -373,7 +409,10 @@ struct WatchLiveView: View {
   let setup = PreviewContainers.liveGameSetup()
   let ctx = setup.container.mainContext
   let fetched = (try? ctx.fetch(FetchDescriptor<Game>())) ?? []
-  let game = fetched.first(where: { $0.effectiveTeamSize > 1 && !$0.isCompleted }) ?? fetched.first(where: { !$0.isCompleted }) ?? Game(gameType: .recreational)
+  let game = fetched.first(where: { $0.effectiveTeamSize > 1 && !$0.isCompleted })
+    ?? fetched.first(where: { !$0.isCompleted })
+    ?? fetched.first
+    ?? { preconditionFailure("Preview requires at least one game") }()
 
   WatchLiveView(game: game)
     .modelContainer(setup.container)

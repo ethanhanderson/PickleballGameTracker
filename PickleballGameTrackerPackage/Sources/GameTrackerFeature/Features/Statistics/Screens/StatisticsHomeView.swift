@@ -105,7 +105,6 @@ struct StatisticsHomeView: View {
         }
       }
     }
-    .tint(.accentColor)
   }
 
   private var filters: StatisticsFilters {
@@ -116,19 +115,23 @@ struct StatisticsHomeView: View {
 #Preview("With Live Game Data") {
   StatisticsHomeView()
     .modelContainer(PreviewContainers.standard())
+    .tint(.green)
 }
 
 #Preview("Deep Link Context") {
   StatisticsHomeView(gameId: "demo-game-id", gameTypeId: "singles")
     .modelContainer(PreviewContainers.standard())
+    .tint(.green)
 }
 
 #Preview("Empty State") {
   StatisticsHomeView()
     .modelContainer(PreviewContainers.empty())
+    .tint(.green)
 }
 
 #Preview("Rich Statistics Data") {
   StatisticsHomeView()
     .modelContainer(PreviewContainers.standard())
+    .tint(.green)
 }

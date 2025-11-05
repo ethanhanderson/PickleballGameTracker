@@ -1,11 +1,4 @@
-//
-//  LiveGameDeltaDTO.swift
-//  GameTrackerCore
-//
-
 import Foundation
-
-// Idempotent, append-only event describing a single user action or state transition.
 public struct LiveGameDeltaDTO: Codable, Sendable, Identifiable {
   public enum Operation: Codable, Sendable {
     case score(team: Int)
@@ -16,7 +9,7 @@ public struct LiveGameDeltaDTO: Codable, Sendable, Identifiable {
     case setServer(team: Int)
     case switchServingPlayer
     case startSecondServe
-    case serviceFault
+    case fault(event: GameEventType, team: Int)
     case nonServingTeamTap(team: Int)
     case reset
     case setElapsedTime(elapsed: TimeInterval, isRunning: Bool)

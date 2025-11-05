@@ -30,6 +30,7 @@ public struct WatchCatalogView: View {
     // MARK: - UI State
     
     @State private var isCreatingGame = false
+    @State private var isStartingNewGame = false
     @State private var isLastGameAvailable = false
     @State private var isStartingLastGame = false
     
@@ -103,7 +104,7 @@ public struct WatchCatalogView: View {
                                     handlePlayButtonTapped()
                                 }
                             } label: {
-                                if isStartingLastGame || isCreatingGame {
+                                if isStartingLastGame || isCreatingGame || isStartingNewGame {
                                     ProgressView()
                                         .progressViewStyle(
                                             CircularProgressViewStyle(tint: .white)
@@ -120,10 +121,12 @@ public struct WatchCatalogView: View {
                                 }
                             }
                             .controlSize(.large)
+                            .frame(width: 44, height: 44)
                             .tint(uiGameTypeForTint.color.opacity(0.6))
                             .disabled(
                                 isCreatingGame ||
                                 isStartingLastGame ||
+                                isStartingNewGame ||
                                 (isPreviewing && !isLastGameAvailable)
                             )
                             .accessibilityIdentifier("catalog.primaryAction")
@@ -137,13 +140,22 @@ public struct WatchCatalogView: View {
                             Button {
                                 handlePlayButtonTapped()
                             } label: {
-                                Image(systemName: "play.fill")
-                                    .foregroundStyle(.white)
+                                if isStartingNewGame {
+                                    ProgressView()
+                                        .progressViewStyle(
+                                            CircularProgressViewStyle(tint: .white)
+                                        )
+                                        .scaleEffect(0.8)
+                                } else {
+                                    Image(systemName: "play.fill")
+                                        .foregroundStyle(.white)
+                                }
                             }
                             .controlSize(.regular)
-                            .disabled(isCreatingGame || isStartingLastGame || isPreviewing)
+                            .frame(width: 36, height: 36)
+                            .disabled(isCreatingGame || isStartingLastGame || isStartingNewGame || isPreviewing)
                             .opacity(isLastGameAvailable ? 1 : 0)
-                            .allowsHitTesting(isLastGameAvailable && !isPreviewing)
+                            .allowsHitTesting(isLastGameAvailable && !isPreviewing && !isStartingNewGame)
                             .accessibilityIdentifier("catalog.secondaryNewGame")
                         }
                     }
@@ -167,7 +179,16 @@ public struct WatchCatalogView: View {
             Button("Complete current game") {
                 Task { @MainActor in
                     do {
+                        let gameId = liveGameStateManager.currentGame?.id
+                        let elapsed = liveGameStateManager.elapsedTime
                         try await liveGameStateManager.completeCurrentGame()
+                        if let gameId {
+                            try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
+                                gameId: gameId,
+                                timestamp: elapsed,
+                                operation: .setGameState(.completed)
+                            ))
+                        }
                     } catch {
                         Log.error(
                             error,
@@ -239,11 +260,25 @@ public struct WatchCatalogView: View {
             return
         }
         
-        NotificationCenter.default.post(
-            name: Notification.Name("SetupRequested"),
-            object: nil,
-            userInfo: ["gameType": uiGameTypeForTint]
-        )
+        Task { @MainActor in
+            do {
+                isStartingNewGame = true
+                try await syncCoordinator.requestStart(gameType: uiGameTypeForTint)
+                Log.event(
+                    .actionTapped,
+                    level: .info,
+                    message: "Start game request sent to iPhone",
+                    metadata: ["platform": "watchOS", "gameType": uiGameTypeForTint.rawValue]
+                )
+            } catch {
+                isStartingNewGame = false
+                Log.error(
+                    error,
+                    event: .saveFailed,
+                    metadata: ["phase": "sendStartRequest", "platform": "watchOS"]
+                )
+            }
+        }
     }
     
     private func handleStartLastGameTapped() {

@@ -49,3 +49,13 @@ struct GameInsightRow: View {
     )
   }
 }
+
+#Preview {
+  GameInsightRow(
+    iconName: "trophy.fill",
+    message: "You've won 5 games in a row!",
+    iconGradient: Color.green.gradient
+  )
+  .padding()
+  .tint(.green)
+}

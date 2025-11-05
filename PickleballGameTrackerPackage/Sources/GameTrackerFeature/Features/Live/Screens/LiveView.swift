@@ -30,43 +30,52 @@ struct LiveView: View {
     @State private var showEventsHistory = false
 
     var body: some View {
-        VStack(spacing: DesignSystem.Spacing.md) {
-            TimerCard(
-                game: game,
-                formattedElapsedTime: activeGameStateManager
-                    .formattedElapsedTimeWithCentiseconds,
-                isTimerPaused: !activeGameStateManager.isTimerRunning,
-                isGameLive: activeGameStateManager.isGameLive,
-                isResetting: isResetting,
-                isToggling: isToggling,
-                pulseAnimation: pulseAnimation,
-                resetTrigger: resetTrigger,
-                playPauseTrigger: playPauseTrigger
-            )
+        Group {
+            if !game.isDetachedFromContext {
+                VStack(spacing: DesignSystem.Spacing.md) {
+                    TimerCard(
+                        game: game,
+                        formattedElapsedTime: activeGameStateManager
+                            .formattedElapsedTimeWithCentiseconds,
+                        isTimerPaused: !activeGameStateManager.isTimerRunning,
+                        isGameLive: activeGameStateManager.isGameLive,
+                        isResetting: isResetting,
+                        isToggling: isToggling,
+                        pulseAnimation: pulseAnimation,
+                        resetTrigger: resetTrigger,
+                        playPauseTrigger: playPauseTrigger
+                    )
 
-            ForEach(game.teamsWithLabels(context: modelContext), id: \.teamNumber) { teamConfig in
-                SideScoreSection(
-                    game: game,
-                    teamNumber: teamConfig.teamNumber,
-                    teamName: teamConfig.teamName,
-                    isGameLive: activeGameStateManager.isGameLive,
-                    currentTimestamp: activeGameStateManager.elapsedTime,
-                    onEventLogged: handleEventLogged
-                )
-                .tint(game.teamTintColor(for: teamConfig.teamNumber, context: modelContext))
+                    ForEach(game.teamsWithLabels(context: modelContext), id: \.teamNumber) { teamConfig in
+                        SideScoreSection(
+                            game: game,
+                            teamNumber: teamConfig.teamNumber,
+                            teamName: teamConfig.teamName,
+                            isGameLive: activeGameStateManager.isGameLive,
+                            currentTimestamp: activeGameStateManager.elapsedTime,
+                            onEventLogged: handleEventLogged
+                        )
+                        .tint(game.teamTintColor(for: teamConfig.teamNumber, context: modelContext))
+                    }
+
+                    Spacer()
+
+                    GameControlButton(
+                        game: game,
+                        isGamePaused: !activeGameStateManager.isGameLive,
+                        isGameInitial: activeGameStateManager.isGameInitial,
+                        isToggling: isToggling,
+                        isResetting: isResetting,
+                        onToggleGame: toggleGame
+                    )
+                    .accessibilityIdentifier("LiveView.toggleGameButton")
+                }
+                .tint(game.gameType.color)
+            } else {
+                // When the game model is no longer available (detached/deleted), render an empty view
+                // so the navigation dismissal can complete without touching SwiftData properties.
+                EmptyView()
             }
-            
-            Spacer()
-
-            GameControlButton(
-                game: game,
-                isGamePaused: !activeGameStateManager.isGameLive,
-                isGameInitial: activeGameStateManager.isGameInitial,
-                isToggling: isToggling,
-                isResetting: isResetting,
-                onToggleGame: toggleGame
-            )
-            .accessibilityIdentifier("LiveView.toggleGameButton")
         }
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .padding(.top, DesignSystem.Spacing.md)
@@ -76,29 +85,31 @@ struct LiveView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                VStack(spacing: 2) {
-                    HStack(spacing: DesignSystem.Spacing.sm) {
-                        Image(systemName: game.gameType.iconName)
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundStyle(
-                                game.gameType.color.gradient
-                            )
-                            .shadow(
-                                color: game.gameType.color
-                                    .opacity(0.3),
-                                radius: 2,
-                                x: 0,
-                                y: 1
-                            )
+            if !game.isDetachedFromContext {
+                ToolbarItem(placement: .principal) {
+                    VStack(spacing: 2) {
+                        HStack(spacing: DesignSystem.Spacing.sm) {
+                            Image(systemName: game.gameType.iconName)
+                                .font(.system(size: 20, weight: .medium))
+                                .foregroundStyle(
+                                    game.gameType.color.gradient
+                                )
+                                .shadow(
+                                    color: game.gameType.color
+                                        .opacity(0.3),
+                                    radius: 2,
+                                    x: 0,
+                                    y: 1
+                                )
 
-                        Text(game.gameType.displayName)
-                            .font(.title3)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.primary)
+                            Text(game.gameType.displayName)
+                                .font(.title3)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.primary)
+                        }
+                        
+                        // Role badge removed per sync v2 (no leader/follower UI)
                     }
-                    
-                    // Role badge removed per sync v2 (no leader/follower UI)
                 }
             }
 
@@ -106,10 +117,50 @@ struct LiveView: View {
                 game: game,
                 gameManager: gameManager,
                 activeGameStateManager: activeGameStateManager,
+                onEndGame: {
+                    let gameId = game.id
+                    let elapsed = activeGameStateManager.elapsedTime
+                    do {
+                        try await activeGameStateManager.completeCurrentGame()
+                        try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
+                            gameId: gameId,
+                            timestamp: elapsed,
+                            operation: .setGameState(.completed)
+                        ))
+                    } catch {
+                        Log.error(
+                            error,
+                            event: .saveFailed,
+                            context: .current(gameId: gameId),
+                            metadata: ["action": "endGame"]
+                        )
+                    }
+                },
                 showEventsHistory: $showEventsHistory
             )
         }
-        .tint(game.gameType.color)
+        // Keep feedback using safe accessors; tint is applied conditionally above
+        .sensoryFeedbackGameAction(
+            trigger: game.safeGameState,
+            feedback: {
+                switch game.safeGameState {
+                case .playing:
+                    return .impact(weight: .heavy, intensity: 1.0)
+                case .completed:
+                    return .success
+                default:
+                    return nil
+                }
+            },
+            isGamePlaying: { true }
+        )
+        .observeHapticServiceTriggers()
+        .onDisappear {
+            // Release active game state on dismissal once the game is completed
+            if game.safeIsCompleted {
+                activeGameStateManager.clearCurrentGame()
+            }
+        }
     }
 
     // Timer bezel controls removed — timer is controlled only via GameControlButton
@@ -126,7 +177,7 @@ struct LiveView: View {
             defer { isToggling = false }
             try? await activeGameStateManager.toggleGameState()
             try? await Task.sleep(for: .milliseconds(100))
-            let state = game.gameState
+            let state = game.safeGameState
             let elapsed = activeGameStateManager.elapsedTime
             Task { @MainActor in
                 try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
@@ -144,106 +195,7 @@ struct LiveView: View {
         }
     }
 
-    private func handleEventLogged(_ event: GameEvent) {
-        // Handle serve changes for events that affect serving
-        if event.affectsServing {
-            Task { @MainActor in
-                do {
-                    // Use the game manager to handle the serve change properly
-                    if game.effectiveTeamSize == 1 {
-                        // Singles: persist in-view serve change applied by GlobalActionsView
-                        try await gameManager.updateGame(game)
-                    } else {
-                        // Doubles: handle service fault
-                        // Note: The game.handleServiceFault() is called in GlobalActionsView for immediate UI updates
-                        // but we need to persist it through the manager for data consistency
-                        try await gameManager.updateGame(game)
-                    }
-
-                    // Trigger haptic feedback for serve change
-                    activeGameStateManager.triggerServeChangeHaptic()
-
-                    Log.event(
-                        .serverSwitched,
-                        level: .info,
-                        message: "Serve changed due to game event",
-                        context: .current(gameId: game.id),
-                        metadata: [
-                            "eventType": event.eventType.rawValue,
-                            "teamAffected": String(event.teamAffected ?? 0),
-                            "timestamp": String(
-                                format: "%.2f",
-                                event.timestamp
-                            ),
-                        ]
-                    )
-                } catch {
-                    Log.error(
-                        error,
-                        event: .serverSwitched,
-                        context: .current(gameId: game.id),
-                        metadata: ["action": "handleEventLogged_serveChange"]
-                    )
-                }
-            }
-            Task { @MainActor in
-                try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
-                    gameId: game.id,
-                    timestamp: event.timestamp,
-                    operation: .switchServer
-                ))
-            }
-        } else {
-            // For non-serving events, just update the game
-            Task { @MainActor in
-                try? await gameManager.updateGame(game)
-            }
-        }
-
-        // Could add additional haptic feedback, analytics, etc. here
-        Task { @MainActor in
-            switch event.eventType {
-            case .playerScored:
-                try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
-                    gameId: game.id,
-                    timestamp: event.timestamp,
-                    operation: .score(team: event.teamAffected ?? game.currentServer)
-                ))
-            case .scoreUndone:
-                try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
-                    gameId: game.id,
-                    timestamp: event.timestamp,
-                    operation: .undoLastPoint
-                ))
-            case .serviceFault:
-                try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
-                    gameId: game.id,
-                    timestamp: event.timestamp,
-                    operation: .serviceFault
-                ))
-            case .gamePaused:
-                try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
-                    gameId: game.id,
-                    timestamp: event.timestamp,
-                    operation: .setGameState(.paused)
-                ))
-            case .gameResumed:
-                try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
-                    gameId: game.id,
-                    timestamp: event.timestamp,
-                    operation: .setGameState(.playing)
-                ))
-            case .gameCompleted:
-                try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
-                    gameId: game.id,
-                    timestamp: event.timestamp,
-                    operation: .setGameState(.completed)
-                ))
-            default:
-                break
-            }
-        }
-    }
+    private func handleEventLogged(_ event: GameEvent) { }
 }
 
 // MARK: - Color Helpers

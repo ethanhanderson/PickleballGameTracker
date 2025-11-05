@@ -18,69 +18,196 @@ public struct CompletedGameCard: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: DesignSystem.Spacing.md) {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.lg) {
             HStack(spacing: DesignSystem.Spacing.md) {
                 Image(systemName: game.gameType.iconName)
-                    .font(.system(size: 24, weight: .medium))
-                    .shadow(color: .black.opacity(0.20), radius: 3, x: 0, y: 1)
-                    .frame(width: 32, height: 32)
-                
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(game.gameType.color)
+                    .frame(width: 24, height: 24)
+
                 VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
                     Text(game.gameType.displayName)
                         .font(.headline)
-                        .fontWeight(.bold)
-                    
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.primary)
+
                     Text(formattedDate)
                         .font(.caption)
                         .fontWeight(.medium)
-                        .foregroundStyle(Color.white.opacity(0.7))
+                        .foregroundStyle(.secondary)
                 }
-                
+
                 Spacer()
-                
+
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.7))
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.secondary)
             }
-            
-            HStack(spacing: DesignSystem.Spacing.md) {
-                HStack(spacing: DesignSystem.Spacing.sm) {
-                    Text(participantName(at: 0))
-                        .font(.headline)
-                        .fontWeight(game.score1 > game.score2 ? .semibold : .medium)
-                        .foregroundStyle(Color.white.opacity(game.score1 > game.score2 ? 1.0 : 0.6))
+
+            HStack(alignment: .center) {
+                HStack(alignment: .center) {
+                    VStack(
+                        alignment: .leading,
+                        spacing: DesignSystem.Spacing.sm
+                    ) {
+                        side1Avatar
+
+                        Text(formattedParticipantName(for: 1))
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.primary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.85)
+                    }
+                    
+                    Spacer(minLength: DesignSystem.Spacing.md)
 
                     Text("\(game.score1)")
-                        .font(.system(size: 26, weight: game.score1 > game.score2 ? .semibold : .medium, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(game.score1 > game.score2 ? 1.0 : 0.6))
+                        .font(
+                            .system(size: 44, weight: .bold, design: .rounded)
+                        )
+                        .foregroundStyle(
+                            game.score1 > game.score2
+                                ? .primary : Color.primary.opacity(0.5)
+                        )
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if !gameDuration.isEmpty {
+                    Spacer(minLength: DesignSystem.Spacing.xl)
+
+                    Text(gameDuration)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.primary)
+
+                    Spacer(minLength: DesignSystem.Spacing.xl)
+                } else {
+                    Spacer()
                 }
 
-                HStack(spacing: DesignSystem.Spacing.sm) {
-                    Text(participantName(at: 1))
-                        .font(.headline)
-                        .fontWeight(game.score2 > game.score1 ? .semibold : .medium)
-                        .foregroundStyle(Color.white.opacity(game.score2 > game.score1 ? 1.0 : 0.6))
-
+                HStack(alignment: .center) {
                     Text("\(game.score2)")
-                        .font(.system(size: 26, weight: game.score2 > game.score1 ? .semibold : .medium, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(game.score2 > game.score1 ? 1.0 : 0.6))
-                }
+                        .font(
+                            .system(size: 44, weight: .bold, design: .rounded)
+                        )
+                        .foregroundStyle(
+                            game.score2 > game.score1
+                                ? .primary : Color.primary.opacity(0.5)
+                        )
+                    
+                    Spacer(minLength: DesignSystem.Spacing.md)
 
-                Spacer()
+                    VStack(
+                        alignment: .trailing,
+                        spacing: DesignSystem.Spacing.sm
+                    ) {
+                        side2Avatar
+
+                        Text(formattedParticipantName(for: 2))
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.primary)
+                            .multilineTextAlignment(.trailing)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.85)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
+            .frame(maxWidth: .infinity)
         }
-        .foregroundStyle(.white)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(DesignSystem.Spacing.lg)
         .glassEffect(
-            .regular.tint(game.gameType.color).interactive(),
-            in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xxl)
+            .regular.tint(
+                game.gameType.color.opacity(0.05)
+            ),
+            in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl)
         )
         .contentShape(
-            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xxl)
+            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl)
         )
         .accessibilityLabel("Game card")
         .accessibilityHint("Tap to open completed game details")
+    }
+
+    private var side1Avatar: some View {
+        Group {
+            switch game.participantMode {
+            case .players:
+                if let players = game.resolveSide1Players(
+                    context: modelContext
+                ),
+                    let firstPlayer = players.first
+                {
+                    AvatarView(
+                        player: firstPlayer,
+                        style: .small,
+                        isArchived: firstPlayer.isArchived
+                    )
+                } else {
+                    fallbackAvatar(symbolName: "person.fill", teamNumber: 1)
+                }
+            case .teams:
+                if let team = game.resolveSide1Team(context: modelContext) {
+                    AvatarView(
+                        team: team,
+                        style: .small,
+                        isArchived: team.isArchived
+                    )
+                } else {
+                    fallbackAvatar(symbolName: "person.2.fill", teamNumber: 1)
+                }
+            }
+        }
+    }
+
+    private var side2Avatar: some View {
+        Group {
+            switch game.participantMode {
+            case .players:
+                if let players = game.resolveSide2Players(
+                    context: modelContext
+                ),
+                    let firstPlayer = players.first
+                {
+                    AvatarView(
+                        player: firstPlayer,
+                        style: .small,
+                        isArchived: firstPlayer.isArchived
+                    )
+                } else {
+                    fallbackAvatar(symbolName: "person.fill", teamNumber: 2)
+                }
+            case .teams:
+                if let team = game.resolveSide2Team(context: modelContext) {
+                    AvatarView(
+                        team: team,
+                        style: .small,
+                        isArchived: team.isArchived
+                    )
+                } else {
+                    fallbackAvatar(symbolName: "person.2.fill", teamNumber: 2)
+                }
+            }
+        }
+    }
+
+    private func fallbackAvatar(symbolName: String, teamNumber: Int)
+        -> some View
+    {
+        AvatarView(
+            configuration: .init(
+                symbolName: symbolName,
+                tintColor: game.teamTintColor(
+                    for: teamNumber,
+                    context: modelContext
+                ),
+                style: .small
+            )
+        )
     }
 
     private var formattedDate: String {
@@ -115,12 +242,54 @@ public struct CompletedGameCard: View {
         }
     }
 
-    private func participantName(at index: Int) -> String {
-        let names = game.teamsWithLabels(context: modelContext).map { $0.teamName }
-        if names.count > index, names[index] != "Team \(index + 1)" {
-            return names[index]
+    private var gameDuration: String {
+        if let formatted = game.formattedDuration {
+            return formatted
         }
-        return index == 0 ? game.effectivePlayerLabel1 : game.effectivePlayerLabel2
+
+        if let completedDate = game.completedDate {
+            let duration = completedDate.timeIntervalSince(game.createdDate)
+            let minutes = Int(duration) / 60
+            let seconds = Int(duration) % 60
+            return String(format: "%d:%02d", minutes, seconds)
+        }
+
+        return ""
+    }
+
+    private func formattedParticipantName(for sideNumber: Int) -> String {
+        let players: [PlayerProfile]
+
+        switch game.participantMode {
+        case .players:
+            if sideNumber == 1 {
+                players = game.resolveSide1Players(context: modelContext) ?? []
+            } else {
+                players = game.resolveSide2Players(context: modelContext) ?? []
+            }
+        case .teams:
+            if sideNumber == 1 {
+                players =
+                    game.resolveSide1Team(context: modelContext)?.players ?? []
+            } else {
+                players =
+                    game.resolveSide2Team(context: modelContext)?.players ?? []
+            }
+        }
+
+        guard !players.isEmpty else {
+            return sideNumber == 1
+                ? game.effectivePlayerLabel1 : game.effectivePlayerLabel2
+        }
+
+        let names = players.map { $0.name }
+        if names.count == 1 {
+            return names[0]
+        } else if names.count >= 2 {
+            return "\(names[0]) &\n\(names[1])"
+        }
+
+        return names.joined(separator: " &\n")
     }
 
 }
@@ -136,11 +305,31 @@ public struct CompletedGameCard: View {
 
     ScrollView {
         VStack(spacing: DesignSystem.Spacing.md) {
-            ForEach(games) { game in
+            ForEach(Array(games.prefix(5))) { game in
                 CompletedGameCard(game: game)
             }
         }
         .padding()
     }
     .modelContainer(container)
+}
+
+#Preview("Single Game") {
+    let container = PreviewContainers.history()
+    let games = try! container.mainContext.fetch(
+        FetchDescriptor<Game>(
+            predicate: #Predicate { $0.isCompleted },
+            sortBy: [SortDescriptor(\.createdDate, order: .reverse)]
+        )
+    )
+
+    if let randomGame = games.randomElement() {
+        CompletedGameCard(game: randomGame)
+            .padding()
+            .modelContainer(container)
+    } else {
+        Text("No games available")
+            .padding()
+            .modelContainer(container)
+    }
 }

@@ -10,13 +10,12 @@ import SwiftUI
 
 // MARK: - App Tab Navigation
 
-enum AppTab: String, CaseIterable {
+public enum AppTab: String, CaseIterable {
   case games
   case history
   case search
   case statistics
   case roster
-  case settings
 
   var displayName: String {
     switch self {
@@ -25,7 +24,6 @@ enum AppTab: String, CaseIterable {
     case .search: return "Search"
     case .statistics: return "Statistics"
     case .roster: return "Roster"
-    case .settings: return "Settings"
     }
   }
 
@@ -36,7 +34,6 @@ enum AppTab: String, CaseIterable {
     case .search: return "magnifyingglass"
     case .statistics: return "chart.bar"
     case .roster: return "person.2"
-    case .settings: return "gear"
     }
   }
 }

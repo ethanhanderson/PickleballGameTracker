@@ -345,8 +345,7 @@ struct CurrentMatchupSection: View {
                         if index == sideAEntities.count - 1
                             && !sideBEntities.isEmpty
                         {
-                            ZStack {
-                                Divider()
+                            ZStack(alignment: .center) {
                                 Text("vs")
                                     .font(.caption)
                                     .fontWeight(.semibold)
@@ -355,7 +354,22 @@ struct CurrentMatchupSection: View {
                                         .horizontal,
                                         DesignSystem.Spacing.sm
                                     )
-                                    .background(.background)
+                                    .padding(.vertical, DesignSystem.Spacing.xs)
+
+                                ZStack(alignment: .center) {
+                                    Capsule()
+                                        .fill(.primary)
+                                        .frame(
+                                            width: 40,
+                                            height: 25
+                                        )
+
+                                    Capsule()
+                                        .fill(.primary)
+                                        .frame(height: 2)
+                                }
+                                .compositingGroup()
+                                .opacity(0.03)
                             }
                         }
                     }
@@ -375,10 +389,12 @@ struct SetupView: View {
 
     @Query(filter: #Predicate<PlayerProfile> { !$0.isArchived && !$0.isGuest })
     private var allPlayers: [PlayerProfile]
-    @Query(filter: #Predicate<PlayerProfile> { !$0.isArchived && $0.isGuest })
-    private var allGuests: [PlayerProfile]
     @Query private var allTeams: [TeamProfile]
+    @Query(filter: #Predicate<PlayerProfile> { $0.isGuest })
+    private var allGuestPlayers: [PlayerProfile]
     @Environment(LiveGameStateManager.self) private var activeGameStateManager
+    @Environment(LiveSyncCoordinator.self) private var syncCoordinator
+    @Environment(PlayerTeamManager.self) private var rosterManager
 
     @State private var selectedTeamSize: Int = 1
     @State private var selectedPlayerOrder: [UUID: Int] = [:]
@@ -396,16 +412,12 @@ struct SetupView: View {
 
     @State private var showPlayerSheet = false
     @State private var showTeamSheet = false
-    @State private var showGuestSheet = false
+    @State private var globalNav = GlobalNavigationState.shared
 
     @Environment(\.dismiss) private var dismiss
 
     private var activePlayers: [PlayerProfile] {
         allPlayers
-    }
-
-    private var activeGuests: [PlayerProfile] {
-        allGuests
     }
 
     private var activeTeams: [TeamProfile] {
@@ -566,23 +578,16 @@ struct SetupView: View {
                     onRemove: removeEntity
                 )
 
-                EntitySelectionSection(
-                    title: "Select Guests",
-                    entities: activeGuests,
-                    selectedEntityIds: selectedPlayerIds,
-                    isEntityDisabled: isEntityDisabled,
-                    onToggleSelection: { entity in
-                        if let player = entity as? PlayerProfile {
-                            togglePlayerSelection(player)
+                if slotsRemaining > 0
+                    && (!sideAEntities.isEmpty || !sideBEntities.isEmpty)
+                {
+                    Section {
+                        Button(action: fillRemainingWithGuests) {
+                            Text("Fill remaining slots with guests")
                         }
-                    },
-                    selectionNumbers: playerSelectionNumbers,
-                    selectionColor: gameType.color,
-                    createButtonLabel: "New Guest",
-                    createButtonIcon: "person.badge.plus",
-                    onCreateNew: { showGuestSheet = true },
-                    hideEmptyState: true
-                )
+                        .accessibilityIdentifier("setup.fillGuests")
+                    }
+                }
 
                 if selectedTeamSize > 1 {
                     EntitySelectionSection(
@@ -648,8 +653,23 @@ struct SetupView: View {
                             else { return }
                             Task { @MainActor in
                                 do {
+                                    let gameId = activeGameStateManager
+                                        .currentGame?.id
+                                    let elapsed = activeGameStateManager
+                                        .elapsedTime
                                     try await activeGameStateManager
                                         .completeCurrentGame()
+                                    if let gameId {
+                                        try? await syncCoordinator.publish(
+                                            delta: LiveGameDeltaDTO(
+                                                gameId: gameId,
+                                                timestamp: elapsed,
+                                                operation: .setGameState(
+                                                    .completed
+                                                )
+                                            )
+                                        )
+                                    }
                                 } catch {
                                     Log.error(
                                         error,
@@ -697,13 +717,24 @@ struct SetupView: View {
         .sheet(isPresented: $showPlayerSheet) {
             IdentityEditorView(identity: .player(nil))
         }
+        .onChange(of: showPlayerSheet) { _, isPresented in
+            if isPresented {
+                globalNav.registerSheet("setupPlayer")
+            } else {
+                globalNav.unregisterSheet("setupPlayer")
+            }
+        }
         .sheet(isPresented: $showTeamSheet) {
             IdentityEditorView(identity: .team(nil))
         }
-        .sheet(isPresented: $showGuestSheet) {
-            GuestPlayerEditorView(gameType: gameType)
-                .presentationDetents([.medium])
+        .onChange(of: showTeamSheet) { _, isPresented in
+            if isPresented {
+                globalNav.registerSheet("setupTeam")
+            } else {
+                globalNav.unregisterSheet("setupTeam")
+            }
         }
+
     }
 
     private var teamSizeOptions: [TeamSizeOption] {
@@ -853,6 +884,43 @@ struct SetupView: View {
         }
     }
 
+    private func fillRemainingWithGuests() {
+        let remaining = slotsRemaining
+        guard remaining > 0 else { return }
+
+        func extractGuestNumber(from name: String) -> Int? {
+            // Expect names like "Guest 1"
+            let parts = name.split(separator: " ")
+            guard parts.count == 2, parts[0].lowercased() == "guest",
+                let num = Int(parts[1])
+            else { return nil }
+            return num
+        }
+
+        let existingGuestNumbers: [Int] =
+            (allGuestPlayers + selectedPlayers.filter { $0.isGuest })
+            .compactMap { extractGuestNumber(from: $0.name) }
+        let startNumber = (existingGuestNumbers.max() ?? 0) + 1
+
+        for i in 0..<remaining {
+            do {
+                let guestName = "Guest \(startNumber + i)"
+                let guest = try rosterManager.createGuestPlayer(name: guestName)
+                selectedPlayers.append(guest)
+            } catch {
+                Log.error(
+                    error,
+                    event: .saveFailed,
+                    metadata: [
+                        "phase": "fillGuests"
+                    ]
+                )
+                break
+            }
+        }
+        updatePlayerOrder()
+    }
+
     private func createGameRulesAndMatchup()
         async throws(GameRulesError)
         -> (GameRules?, MatchupSelection)
@@ -938,9 +1006,11 @@ struct SetupView: View {
     let container = PreviewContainers.roster()
     let (_, liveGameManager) = PreviewContainers.managers(for: container)
     let rosterManager = PreviewContainers.rosterManager(for: container)
+    let syncCoordinator = LiveSyncCoordinator(service: NoopSyncService())
 
     SetupView(gameType: randomType) { _, _, _ in }
         .modelContainer(container)
         .environment(liveGameManager)
         .environment(rosterManager)
+        .environment(syncCoordinator)
 }

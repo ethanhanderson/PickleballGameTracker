@@ -96,4 +96,16 @@ struct IconAvatarContent: View {
   }
 }
 
+#Preview {
+  @Previewable @State var selectedIconName = "person.fill"
+  @Previewable @State var selectedIconColor = Color.green
+  
+  IconAvatarContent(
+    selectedIconName: $selectedIconName,
+    selectedIconColor: $selectedIconColor,
+    iconOptions: ["person.fill", "person.2.fill", "star.fill", "heart.fill"]
+  )
+  .padding()
+  .tint(.green)
+}
 

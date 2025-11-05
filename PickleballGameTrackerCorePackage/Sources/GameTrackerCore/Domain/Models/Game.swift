@@ -1,17 +1,9 @@
-//
-//  Game.swift
-//  SharedGameCore
-//
-//  Created by Ethan Anderson on 7/9/25.
-//
-
 import Foundation
 import SwiftData
 
 public enum ParticipantMode: String, Codable, Sendable {
   case players
   case teams
-  case anonymous
 }
 
 @Model
@@ -34,8 +26,8 @@ public final class Game: Hashable {
   public var sideOfCourt: SideOfCourt
   public var gameState: GameState
   public var isFirstServiceSequence: Bool
+  public var teamSize: Int = 0
 
-  // Rule fields (copied from GameRules at game creation)
   public var winningScore: Int
   public var winByTwo: Bool
   public var kitchenRule: Bool
@@ -52,7 +44,7 @@ public final class Game: Hashable {
 
   public var events: [GameEvent] = []
 
-  public var participantMode: ParticipantMode = ParticipantMode.anonymous
+  public var participantMode: ParticipantMode = ParticipantMode.players
   public var side1PlayerIds: [UUID] = []
   public var side2PlayerIds: [UUID] = []
   public var side1TeamId: UUID?
@@ -76,6 +68,7 @@ public final class Game: Hashable {
     sideOfCourt: SideOfCourt = .side1,
     gameState: GameState = .initial,
     isFirstServiceSequence: Bool = true,
+    teamSize: Int? = nil,
     winningScore: Int? = nil,
     winByTwo: Bool? = nil,
     kitchenRule: Bool? = nil,
@@ -103,6 +96,7 @@ public final class Game: Hashable {
     self.sideOfCourt = sideOfCourt
     self.gameState = gameState
     self.isFirstServiceSequence = isFirstServiceSequence
+    self.teamSize = teamSize ?? 0
 
     let defaultRules = rules ?? gameType.defaultRules
     self.winningScore = winningScore ?? defaultRules.winningScore
@@ -115,6 +109,10 @@ public final class Game: Hashable {
     self.timeLimit = timeLimit ?? defaultRules.timeLimit
     self.maxRallies = maxRallies ?? defaultRules.maxRallies
     self.notes = notes
+
+    if self.teamSize <= 0 {
+      self.teamSize = gameType.defaultTeamSize
+    }
   }
 
   public convenience init(gameType: GameType, rules: GameRules) {
@@ -207,16 +205,20 @@ extension Game {
 
   /// Get effective player labels based on game type
   public var effectivePlayerLabel1: String {
-    return gameType.playerLabel1
+    let size = effectiveTeamSize
+    return size == 1 ? "Player 1" : "Team 1"
   }
 
   public var effectivePlayerLabel2: String {
-    return gameType.playerLabel2
+    let size = effectiveTeamSize
+    return size == 1 ? "Player 2" : "Team 2"
   }
 
   /// Get effective team size from game type
   public var effectiveTeamSize: Int {
-    return gameType.defaultTeamSize
+    if teamSize > 0 { return teamSize }
+    if !side1PlayerIds.isEmpty { return max(1, min(6, side1PlayerIds.count)) }
+    preconditionFailure("Team size is not set and cannot be inferred from participants. Ensure participants are set before using game state.")
   }
 
   /// Get the label for the currently serving player
@@ -231,12 +233,9 @@ extension Game {
 
   /// Get a short label for the currently serving player
   public var currentServingPlayerShortLabel: String {
-    if effectiveTeamSize == 1 {
-      return currentServer == 1 ? "P1" : "P2"
-    } else {
-      let teamPrefix = currentServer == 1 ? "T1" : "T2"
-      return "\(teamPrefix)P\(serverNumber)"
-    }
+    if effectiveTeamSize == 1 { return currentServer == 1 ? "P1" : "P2" }
+    let teamPrefix = currentServer == 1 ? "T1" : "T2"
+    return "\(teamPrefix)P\(serverNumber)"
   }
 
   /// Check if a specific player on a team is currently serving
@@ -298,13 +297,11 @@ extension Game {
     let newSide: SideOfCourt =
       shouldSwitchSide ? (sideOfCourt == .side1 ? .side2 : .side1) : sideOfCourt
 
-    // For singles, server stays the same when scoring (only changes via manual tap)
     if effectiveTeamSize == 1 {
       let newPosition: ServerPosition = (score1 + score2) % 2 == 0 ? .right : .left
       return (server: currentServer, serverNumber: 1, position: newPosition, side: newSide)
     }
 
-    // For doubles, serving team retains serve when scoring; position changes
     let totalScore = score1 + score2
     let newPosition: ServerPosition = totalScore % 2 == 0 ? .right : .left
 
@@ -417,8 +414,6 @@ extension Game {
     } else {
       let totalScore = score1 + score2
 
-      // For singles - keep current server since we don't track serve change history
-      // For doubles - simplified approach that may not be perfect after undo
       if effectiveTeamSize == 1 {
         serverNumber = 1
       } else {
@@ -540,6 +535,27 @@ extension Game {
   public func recentEvents(count: Int = 10) -> [GameEvent] {
     Array(eventsByTimestamp.prefix(count))
   }
+
+  /// Check if the game is unused (not actively played)
+  /// A game is considered unused if:
+  /// - Elapsed time is less than 5 minutes
+  /// - No scores have been logged (totalRallies == 0)
+  /// - No meaningful events have been logged (only automatic state changes like pause/resume)
+  public func isUnused(elapsedTime: TimeInterval) -> Bool {
+    let fiveMinutes: TimeInterval = 5 * 60
+    
+    guard elapsedTime < fiveMinutes else { return false }
+    
+    guard totalRallies == 0 else { return false }
+    
+    let meaningfulEvents = events.filter { event in
+      event.eventType != .gamePaused &&
+      event.eventType != .gameResumed &&
+      event.eventType != .gameCompleted
+    }
+    
+    return meaningfulEvents.isEmpty
+  }
 }
 
 // MARK: - Participant Resolution
@@ -574,7 +590,13 @@ extension Game {
     let descriptor = FetchDescriptor<PlayerProfile>(
       predicate: #Predicate { player in ids.contains(player.id) }
     )
-    return (try? context.fetch(descriptor)) ?? []
+    let fetched = (try? context.fetch(descriptor)) ?? []
+    // Ensure stable ordering matches the provided IDs to avoid UI flicker or color swaps
+    let indexById = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($0.element, $0.offset) })
+    return fetched.sorted { lhs, rhs in
+      guard let l = indexById[lhs.id], let r = indexById[rhs.id] else { return lhs.id.uuidString < rhs.id.uuidString }
+      return l < r
+    }
   }
   
   private func resolveTeamProfile(id: UUID, context: ModelContext) -> TeamProfile? {

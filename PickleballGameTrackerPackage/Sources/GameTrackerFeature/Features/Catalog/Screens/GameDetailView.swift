@@ -106,7 +106,16 @@ struct GameDetailView: View {
             Button("End current game and start new", role: .destructive) {
               Task { @MainActor in
                 do {
+                  let gameId = activeGameStateManager.currentGame?.id
+                  let elapsed = activeGameStateManager.elapsedTime
                   try await activeGameStateManager.completeCurrentGame()
+                  if let gameId {
+                    try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
+                      gameId: gameId,
+                      timestamp: elapsed,
+                      operation: .setGameState(.completed)
+                    ))
+                  }
                 } catch {
                   Log.error(
                     error,
@@ -293,8 +302,6 @@ struct GameDetailView: View {
             return Participants(side1: .players(game.side1PlayerIds), side2: .players(game.side2PlayerIds))
           case .teams:
             return Participants(side1: .team(game.side1TeamId!), side2: .team(game.side2TeamId!))
-          case .anonymous:
-            return Participants(side1: .players([]), side2: .players([]))
           }
         }(),
         rules: try? GameRules.createValidated(

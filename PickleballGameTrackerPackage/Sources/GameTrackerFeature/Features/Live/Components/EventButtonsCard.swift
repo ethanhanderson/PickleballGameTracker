@@ -12,7 +12,6 @@ struct EventButtonsCard: View {
     let teamNumber: Int
     let onEventLogged: ((GameEvent) -> Void)?
 
-    // Undo state management
     @State private var showingUndoButtonAtIndex: Int?
     @State private var undoTimer: Timer?
     private let undoDuration: TimeInterval = 15.0
@@ -41,48 +40,38 @@ struct EventButtonsCard: View {
     }
 
     private var scoringPlayers: [PlayerProfile] {
-        // Resolve players for this team using variation-derived names and roster lookup
-        let teamName = teamDisplayName
+        let playersPerSide = max(1, min(game.teamSize, 2))
 
-        // Try exact player match (singles case)
-        if let player = try? modelContext.fetch(
-            FetchDescriptor<PlayerProfile>(predicate: #Predicate { $0.name == teamName })
-        ).first {
-            return [player]
+        switch game.participantMode {
+        case .players:
+            if teamNumber == 1, let sidePlayers = game.resolveSide1Players(context: modelContext) {
+                return Array(sidePlayers.prefix(playersPerSide))
+            }
+            if teamNumber == 2, let sidePlayers = game.resolveSide2Players(context: modelContext) {
+                return Array(sidePlayers.prefix(playersPerSide))
+            }
+
+        case .teams:
+            if teamNumber == 1, let team = game.resolveSide1Team(context: modelContext) {
+                return Array(team.players.prefix(playersPerSide))
+            }
+            if teamNumber == 2, let team = game.resolveSide2Team(context: modelContext) {
+                return Array(team.players.prefix(playersPerSide))
+            }
         }
 
-        // Try team match (doubles case)
-        if let team = try? modelContext.fetch(
-            FetchDescriptor<TeamProfile>(predicate: #Predicate { $0.name == teamName })
-        ).first {
-            let required = max(1, min(game.effectiveTeamSize, 2))
-            return Array(team.players.prefix(required))
-        }
-
-        // Fallback: synthesize UI-only players if roster lookup fails
-        let required = max(1, min(game.effectiveTeamSize, 2))
-        if required == 1 {
-            return [PlayerProfile(name: teamName, accentColor: StoredRGBAColor.fromSeed(UUID()))]
-        } else {
-            return [
-                PlayerProfile(name: "Player 1", accentColor: StoredRGBAColor.fromSeed(UUID())),
-                PlayerProfile(name: "Player 2", accentColor: StoredRGBAColor.fromSeed(UUID()))
-            ]
-        }
+        preconditionFailure("Participant data is missing for scoring buttons (team=\(teamNumber)). Ensure participants are set and resolvable before rendering.")
     }
 
     private var teamDisplayName: String {
-        // Use variation-derived team labels (e.g., "A vs B")
         let configs = game.teamsWithLabels(context: modelContext)
         if let cfg = configs.first(where: { $0.teamNumber == teamNumber }) {
             return cfg.teamName
         }
-        // Fallback generic name
-        return teamNumber == 1 ? "Team 1" : "Team 2"
+        preconditionFailure("Team display name not resolvable for team=\(teamNumber). Ensure participants are set.")
     }
 
     private func scoringIconName(for playerIndex: Int) -> String {
-        // Singles: single user filled icon; Doubles: two-person filled icon for each
         if game.effectiveTeamSize == 1 { return "person.fill" }
         return "person.2.fill"
     }
@@ -94,6 +83,7 @@ struct EventButtonsCard: View {
                 tintColor: tintColor,
                 scoringIconName: scoringIconName(for:),
                 scorePoint: scorePoint(for:at:),
+                showsPlayerName: game.effectiveTeamSize > 1,
                 showingUndoButtonAtIndex: showingUndoButtonAtIndex,
                 undoAction: undoLastPoint
             )
@@ -107,46 +97,45 @@ struct EventButtonsCard: View {
     }
 
     private func logEvent(_ eventType: GameEventType) {
-        guard game.gameState == .playing else { return }
+        guard game.safeGameState == .playing else { return }
         let timestamp = currentTimestamp
         let teamAffected = game.currentServer
 
-        game.logEvent(eventType, at: timestamp, teamAffected: teamAffected)
-
         if eventType.typicallyChangesServe {
-            Task {
-                try? await gameManager.handleServiceFault(in: game)
+            Task { @MainActor in
+                do {
+                    let faultTeam = teamAffected
+                    game.logEvent(eventType, at: timestamp, teamAffected: faultTeam)
+                    try? await syncPublish(.fault(event: eventType, team: faultTeam), timestamp: timestamp)
+                    try await gameManager.handleServiceFault(in: game)
+                } catch {
+                    print("Failed to handle service fault: \(error)")
+                }
             }
-        }
-
-        if let event = game.events.last {
-            onEventLogged?(event)
+        } else {
+            game.logEvent(eventType, at: timestamp, teamAffected: teamAffected)
+            if let event = game.events.last {
+                onEventLogged?(event)
+            }
         }
     }
 
     private func scorePoint(for player: PlayerProfile, at index: Int) {
         Task {
             do {
-                // Score for the provided team number (player mapping not available in Core v1)
-                try await gameManager.scorePoint(for: teamNumber, in: game)
-
-                // Show undo button for this player at the specific index
-                startUndoTimer(for: index)
-
-                // Create a scoring event with custom description
                 let timestamp = currentTimestamp
-                let customDescription = "\(player.name) scored"
-                game.logEvent(
-                    .playerScored,
+                let customDescription: String? = game.effectiveTeamSize > 1 ? "\(player.name) scored" : nil
+                
+                try await gameManager.scorePointAndLogEvent(
+                    for: teamNumber,
+                    in: game,
                     at: timestamp,
-                    teamAffected: self.teamNumber,
-                    description: customDescription
+                    customDescription: customDescription
                 )
 
-                // Notify about the event
-                if let event = game.events.last {
-                    onEventLogged?(event)
-                }
+                startUndoTimer(for: index)
+
+                try? await syncPublish(.score(team: teamNumber), timestamp: timestamp)
             } catch {
                 print("Failed to score point: \(error)")
             }
@@ -154,36 +143,36 @@ struct EventButtonsCard: View {
     }
 
     private func undoLastPoint() {
-        // Hide the undo button immediately when tapped
         stopUndoTimer()
 
         Task {
             do {
-                try await gameManager.undoLastPoint(in: game)
-
-                // Log the undo event
                 let timestamp = currentTimestamp
-                game.logEvent(
-                    .serveChange,
-                    at: timestamp,
-                    teamAffected: game.currentServer,
-                    description: "Last point undone"
-                )
-
-                // Notify about the event
-                if let event = game.events.last {
-                    onEventLogged?(event)
-                }
+                try await gameManager.undoLastPoint(in: game)
+                game.logEvent(.scoreUndone, at: timestamp, teamAffected: game.currentServer)
+                try? await syncPublish(.undoLastPoint, timestamp: timestamp)
             } catch {
                 print("Failed to undo point: \(error)")
-                // Note: Button is already hidden, so no need to restore it on error
             }
         }
     }
 
+    // MARK: - Sync Helper
+    @MainActor
+    private func syncPublish(_ op: LiveGameDeltaDTO.Operation, timestamp: TimeInterval) async throws {
+        let envSync = _syncCoordinator
+        try await envSync.publish(delta: LiveGameDeltaDTO(
+            gameId: game.id,
+            timestamp: timestamp,
+            operation: op
+        ))
+    }
+
+    @Environment(LiveSyncCoordinator.self) private var _syncCoordinator
+
     @MainActor
     private func startUndoTimer(for index: Int) {
-        stopUndoTimer() // Stop any existing timer
+        stopUndoTimer()
         showingUndoButtonAtIndex = index
 
         undoTimer = Timer.scheduledTimer(withTimeInterval: undoDuration, repeats: false) { _ in
@@ -210,6 +199,7 @@ private struct ScoringButtonsSection: View {
     let tintColor: Color
     let scoringIconName: (Int) -> String
     let scorePoint: (PlayerProfile, Int) -> Void
+    let showsPlayerName: Bool
     let showingUndoButtonAtIndex: Int?
     let undoAction: () -> Void
 
@@ -221,7 +211,6 @@ private struct ScoringButtonsSection: View {
                     id: \.offset
                 ) { index, player in
                     if showingUndoButtonAtIndex == index {
-                        // Show undo button with transition
                         UndoButton(
                             tintColor: tintColor,
                             action: undoAction,
@@ -229,13 +218,12 @@ private struct ScoringButtonsSection: View {
                         )
                         .animation(.easeInOut(duration: 0.2), value: showingUndoButtonAtIndex == index)
                     } else {
-                        // Show normal score button
                         EventCardButton(
                             eventType: .playerScored,
                             tintColor: tintColor,
                             isEnabled: true,
                             action: { scorePoint(player, index) },
-                            customDescription: "\(player.name) scored",
+                            customDescription: showsPlayerName ? "\(player.name) scored" : nil,
                             customIconName: scoringIconName(index)
                         )
                     }
@@ -289,16 +277,16 @@ private struct UndoButton: View {
                     .font(.headline)
                     .foregroundStyle(.primary)
             }
-            .frame(maxWidth: .infinity)
         }
+        .buttonSizing(.flexible)
         .controlSize(.large)
         .buttonStyle(.glassProminent)
-        .tint(tintColor.opacity(0.15))  // Slightly more subtle tint for undo button
+        .tint(tintColor.opacity(0.15))
         .foregroundStyle(.primary)
         .accessibilityLabel("Undo last point")
         .accessibilityHint("Tap to undo the last scored point")
         .help("Undo last point")
-        .transition(.scale(scale: 0.9).combined(with: .opacity))  // Smoother scale transition
+        .transition(.scale(scale: 0.9).combined(with: .opacity))
     }
 }
 

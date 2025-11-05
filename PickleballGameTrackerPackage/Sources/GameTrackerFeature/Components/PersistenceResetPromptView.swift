@@ -44,8 +44,9 @@ public struct PersistenceResetPromptView: View {
           Text(didCompleteReset ? "OK" : "Not Now")
             .font(.callout)
             .fontWeight(.semibold)
-            .frame(maxWidth: .infinity, minHeight: 44)
+            .frame(minHeight: 44)
         }
+        .buttonSizing(.flexible)
         .buttonStyle(.bordered)
         .disabled(isResetting)
 
@@ -56,8 +57,9 @@ public struct PersistenceResetPromptView: View {
               .font(.callout)
               .fontWeight(.semibold)
           }
-          .frame(maxWidth: .infinity, minHeight: 44)
+          .frame(minHeight: 44)
         }
+        .buttonSizing(.flexible)
         .buttonStyle(.borderedProminent)
         .tint(.blue)
         .disabled(isResetting)

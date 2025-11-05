@@ -22,6 +22,8 @@ struct SideScoreTopCard: View {
     @Environment(LiveGameStateManager.self) private var activeGameStateManager
     @Environment(LiveSyncCoordinator.self) private var syncCoordinator
     @Environment(\.modelContext) private var modelContext
+    
+    @State private var previousServer: Int = 1
 
     private var cardTintColor: Color {
         tintOverride ?? game.teamTintColor(for: teamNumber, context: modelContext)
@@ -34,7 +36,7 @@ struct SideScoreTopCard: View {
         game.shouldShowServingIndicator(for: teamNumber)
     }
     private var servingAnimate: Bool {
-        game.gameState == .playing && !wasJustResumed
+        game.safeGameState == .playing && !wasJustResumed
     }
     private var isWinningTeam: Bool {
         game.isWinningTeam(teamNumber: teamNumber)
@@ -146,16 +148,30 @@ struct SideScoreTopCard: View {
         .padding(.leading, DesignSystem.Spacing.md)
         .padding(.trailing, DesignSystem.Spacing.lg)
         .glassEffect(
-            .regular.tint(cardTintColor.opacity(isGameLive ? 0.2 : 0.05)).interactive(),
+            game.safeGameState == .playing
+                ? .regular.tint(cardTintColor.opacity(isGameLive ? 0.2 : 0.05)).interactive()
+                : .regular.tint(cardTintColor.opacity(isGameLive ? 0.2 : 0.05)),
             in: .capsule
         )
         .contentShape(.capsule)
         .onAppear {
             previousScore = score
+            previousServer = game.currentServer
         }
         .onChange(of: score) { _, newScore in
             previousScore = newScore
         }
+        .onChange(of: game.currentServer) { _, newServer in
+            previousServer = newServer
+        }
+        .sensoryFeedbackScore(
+            trigger: score,
+            isGamePlaying: isGameLive && game.safeGameState == .playing
+        )
+        .sensoryFeedbackServeChange(
+            trigger: game.currentServer,
+            isGamePlaying: isGameLive && game.safeGameState == .playing
+        )
         .onTapGesture {
             Task {
                 guard !game.isCompleted else { return }

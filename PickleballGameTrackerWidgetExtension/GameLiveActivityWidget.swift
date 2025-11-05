@@ -92,9 +92,9 @@ struct GameLiveActivityWidget: Widget {
         }
       } minimal: {
         AvatarView(
-          imageData: context.attributes.side1AvatarImageData,
-          iconSymbolName: context.attributes.side1IconSymbolName,
-          tintColor: context.attributes.side1TintColor.swiftUIColor,
+          imageData: nil,
+          iconSymbolName: context.attributes.gameTypeIconName,
+          tintColor: context.attributes.gameTypeTintColor.swiftUIColor,
           size: 16
         )
       }

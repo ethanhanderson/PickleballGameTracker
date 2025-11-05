@@ -22,6 +22,9 @@ enum MessageCodec {
     switch envelope.type {
     case .liveStatusRequest:
       return (.liveStatusRequest, ())
+    case .startRequest:
+      let request = try decoder.decode(StartGameRequestDTO.self, from: envelope.payload)
+      return (.startRequest, request)
     case .startConfig:
       let config = try decoder.decode(GameStartConfiguration.self, from: envelope.payload)
       return (.startConfig, config)
@@ -41,6 +44,15 @@ enum MessageCodec {
       return (.rosterRequest, ())
     case .historyRequest:
       return (.historyRequest, ())
+    case .rosterInventory:
+      let inventory = try decoder.decode(RosterInventoryDTO.self, from: envelope.payload)
+      return (.rosterInventory, inventory)
+    case .rosterUpsert:
+      let upsert = try decoder.decode(RosterUpsertDTO.self, from: envelope.payload)
+      return (.rosterUpsert, upsert)
+    case .rosterPrune:
+      let prune = try decoder.decode(RosterPruneDTO.self, from: envelope.payload)
+      return (.rosterPrune, prune)
     case .ack, .error:
       return (envelope.type, envelope)
     }

@@ -61,6 +61,7 @@ struct IdentityEditorView: View {
 
   @Environment(\.dismiss) private var dismiss
   @Environment(PlayerTeamManager.self) private var manager
+  @State private var globalNav = GlobalNavigationState.shared
   
   @Query(filter: #Predicate<PlayerProfile> { !$0.isArchived && !$0.isGuest })
   private var players: [PlayerProfile]
@@ -169,7 +170,6 @@ struct IdentityEditorView: View {
           Text("Expert").tag(PlayerSkillLevel.expert)
         }
         .pickerStyle(.menu)
-        .tint(.accentColor)
         .accessibilityLabel("Skill level selection")
 
         VStack(
@@ -346,13 +346,14 @@ struct IdentityEditorView: View {
             Label("Save", systemImage: "checkmark")
           }
           .buttonStyle(.glassProminent)
-          .tint(.accentColor)
           .accessibilityLabel("Save")
           .disabled(saveDisabled)
         }
       }
     }
     .onAppear { populateFromIdentityIfNeeded() }
+    .onAppear { globalNav.registerSheet("identityEditor") }
+    .onDisappear { globalNav.unregisterSheet("identityEditor") }
     .fullScreenCover(isPresented: $showingCamera) {
       CameraPicker(selectedImageData: $selectedPhotoData)
         .ignoresSafeArea()
@@ -652,6 +653,7 @@ struct IdentityEditorView: View {
   }
   .modelContainer(container)
   .environment(rosterManager)
+  .tint(.green)
 }
 
 #Preview("Create Team") {
@@ -663,6 +665,7 @@ struct IdentityEditorView: View {
   }
   .modelContainer(container)
   .environment(rosterManager)
+  .tint(.green)
 }
 
 #Preview("Edit Team") {
@@ -670,8 +673,9 @@ struct IdentityEditorView: View {
   let rosterManager = PreviewContainers.rosterManager(for: container)
   
   NavigationStack {
-    IdentityEditorView(identity: .team(nil)) // Will be populated with actual team from roster
+    IdentityEditorView(identity: .team(nil))
   }
   .modelContainer(container)
   .environment(rosterManager)
+  .tint(.green)
 }

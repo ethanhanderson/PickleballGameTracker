@@ -7,10 +7,16 @@ struct ArchiveView: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(PlayerTeamManager.self) private var manager
   
-  @Query(filter: #Predicate<PlayerProfile> { $0.isArchived && !$0.isGuest })
+  @Query(
+    filter: #Predicate<PlayerProfile> { $0.isArchived && !$0.isGuest },
+    sort: [SortDescriptor(\.lastModified, order: .reverse)]
+  )
   private var archivedPlayers: [PlayerProfile]
   
-  @Query(filter: #Predicate<TeamProfile> { $0.isArchived })
+  @Query(
+    filter: #Predicate<TeamProfile> { $0.isArchived },
+    sort: [SortDescriptor(\.lastModified, order: .reverse)]
+  )
   private var archivedTeams: [TeamProfile]
 
   init() {}

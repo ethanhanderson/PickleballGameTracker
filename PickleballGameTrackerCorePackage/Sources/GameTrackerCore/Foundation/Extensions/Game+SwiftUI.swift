@@ -1,11 +1,3 @@
-//
-//  Game+SwiftUI.swift
-//  SharedGameCore
-//
-//  SwiftUI-specific extensions for Game model
-//  These extensions contain UI-related computed properties that depend on SwiftUI types
-//
-
 import SwiftUI
 import SwiftData
 import CoreGraphics
@@ -26,6 +18,9 @@ extension Game {
   /// Array of team configurations for dynamic UI rendering
   /// Requires ModelContext to resolve participant names from roster
   public func teamsWithLabels(context: ModelContext) -> [TeamConfig] {
+    // When the model is detached (e.g., deleted or view dismissed), avoid fault resolution
+    guard !isDetachedFromContext else { return [] }
+
     switch participantMode {
     case .players:
       if let side1Players = resolveSide1Players(context: context),
@@ -46,28 +41,22 @@ extension Game {
           TeamConfig(teamNumber: 2, teamName: team2.name)
         ]
       }
-      
-    case .anonymous:
-      break
     }
-    
-    return [
-      TeamConfig(teamNumber: 1, teamName: "Team 1"),
-      TeamConfig(teamNumber: 2, teamName: "Team 2")
-    ]
+    // If participants cannot be resolved, prefer an empty array over crashing
+    return []
   }
 
   /// Convenience property for views without ModelContext
   public var teamsWithLabels: [TeamConfig] {
-    // Fallback to default labels
-    return [
-      TeamConfig(teamNumber: 1, teamName: "Team 1"),
-      TeamConfig(teamNumber: 2, teamName: "Team 2")
-    ]
+    // No context available — return an empty list to avoid accidental crashes
+    []
   }
 
   /// Get the accent color for a team using the current roster associations
   public func teamTintColor(for teamNumber: Int, context: ModelContext) -> Color {
+    // When the model is detached (e.g., deleted or view dismissed), avoid fault resolution
+    guard !isDetachedFromContext else { return .accentColor }
+
     switch participantMode {
     case .teams:
       let team = (teamNumber == 1) ? resolveSide1Team(context: context) : resolveSide2Team(context: context)
@@ -75,11 +64,9 @@ extension Game {
     case .players:
       let players = (teamNumber == 1) ? resolveSide1Players(context: context) : resolveSide2Players(context: context)
       if let first = players?.first { return first.accentColor }
-    case .anonymous:
-      break
     }
-    // Fallback to game type color if roster cannot be resolved
-    return gameType.color
+    // Fallback gracefully if a tint cannot be resolved
+    return .accentColor
   }
 }
 
@@ -124,6 +111,21 @@ extension Game {
   public func shouldShowServingIndicator(for teamNumber: Int) -> Bool {
     isServing(teamNumber: teamNumber) && !isCompleted
   }
+}
+
+// MARK: - Safe Accessors for Detached Models
+
+extension Game {
+  /// True when this `Game` instance is no longer attached to a `ModelContext`.
+  /// UI should avoid touching SwiftData-backed properties when detached.
+  public var isDetachedFromContext: Bool { modelContext == nil }
+
+  /// Safe accessor for `gameState` that avoids fault resolution on detached objects.
+  /// Falls back to `.completed` so UI disables live-only affordances while dismissing.
+  public var safeGameState: GameState { isDetachedFromContext ? .completed : gameState }
+
+  /// Safe accessor for `isCompleted` that treats detached objects as completed.
+  public var safeIsCompleted: Bool { isDetachedFromContext ? true : isCompleted }
 }
 
 // MARK: - PlayerProfile SwiftUI Extensions

@@ -42,3 +42,12 @@ struct StatChartPlaceholder: View {
     }
   }
 }
+
+#Preview {
+  StatChartPlaceholder(
+    title: "Win Rate Trend",
+    points: []
+  )
+  .padding()
+  .tint(.green)
+}

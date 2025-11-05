@@ -30,26 +30,20 @@ struct GameTypeCard: View {
           HStack(alignment: .center, spacing: DesignSystem.Spacing.md) {
             Image(systemName: gameType.iconName)
               .font(.system(size: DesignSystem.Spacing.lg, weight: .medium))
-              .foregroundStyle(.white)
-              .shadow(
-                color: .black.opacity(0.20),
-                radius: 3,
-                x: 0,
-                y: 1
-              )
+              .foregroundStyle(gameType.color)
               .frame(width: 32, height: 32)
 
             Text(gameType.displayName)
               .font(.headline)
-              .fontWeight(.bold)
-              .foregroundStyle(.white)
+              .fontWeight(.semibold)
+              .foregroundStyle(.primary)
               .multilineTextAlignment(.leading)
               .frame(maxWidth: .infinity, alignment: .leading)
           }
 
           Text(gameType.description)
             .font(.subheadline)
-            .foregroundStyle(.white.opacity(0.7))
+            .foregroundStyle(.secondary)
             .multilineTextAlignment(.leading)
             .lineLimit(2)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -57,7 +51,7 @@ struct GameTypeCard: View {
 
         Image(systemName: "chevron.right")
           .font(.system(size: DesignSystem.Spacing.md, weight: .semibold))
-          .foregroundStyle(.white.opacity(0.7))
+          .foregroundStyle(.secondary)
       }
       .padding(.bottom, DesignSystem.Spacing.md)
 
@@ -86,6 +80,7 @@ struct GameTypeCard: View {
         )
       }
     }
+    .tint(.primary)
     .frame(
       width: fillsWidth ? nil : 220,
       height: fillsWidth ? nil : 180,
@@ -99,7 +94,7 @@ struct GameTypeCard: View {
     .padding(.top, DesignSystem.Spacing.lg)
     .padding(.bottom, DesignSystem.CornerRadius.xl)
     .glassEffect(
-        .regular.tint(gameType.color).interactive(),
+        .regular.tint(gameType.color.opacity(0.2)),
       in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xxl)
     )
     .contentShape(.rect)
@@ -151,15 +146,14 @@ private struct GameDetailItem: View {
   private var iconView: some View {
     Image(systemName: icon)
       .font(.system(size: iconSize, weight: .medium))
-      .foregroundStyle(.white.opacity(levelValue != nil ? 0.8 : 0.7))
-      .shadow(color: .black.opacity(0.08), radius: 2, x: 0, y: 1)
+      .foregroundStyle(.secondary)
   }
 
   private var labelView: some View {
     Text(label)
       .font(.caption)
       .fontWeight(.semibold)
-      .foregroundStyle(.white.opacity(0.7))
+      .foregroundStyle(.secondary)
   }
 
   private var valueView: some View {
@@ -167,14 +161,14 @@ private struct GameDetailItem: View {
       .font(.headline)
       .fontWeight(.bold)
       .fontDesign(.rounded)
-      .foregroundStyle(.white)
+      .foregroundStyle(.primary)
       .monospacedDigit()
   }
 
   private func levelIndicatorView(levelValue: Double, iconSize: CGFloat) -> some View {
     Image(systemName: "chart.bar.fill", variableValue: levelValue)
       .font(.system(size: iconSize, weight: .bold))
-      .foregroundStyle(.white)
+      .foregroundStyle(.primary)
   }
 }
 

@@ -12,7 +12,7 @@ struct GameControlButton: View {
     let onToggleGame: () -> Void
 
     private var isGameCompleted: Bool {
-        game.isCompleted
+        game.safeIsCompleted
     }
 
     private var buttonText: String {
@@ -38,17 +38,11 @@ struct GameControlButton: View {
     }
 
     private var gameStateColor: GameStateColor {
-        game.gameState.stateColor
+        game.safeGameState.stateColor
     }
 
     private var mappedColor: Color {
-        switch gameStateColor {
-        case .readyToStart: return .blue
-        case .attention: return .orange
-        case .active: return .green
-        case .success: return .green
-        case .inactive: return .gray
-        }
+        gameStateColor.color
     }
 
     var body: some View {
@@ -62,9 +56,9 @@ struct GameControlButton: View {
                         mappedColor
                     )
             }
-            .frame(maxWidth: .infinity)
             .fontWeight(.semibold)
         }
+        .buttonSizing(.flexible)
         .controlSize(.large)
         .buttonStyle(.glassProminent)
         .foregroundStyle(.primary)
@@ -73,6 +67,16 @@ struct GameControlButton: View {
         .opacity(1.0)
         .accessibilityIdentifier("GameControlButton.primary")
         .accessibilityLabel(Text(buttonText))
+        .sensoryFeedback(trigger: buttonText) {
+            guard HapticFeedbackService.shared.isEnabled else { return nil }
+            if isGameCompleted {
+                return .success
+            } else if !isGamePaused {
+                return .impact(weight: .medium, intensity: 0.8)
+            } else {
+                return .impact(weight: .heavy, intensity: 1.0)
+            }
+        }
     }
 }
 

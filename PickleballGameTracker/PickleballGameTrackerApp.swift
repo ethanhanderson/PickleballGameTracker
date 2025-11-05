@@ -20,32 +20,32 @@ struct PickleballGameTrackerApp: App {
     #endif
   }()
   
+  @UIApplicationDelegateAdaptor(NotificationDelegate.self) private var notificationDelegate
+  
   init() {
     Task { await LoggingService.shared.configure(sinks: [OSLogSink(), ConsoleSink()], minimumLevel: .warn) }
     Log.event(.appLaunch, level: .warn, message: "iOS app launch")
-    
-    // Best-effort: request notification permission for background setup prompts
-    Task {
-      let center = UNUserNotificationCenter.current()
-      let settings = await center.notificationSettings()
-      if settings.authorizationStatus == .notDetermined {
-        _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
-      }
-    }
   }
 
   var body: some Scene {
     WindowGroup {
       AppNavigationView()
-        .background {
-          AppLifecycleHandler(liveGameStateManager: liveGameStateManager)
-        }
+        .tint(.accentColor)
         .modelContainer(SwiftDataContainer.shared.modelContainer)
         .environment(liveGameStateManager)
         .environment(liveGameStateManager.gameManager!)
         .environment(rosterManager)
         .environment(syncCoordinator)
+        .modifier(AppLifecycleModifier(liveGameStateManager: liveGameStateManager))
         .task {
+          UNUserNotificationCenter.current().delegate = notificationDelegate
+          
+          let center = UNUserNotificationCenter.current()
+          let settings = await center.notificationSettings()
+          if settings.authorizationStatus == .notDetermined {
+            _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
+          }
+          
           if let gm = liveGameStateManager.gameManager {
             syncCoordinator.bind(liveManager: liveGameStateManager, gameManager: gm)
           }
@@ -98,30 +98,89 @@ struct PickleballGameTrackerApp: App {
           } catch {
             Log.error(error, event: .loadFailed, metadata: ["phase": "phone.roster.preview"])
           }
+
+          // After initial setup, forward any pending launch intent to the feature layer
+          if let pending = LaunchIntentStore.shared.consumePendingSetup() {
+            // Give AppNavigationView a brief moment to register observers
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            NotificationCenter.default.post(
+              name: Notification.Name("OpenSetupRequested"),
+              object: nil,
+              userInfo: ["gameType": pending]
+            )
+          }
         }
     }
   }
 }
 
+final class NotificationDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+  func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
+    // Ensure notification delegate is set as early as possible for cold-start from tap
+    UNUserNotificationCenter.current().delegate = self
+
+    // Register categories used by local notifications
+    let category = UNNotificationCategory(
+      identifier: "SETUP_REQUEST",
+      actions: [],
+      intentIdentifiers: [],
+      options: [.customDismissAction]
+    )
+    UNUserNotificationCenter.current().setNotificationCategories([category])
+    return true
+  }
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    if response.notification.request.content.categoryIdentifier == "SETUP_REQUEST",
+       let gameTypeRawValue = response.notification.request.content.userInfo["gameType"] as? String,
+       let gameType = GameType(rawValue: gameTypeRawValue) {
+      // Persist the intent so SwiftUI can consume even if observer isn't attached yet
+      LaunchIntentStore.shared.setPendingSetup(gameType: gameType)
+      Task { @MainActor in
+        NotificationCenter.default.post(
+          name: .setupNotificationTapped,
+          object: nil,
+          userInfo: ["gameType": gameType]
+        )
+        Log.event(
+          .actionTapped,
+          level: .info,
+          message: "Setup notification tapped",
+          metadata: ["gameType": gameType.rawValue]
+        )
+      }
+    }
+    completionHandler()
+  }
+  
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    completionHandler([.banner, .sound, .badge])
+  }
+}
+
 @MainActor
-private struct AppLifecycleHandler: View {
+private struct AppLifecycleModifier: ViewModifier {
   @Environment(\.scenePhase) private var scenePhase
   let liveGameStateManager: LiveGameStateManager
   
-  var body: some View {
-    Color.clear
+  func body(content: Content) -> some View {
+    content
       .onChange(of: scenePhase) { oldPhase, newPhase in
-        // Persist state when going to background, but don't pause
-        // The game continues running in the background
         if newPhase == .background {
-          Task { @MainActor in
+          Task {
             await liveGameStateManager.persistSessionOnly()
           }
         }
       }
       .onReceive(NotificationCenter.default.publisher(for: UIApplication.willTerminateNotification)) { _ in
-        // Only pause when app is actually terminating
-        Task { @MainActor in
+        Task {
           await liveGameStateManager.handleAppWillTerminate()
         }
       }

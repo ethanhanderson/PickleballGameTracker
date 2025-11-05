@@ -1,15 +1,8 @@
-//
-//  GameEvent.swift
-//  SharedGameCore
-//
-//  Created by Ethan Anderson on 7/9/25.
-//
-
 import Foundation
 import SwiftData
 
 /// Represents different types of game events that can occur during a pickleball game
-public enum GameEventType: String, Codable, CaseIterable {
+public enum GameEventType: String, Codable, CaseIterable, Sendable {
     // Scoring events
     case playerScored = "Player Scored"
     case scoreUndone = "Score Undone"

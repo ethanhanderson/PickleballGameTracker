@@ -1,4 +1,5 @@
 import GameTrackerCore
+import SwiftData
 import SwiftUI
 
 @MainActor
@@ -36,7 +37,6 @@ struct ShareIdentityView: View {
             Label("Share via Messages", systemImage: "message.fill")
           }
           .buttonStyle(.borderedProminent)
-          .tint(.accentColor)
 
           ShareLink(
             item: shareText,
@@ -116,4 +116,30 @@ extension PlayerHandedness {
     case .unknown: return "Unknown"
     }
   }
+}
+
+#Preview {
+  let container = PreviewContainers.roster()
+  let rosterManager = PreviewContainers.rosterManager(for: container)
+  
+  let players = try! container.mainContext.fetch(
+    FetchDescriptor<PlayerProfile>(predicate: #Predicate { !$0.isArchived })
+  )
+  let teams = try! container.mainContext.fetch(
+    FetchDescriptor<TeamProfile>(predicate: #Predicate { !$0.isArchived })
+  )
+  let identity: IdentityCard.Identity = {
+    if let player = players.first {
+      return .player(player, teamCount: nil)
+    } else if let team = teams.first {
+      return .team(team)
+    } else {
+      return .player(PlayerProfile(name: "Sample Player", accentColor: StoredRGBAColor.fromSeed(UUID())), teamCount: nil)
+    }
+  }()
+  
+  ShareIdentityView(identity: identity)
+    .modelContainer(container)
+    .environment(rosterManager)
+    .tint(.green)
 }

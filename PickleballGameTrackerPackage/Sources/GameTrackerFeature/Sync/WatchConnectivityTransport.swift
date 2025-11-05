@@ -1,13 +1,9 @@
-//
-//  WatchConnectivityTransport.swift
-//  GameTrackerFeature (iOS)
-//
-
 import Foundation
 import GameTrackerCore
 
 #if canImport(WatchConnectivity)
 import WatchConnectivity
+import UserNotifications
 
 @MainActor
 public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionDelegate {
@@ -15,19 +11,34 @@ public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionD
   private var sessionId: UUID = UUID()
   private var isActivated: Bool = false
   private var pendingSends: [(data: Data, preferContext: Bool)] = []
+  private var retryTask: Task<Void, Never>? = nil
+  private var lastReachable: Bool? = nil
+  private let defaults: UserDefaults = .standard
+  private let activationFailuresKey = "wc.activationFailures.ios"
+  private let lostConnectionsKey = "wc.lostConnections.ios"
+  private let rejectionsKey = "wc.rejections.ios"
+  private let maxActivationFailures = 10
+  private let maxLostConnections = 10
+  private let maxRejections = 10
 
   public var onReceiveLiveSnapshot: (@Sendable (LiveGameSnapshotDTO) -> Void)?
   public var onReceiveLiveDelta: (@Sendable (LiveGameDeltaDTO) -> Void)?
   public var onReceiveRosterSnapshot: (@Sendable (RosterSnapshotDTO) -> Void)?
   public var onReceiveHistorySummaries: (@Sendable (HistorySummariesDTO) -> Void)?
   public var onReceiveStartConfiguration: (@Sendable (GameStartConfiguration) -> Void)?
+  public var onReceiveStartRequest: (@Sendable (StartGameRequestDTO) -> Void)?
   public var onReceiveLiveStatusRequest: (@Sendable () -> Void)?
   public var onReachabilityChanged: (@Sendable (SyncReachability) -> Void)?
   public var onReceiveRosterRequest: (@Sendable () -> Void)?
   public var onReceiveHistoryRequest: (@Sendable () -> Void)?
+  public var onReceiveRosterInventory: (@Sendable (RosterInventoryDTO) -> Void)?
+  public var onReceiveRosterUpsert: (@Sendable (RosterUpsertDTO) -> Void)?
+  public var onReceiveRosterPrune: (@Sendable (RosterPruneDTO) -> Void)?
 
   public var currentReachability: SyncReachability {
     guard WCSession.isSupported() else { return .unavailable }
+    // On iOS, also factor in pairing and watch app install state
+    if !session.isPaired || !session.isWatchAppInstalled { return .unavailable }
     return session.isReachable ? .reachable : .connecting
   }
 
@@ -47,11 +58,16 @@ public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionD
       message: "wc.start",
       metadata: ["platform": "iOS"]
     )
+    // On iOS, the activation delegate may not fire; ensure we eventually mark as activated
+    await ensureActivationReady()
+    startAutoConnectRetriesIfNeeded()
   }
 
   public func stop() async {
     // WCSession has no explicit stop; rotate sessionId to partition streams
     sessionId = UUID()
+    retryTask?.cancel()
+    retryTask = nil
   }
 
   // MARK: Outbound
@@ -105,6 +121,16 @@ public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionD
     try await send(envelopeFor: config, type: .startConfig, preferContext: true)
   }
 
+  public func sendStartRequest(_ request: StartGameRequestDTO) async throws {
+    Log.event(
+      .saveStarted,
+      level: .debug,
+      message: "wc.send.startRequest",
+      metadata: ["preferContext": "true", "reachable": String(session.isReachable)]
+    )
+    try await send(envelopeFor: request, type: .startRequest, preferContext: true)
+  }
+
   public func requestRosterSnapshot() async throws {
     Log.event(
       .loadStarted,
@@ -123,6 +149,36 @@ public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionD
       metadata: ["reachable": String(session.isReachable)]
     )
     try await send(typeOnly: .historyRequest)
+  }
+
+  public func sendRosterInventory(_ inventory: RosterInventoryDTO) async throws {
+    Log.event(
+      .saveStarted,
+      level: .debug,
+      message: "wc.send.rosterInventory",
+      metadata: ["preferContext": "true", "reachable": String(session.isReachable)]
+    )
+    try await send(envelopeFor: inventory, type: .rosterInventory, preferContext: true)
+  }
+
+  public func sendRosterUpsert(_ upsert: RosterUpsertDTO) async throws {
+    Log.event(
+      .saveStarted,
+      level: .debug,
+      message: "wc.send.rosterUpsert",
+      metadata: ["preferContext": "true", "reachable": String(session.isReachable)]
+    )
+    try await send(envelopeFor: upsert, type: .rosterUpsert, preferContext: true)
+  }
+
+  public func sendRosterPrune(_ prune: RosterPruneDTO) async throws {
+    Log.event(
+      .saveStarted,
+      level: .debug,
+      message: "wc.send.rosterPrune",
+      metadata: ["preferContext": "true", "reachable": String(session.isReachable)]
+    )
+    try await send(envelopeFor: prune, type: .rosterPrune, preferContext: true)
   }
 
   public func requestLiveStatus() async throws {
@@ -166,7 +222,11 @@ public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionD
   }
 
   private func send(typeOnly: SyncMessageType) async throws {
-    let data = try MessageCodec.encode(SyncEnvelope(type: typeOnly, sessionId: sessionId, payload: Data()), type: typeOnly, sessionId: sessionId)
+    // Encode a single envelope directly for type-only messages (no nested envelope)
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    let envelope = SyncEnvelope(type: typeOnly, sessionId: sessionId, payload: Data())
+    let data = try encoder.encode(envelope)
     if !isActivated {
       pendingSends.append((data, false))
       Log.event(
@@ -181,8 +241,24 @@ public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionD
   }
 
   private func sendData(_ data: Data) async throws {
+    // Prefer interactive messaging for small payloads when reachable; otherwise use background transfer
+    let interactiveLimit = 60 * 1024
+    if data.count > interactiveLimit {
+      session.transferUserInfo(["data": data])
+      Log.event(
+        .saveSucceeded,
+        level: .debug,
+        message: "wc.transferUserInfo.large",
+        metadata: ["bytes": String(data.count)]
+      )
+      return
+    }
     if session.isReachable {
-      session.sendMessageData(data, replyHandler: nil, errorHandler: nil)
+      session.sendMessageData(
+        data,
+        replyHandler: nil,
+        errorHandler: makeSendErrorHandler(for: data)
+      )
       Log.event(
         .saveSucceeded,
         level: .debug,
@@ -190,13 +266,26 @@ public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionD
         metadata: nil
       )
     } else {
+      // When not reachable, push latest state via application context for faster delivery, and also queue background transfer
+      _ = try? session.updateApplicationContext(["data": data])
       session.transferUserInfo(["data": data])
       Log.event(
         .saveSucceeded,
         level: .debug,
-        message: "wc.transferUserInfo",
+        message: "wc.contextAndTransfer",
         metadata: nil
       )
+    }
+  }
+
+  // Create a nonisolated error handler so WCSession can invoke it on its own queue
+  nonisolated private func makeSendErrorHandler(for data: Data) -> @Sendable (Error) -> Void {
+    { _ in
+      Task { @MainActor in
+        let sess = WCSession.default
+        _ = try? sess.updateApplicationContext(["data": data])
+        sess.transferUserInfo(["data": data])
+      }
     }
   }
 
@@ -234,6 +323,15 @@ public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionD
     switch type {
     case .liveStatusRequest:
       onReceiveLiveStatusRequest?()
+    case .startRequest:
+      if let v = anyValue as? StartGameRequestDTO {
+        // Always schedule a notification in case app is in background or terminated
+        // AppNavigationView will cancel it if it can open immediately
+        Task {
+          await scheduleSetupNotificationIfNeeded(for: v.gameType)
+        }
+        onReceiveStartRequest?(v)
+      }
     case .startConfig:
       if let v = anyValue as? GameStartConfiguration { onReceiveStartConfiguration?(v) }
     case .liveSnapshot:
@@ -248,6 +346,12 @@ public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionD
       onReceiveRosterRequest?()
     case .historyRequest:
       onReceiveHistoryRequest?()
+    case .rosterInventory:
+      if let v = anyValue as? RosterInventoryDTO { onReceiveRosterInventory?(v) }
+    case .rosterUpsert:
+      if let v = anyValue as? RosterUpsertDTO { onReceiveRosterUpsert?(v) }
+    case .rosterPrune:
+      if let v = anyValue as? RosterPruneDTO { onReceiveRosterPrune?(v) }
     case .ack, .error:
       break
     }
@@ -257,6 +361,7 @@ public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionD
   public nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
     Task { @MainActor in
       self.isActivated = (activationState == .activated)
+      self.handleActivationResult(error: error)
       // Flush any queued messages after activation
       if self.isActivated, !self.pendingSends.isEmpty {
         let queued = self.pendingSends
@@ -285,6 +390,12 @@ public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionD
 
   public nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
     Task { @MainActor in
+      let wasReachable = self.lastReachable
+      self.lastReachable = self.session.isReachable
+      if let wasReachable, wasReachable && !self.session.isReachable {
+        self.incrementCounter(self.lostConnectionsKey)
+        self.startAutoConnectRetriesIfNeeded()
+      }
       self.onReachabilityChanged?(self.currentReachability)
       Log.event(
         .loadSucceeded,
@@ -298,7 +409,169 @@ public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionD
   // iOS-specific required delegate stubs
   public nonisolated func sessionDidBecomeInactive(_ session: WCSession) {}
   public nonisolated func sessionDidDeactivate(_ session: WCSession) {
+    Task { @MainActor in
+      self.isActivated = false
+    }
     session.activate()
+    Task { @MainActor in
+      self.startAutoConnectRetriesIfNeeded()
+    }
+  }
+
+  // MARK: - Watch/app install and activation helpers (iOS)
+  public nonisolated func sessionWatchStateDidChange(_ session: WCSession) {
+    Task { @MainActor in
+      // Update activation snapshot and notify reachability changes
+      self.isActivated = (self.session.activationState == .activated)
+      if self.isActivated { await self.flushPendingSends() }
+      if !self.session.isPaired || !self.session.isWatchAppInstalled {
+        self.incrementCounter(self.rejectionsKey)
+        self.startAutoConnectRetriesIfNeeded()
+      }
+      self.onReachabilityChanged?(self.currentReachability)
+      Log.event(
+        .loadSucceeded,
+        level: .debug,
+        message: "wc.watchStateChanged",
+        metadata: [
+          "paired": String(self.session.isPaired),
+          "installed": String(self.session.isWatchAppInstalled),
+          "activation": String(self.session.activationState.rawValue)
+        ]
+      )
+    }
+  }
+
+  private func updateActivationFromSession() {
+    isActivated = (session.activationState == .activated)
+  }
+
+  private func flushPendingSends() async {
+    guard !pendingSends.isEmpty else { return }
+    let queued = pendingSends
+    pendingSends.removeAll()
+    for item in queued {
+      if item.preferContext {
+        do { try session.updateApplicationContext(["data": item.data]) } catch { try? await sendData(item.data) }
+      } else {
+        try? await sendData(item.data)
+      }
+    }
+  }
+
+  private func ensureActivationReady() async {
+    // If already activated, set and flush immediately
+    updateActivationFromSession()
+    if isActivated {
+      await flushPendingSends()
+      return
+    }
+    // Poll briefly to allow activation to complete on iOS
+    let deadline = Date().addingTimeInterval(3.0)
+    while Date() < deadline {
+      try? await Task.sleep(nanoseconds: 50_000_000)
+      updateActivationFromSession()
+      if isActivated {
+        await flushPendingSends()
+        break
+      }
+    }
+  }
+
+  // MARK: - Persistent retry/backoff
+  private func startAutoConnectRetriesIfNeeded() {
+    guard !hasExceededRetryLimits(), !isConnected() else { return }
+    if retryTask?.isCancelled == false { return }
+    retryTask = Task { [weak self] in
+      guard let self else { return }
+      var attempt: Int = 0
+      while !Task.isCancelled {
+        let connected = await MainActor.run { self.isConnected() }
+        let exceeded = await MainActor.run { self.hasExceededRetryLimits() }
+        if connected || exceeded { break }
+        let delay = self.backoff(for: attempt)
+        do { try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) } catch { break }
+        await MainActor.run {
+          self.session.activate()
+        }
+        attempt += 1
+      }
+    }
+  }
+
+  private func isConnected() -> Bool {
+    if !WCSession.isSupported() { return false }
+    if !session.isPaired || !session.isWatchAppInstalled { return false }
+    return isActivated && session.isReachable
+  }
+
+  private func backoff(for attempt: Int) -> Double {
+    let base: Double = 0.5
+    let maxDelay: Double = 30.0
+    let delay = base * pow(2.0, Double(min(attempt, 10)))
+    return min(delay, maxDelay)
+  }
+
+  private func handleActivationResult(error: Error?) {
+    if isConnected() {
+      resetRetryCounters()
+      retryTask?.cancel()
+      retryTask = nil
+    } else {
+      if error != nil || session.activationState != .activated {
+        incrementCounter(activationFailuresKey)
+      }
+      startAutoConnectRetriesIfNeeded()
+    }
+  }
+
+  private func hasExceededRetryLimits() -> Bool {
+    let failures = defaults.integer(forKey: activationFailuresKey)
+    let lost = defaults.integer(forKey: lostConnectionsKey)
+    let rejections = defaults.integer(forKey: rejectionsKey)
+    return failures >= maxActivationFailures || lost >= maxLostConnections || rejections >= maxRejections
+  }
+
+  private func resetRetryCounters() {
+    defaults.set(0, forKey: activationFailuresKey)
+    defaults.set(0, forKey: lostConnectionsKey)
+    defaults.set(0, forKey: rejectionsKey)
+  }
+
+  private func incrementCounter(_ key: String) {
+    let v = defaults.integer(forKey: key)
+    defaults.set(v + 1, forKey: key)
+  }
+  
+  private func scheduleSetupNotificationIfNeeded(for gameType: GameType) async {
+    // Brief delay to let UI register observers and update sheet state
+    try? await Task.sleep(nanoseconds: 200_000_000)
+    let (isActive, hasSheet, isSetupOpen) = await MainActor.run { () -> (Bool, Bool, Bool) in
+      let global = GlobalNavigationState.shared
+      return (global.isAppActive, global.hasOpenSheet, global.isSheetOpen("setup"))
+    }
+    // If app is active and no sheets are open, request opening immediately (no notification)
+    if isActive && !hasSheet {
+      Log.event(
+        .actionTapped,
+        level: .info,
+        message: "Skip scheduling setup notification (app active, can present)",
+        metadata: [
+          "gameType": gameType.rawValue,
+          "hasSheet": String(hasSheet),
+          "isSetupOpen": String(isSetupOpen)
+        ]
+      )
+      NotificationCenter.default.post(
+        name: Notification.Name("OpenSetupRequested"),
+        object: nil,
+        userInfo: ["gameTypeId": gameType.rawValue]
+      )
+      return
+    }
+
+    // Otherwise, schedule a notification to prompt the user
+    await SetupNotificationService.shared.scheduleSetupNotification(for: gameType)
   }
 }
 

@@ -66,6 +66,24 @@ public struct ErrorView: View {
   }
 }
 
+#Preview {
+  ErrorView(
+    error: NSError(domain: "PreviewError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Sample error message"]),
+    retry: {}
+  )
+  .padding()
+  .tint(.green)
+}
+
+#Preview("No Retry") {
+  ErrorView(
+    error: NSError(domain: "PreviewError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Sample error message"]),
+    retry: nil
+  )
+  .padding()
+  .tint(.green)
+}
+
 // MARK: - Custom Error Types
 enum AppError: LocalizedError {
   case coreDataError(String)

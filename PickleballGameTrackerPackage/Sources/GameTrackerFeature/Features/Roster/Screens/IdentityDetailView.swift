@@ -570,6 +570,7 @@ struct IdentityDetailView: View {
     }
     .modelContainer(container)
     .environment(rosterManager)
+    .tint(.green)
 }
 
 #Preview("Active Teams") {
@@ -586,6 +587,7 @@ struct IdentityDetailView: View {
     }
     .modelContainer(container)
     .environment(rosterManager)
+    .tint(.green)
 }
 
 // MARK: - Archived Identity Previews
@@ -613,6 +615,7 @@ struct IdentityDetailView: View {
     }
     .modelContainer(container)
     .environment(rosterManager)
+    .tint(.green)
 }
 
 #Preview("Archived Teams") {
@@ -635,4 +638,5 @@ struct IdentityDetailView: View {
     }
     .modelContainer(container)
     .environment(rosterManager)
+    .tint(.green)
 }

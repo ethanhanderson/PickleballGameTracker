@@ -163,3 +163,20 @@ private struct TeamRowView: View {
     .buttonStyle(.plain)
   }
 }
+
+#Preview {
+  let container = PreviewContainers.roster()
+  let rosterManager = PreviewContainers.rosterManager(for: container)
+  
+  let players = try! container.mainContext.fetch(
+    FetchDescriptor<PlayerProfile>(predicate: #Predicate { !$0.isArchived })
+  )
+  let player = players.first ?? PlayerProfile(name: "Sample Player", accentColor: StoredRGBAColor.fromSeed(UUID()))
+  
+  NavigationStack {
+    AddPlayerToTeamView(player: player)
+  }
+  .modelContainer(container)
+  .environment(rosterManager)
+  .tint(.green)
+}

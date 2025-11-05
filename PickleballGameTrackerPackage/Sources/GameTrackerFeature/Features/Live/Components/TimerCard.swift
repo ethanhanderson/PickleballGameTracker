@@ -22,7 +22,7 @@ struct TimerCard: View {
   private var timerIconColor: Color { gameTypeColor }
   private var timerBackgroundColor: Color { gameTypeColor }
 
-  private var isPlaying: Bool { game.gameState == .playing && !game.isCompleted }
+  private var isPlaying: Bool { game.safeGameState == .playing && !game.safeIsCompleted }
 
   var body: some View {
     HStack(spacing: DesignSystem.Spacing.sm) {
@@ -40,9 +40,9 @@ struct TimerCard: View {
     .padding(.horizontal, DesignSystem.Spacing.lg)
     .padding(.vertical, DesignSystem.Spacing.md)
     .glassEffect(.regular.tint(timerBackgroundColor.opacity(0.35)), in: Capsule())
-    .opacity(game.isCompleted ? 0.6 : (pulseAnimation ? 0.6 : 1.0))
+    .opacity(game.safeIsCompleted ? 0.6 : (pulseAnimation ? 0.6 : 1.0))
     .animation(.easeInOut(duration: 0.3), value: pulseAnimation)
-    .animation(.easeInOut(duration: 0.2), value: game.isCompleted)
+    .animation(.easeInOut(duration: 0.2), value: game.safeIsCompleted)
   }
 }
 
@@ -60,6 +60,7 @@ struct TimerCard: View {
   )
   .padding()
   .modelContainer(PreviewContainers.standard())
+  .tint(.green)
 }
 
 #Preview("Basic Timer") {
@@ -76,6 +77,7 @@ struct TimerCard: View {
   )
   .padding()
   .modelContainer(PreviewContainers.minimal())
+  .tint(.green)
 }
 
 #Preview("Timer Paused") {
@@ -92,6 +94,7 @@ struct TimerCard: View {
   )
   .padding()
   .modelContainer(PreviewContainers.minimal())
+  .tint(.green)
 }
 
 #Preview("Game Paused") {
@@ -108,6 +111,7 @@ struct TimerCard: View {
   )
   .padding()
   .modelContainer(PreviewContainers.minimal())
+  .tint(.green)
 }
 
 #Preview("Game Completed") {
@@ -124,4 +128,5 @@ struct TimerCard: View {
   )
   .padding()
   .modelContainer(PreviewContainers.minimal())
+  .tint(.green)
 }

@@ -209,3 +209,18 @@ struct LiveGameMiniPreview: View {
         }
     }
 }
+
+#Preview {
+  @Previewable @State var showSheet = false
+  @Previewable @Namespace var animation
+  
+  let setup = PreviewContainers.liveGameSetup()
+  
+  LiveGameMiniPreview(
+    onTap: { showSheet = true },
+    animation: animation
+  )
+  .modelContainer(setup.container)
+  .environment(setup.liveGameManager)
+  .tint(.green)
+}

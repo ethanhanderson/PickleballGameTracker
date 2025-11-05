@@ -17,7 +17,11 @@ public enum SyncMessageType: String, Codable, Sendable {
   case rosterRequest
   case historyRequest
   case startConfig
+  case startRequest
   case liveStatusRequest
+  case rosterInventory
+  case rosterUpsert
+  case rosterPrune
   case ack
   case error
 }
@@ -76,10 +80,15 @@ public protocol SyncService: Sendable {
   func sendRosterSnapshot(_ roster: RosterSnapshotDTO) async throws
   func sendHistorySummaries(_ summaries: HistorySummariesDTO) async throws
   func sendStartConfiguration(_ config: GameStartConfiguration) async throws
+  func sendStartRequest(_ request: StartGameRequestDTO) async throws
   func requestLiveStatus() async throws
 
   func requestRosterSnapshot() async throws
   func requestHistorySummaries() async throws
+  
+  func sendRosterInventory(_ inventory: RosterInventoryDTO) async throws
+  func sendRosterUpsert(_ upsert: RosterUpsertDTO) async throws
+  func sendRosterPrune(_ prune: RosterPruneDTO) async throws
 
   // MARK: Inbound Handlers
   var onReceiveLiveSnapshot: (@Sendable (LiveGameSnapshotDTO) -> Void)? { get set }
@@ -87,11 +96,16 @@ public protocol SyncService: Sendable {
   var onReceiveRosterSnapshot: (@Sendable (RosterSnapshotDTO) -> Void)? { get set }
   var onReceiveHistorySummaries: (@Sendable (HistorySummariesDTO) -> Void)? { get set }
   var onReceiveStartConfiguration: (@Sendable (GameStartConfiguration) -> Void)? { get set }
+  var onReceiveStartRequest: (@Sendable (StartGameRequestDTO) -> Void)? { get set }
   var onReceiveLiveStatusRequest: (@Sendable () -> Void)? { get set }
 
   // Type-only inbound requests
   var onReceiveRosterRequest: (@Sendable () -> Void)? { get set }
   var onReceiveHistoryRequest: (@Sendable () -> Void)? { get set }
+  
+  var onReceiveRosterInventory: (@Sendable (RosterInventoryDTO) -> Void)? { get set }
+  var onReceiveRosterUpsert: (@Sendable (RosterUpsertDTO) -> Void)? { get set }
+  var onReceiveRosterPrune: (@Sendable (RosterPruneDTO) -> Void)? { get set }
 
   // MARK: Reachability
   var onReachabilityChanged: (@Sendable (SyncReachability) -> Void)? { get set }

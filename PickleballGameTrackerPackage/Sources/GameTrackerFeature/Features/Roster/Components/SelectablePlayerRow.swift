@@ -23,3 +23,23 @@ struct SelectablePlayerRow: View {
     .buttonStyle(.plain)
   }
 }
+
+#Preview {
+  SelectablePlayerRow(
+    name: "Sample Player",
+    isSelected: true,
+    onToggle: {}
+  )
+  .padding()
+  .tint(.green)
+}
+
+#Preview("Unselected") {
+  SelectablePlayerRow(
+    name: "Sample Player",
+    isSelected: false,
+    onToggle: {}
+  )
+  .padding()
+  .tint(.green)
+}

@@ -551,12 +551,12 @@ extension PreviewEnvironment.Context {
         try await activeGameStateManager.startGame()
       }
     } else {
-      // Create a basic live game for preview context
-      let game = Game(gameType: .recreational)
-      game.gameState = .playing
-      container.mainContext.insert(game)
-      try container.mainContext.save()
-      await activeGameStateManager.setCurrentGame(game)
+      // Create a seeded live game with participants for preview context
+      _ = try? await PreviewGameData.createRandomLiveGame(using: gameManager)
+      let refreshed = try? container.mainContext.fetch(FetchDescriptor<Game>())
+      if let game = refreshed?.first {
+        await activeGameStateManager.setCurrentGame(game)
+      }
     }
   }
 

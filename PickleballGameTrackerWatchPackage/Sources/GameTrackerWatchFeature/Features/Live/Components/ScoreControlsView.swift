@@ -12,13 +12,10 @@ struct ScoreControlsView: View {
   let onSetServer: ((Int) -> Void)?
   let onHapticFeedback: () -> Void
 
-  // Removed timer controls; display-only
-
   @State private var gamePointBreathing = false
   @State private var previousScore1: Int = 0
   @State private var previousScore2: Int = 0
   
-  // Badge visibility states
   @State private var matchLabelVisible1: Bool = false
   @State private var serveLabelVisible1: Bool = false
   @State private var matchLabelVisible2: Bool = false
@@ -37,7 +34,7 @@ struct ScoreControlsView: View {
           teamName: teamName(for: 1),
           score: game.score1,
           color: game.teamTintColor(for: 1, context: modelContext),
-          isServing: game.currentServer == 1 && !game.isCompleted,
+          isServing: game.currentServer == 1 && !game.safeIsCompleted,
           previousScore: previousScore1,
           matchLabelVisible: $matchLabelVisible1,
           serveLabelVisible: $serveLabelVisible1,
@@ -51,7 +48,7 @@ struct ScoreControlsView: View {
           teamName: teamName(for: 2),
           score: game.score2,
           color: game.teamTintColor(for: 2, context: modelContext),
-          isServing: game.currentServer == 2 && !game.isCompleted,
+          isServing: game.currentServer == 2 && !game.safeIsCompleted,
           previousScore: previousScore2,
           matchLabelVisible: $matchLabelVisible2,
           serveLabelVisible: $serveLabelVisible2,
@@ -99,8 +96,8 @@ struct ScoreControlsView: View {
     .padding(.horizontal, DesignSystem.Spacing.sm)
     .padding(.vertical, DesignSystem.Spacing.xs)
     .glassEffect()
-    .opacity(game.isCompleted ? 0.6 : 1.0)
-    .animation(isLuminanceReduced ? nil : .easeInOut(duration: 0.2), value: game.isCompleted)
+    .opacity(game.safeIsCompleted ? 0.6 : 1.0)
+    .animation(isLuminanceReduced ? nil : .easeInOut(duration: 0.2), value: game.safeIsCompleted)
   }
 
   // MARK: - Helper Functions
@@ -110,11 +107,11 @@ struct ScoreControlsView: View {
     if let config = teamConfigs.first(where: { $0.teamNumber == teamNumber }) {
       return config.teamName
     }
-    return teamNumber == 1 ? "Team 1" : "Team 2"
+    preconditionFailure("Team display name not resolvable for team=\(teamNumber). Ensure participants are set.")
   }
   
   private func isWinner(teamNumber: Int) -> Bool {
-    guard game.isCompleted else { return false }
+    guard game.safeIsCompleted else { return false }
     let team1Score = game.score1
     let team2Score = game.score2
     return teamNumber == 1 ? (team1Score > team2Score) : (team2Score > team1Score)
@@ -133,7 +130,7 @@ struct ScoreControlsView: View {
   ) -> some View {
     let isAtMatchPoint = game.isAtMatchPoint(for: teamNumber)
     let servingIndicatorVisible = game.shouldShowServingIndicator(for: teamNumber)
-    let servingAnimate = game.gameState == .playing && !wasJustResumed
+    let servingAnimate = game.safeGameState == .playing && !wasJustResumed
     let isWinningTeam = game.isWinningTeam(teamNumber: teamNumber)
     let scoreIsDecreasing = score < previousScore
     
@@ -155,7 +152,6 @@ struct ScoreControlsView: View {
       }
 
       ZStack {
-        // Main score display
         Text("\(score)")
           .font(
             .system(
@@ -174,7 +170,6 @@ struct ScoreControlsView: View {
             "WatchScoreCard.score.team\(teamNumber)"
           )
 
-        // Status indicators in top trailing corner
         VStack {
           HStack {
             Spacer()
@@ -194,7 +189,7 @@ struct ScoreControlsView: View {
                   matchLabelVisible.wrappedValue = isVisible
                 },
                 shouldDefer: {
-                  (isServing && !game.isCompleted)
+                  (isServing && !game.safeIsCompleted)
                     && serveLabelVisible.wrappedValue
                 }
               )
@@ -225,12 +220,11 @@ struct ScoreControlsView: View {
           Spacer()
         }
 
-        // Winner badge in bottom center
         VStack {
           Spacer()
           HStack {
             Spacer()
-            if game.isCompleted, isWinningTeam {
+            if game.safeIsCompleted, isWinningTeam {
               WatchWinnerChip(game: game, teamTintColor: color)
             }
             Spacer()
@@ -247,45 +241,43 @@ struct ScoreControlsView: View {
           : .regular.tint(color.opacity(0.25)),
         in: .rect(cornerRadius: 16.0)
       )
-      .scaleEffect(game.isCompleted ? 0.95 : 1.0)
-      .opacity(game.isCompleted ? 0.6 : 1.0)
-      .animation(isLuminanceReduced ? nil : .easeInOut(duration: 0.2), value: game.isCompleted)
+      .scaleEffect(game.safeIsCompleted ? 0.95 : 1.0)
+      .opacity(game.safeIsCompleted ? 0.6 : 1.0)
+      .animation(isLuminanceReduced ? nil : .easeInOut(duration: 0.2), value: game.safeIsCompleted)
       .animation(isLuminanceReduced ? nil : .easeInOut(duration: 0.3), value: liveGameStateManager.isGameLive)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .disabled(game.isCompleted)
+    .disabled(game.safeIsCompleted)
     .contentShape(.rect)
     .onTapGesture {
-      guard !game.isCompleted else { return }
+      guard !game.safeIsCompleted else { return }
       
-      // If not serving, set server first, then score
       if game.currentServer != teamNumber {
         onSetServer?(teamNumber)
       }
       
-      // Always score the point
       onScorePoint(teamNumber)
-      onHapticFeedback()
+      // Haptic feedback is handled inside scorePoint function based on game state
       onScoreChange(score + 1)
     }
     .onTapGesture(count: 2) {
-      guard !game.isCompleted else { return }
+      guard !game.safeIsCompleted else { return }
       guard score > 0 else { return }
       onDecrementScore(teamNumber)
-      onHapticFeedback()
+      // Haptic feedback is handled inside decrementScore function based on game state
       onScoreChange(score - 1)
     }
     .gesture(
       DragGesture()
         .onEnded { value in
-          guard !game.isCompleted else { return }
+          guard !game.safeIsCompleted else { return }
           if value.translation.height < -30 {
             onScorePoint(teamNumber)
-            onHapticFeedback()
+            // Haptic feedback is handled inside scorePoint function based on game state
             onScoreChange(score + 1)
           } else if value.translation.height > 30 && score > 0 {
             onDecrementScore(teamNumber)
-            onHapticFeedback()
+            // Haptic feedback is handled inside decrementScore function based on game state
             onScoreChange(score - 1)
           }
         }

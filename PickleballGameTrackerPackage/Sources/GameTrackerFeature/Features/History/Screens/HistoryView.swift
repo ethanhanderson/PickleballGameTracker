@@ -12,7 +12,9 @@ import SwiftUI
 
 @MainActor
 struct HistoryView: View {
+    @Namespace var animation
     @Environment(\.modelContext) private var modelContext
+    @Environment(SwiftDataGameManager.self) private var gameManager
     private static let completedSort: [SortDescriptor<GameSummary>] = [
         SortDescriptor(\.completedDate, order: .reverse)
     ]
@@ -23,6 +25,9 @@ struct HistoryView: View {
     @State private var navigationState = AppNavigationState()
     @State private var selectedFilter: GameFilter = .all  // Logical default: show all games
     @State private var selectedGrouping: GroupingOption = .none  // Logical default: chronological order
+    @State private var showArchiveSheet = false
+    @State private var hiddenGameIds: Set<UUID> = []
+    @State private var deletionObserver: (any NSObjectProtocol)? = nil
 
     // MARK: - Computed Properties
 
@@ -55,6 +60,9 @@ struct HistoryView: View {
 
         // Apply selected filter
         games = applySelectedFilter(to: games)
+
+        // Hide games pending deletion
+        games.removeAll { hiddenGameIds.contains($0.id) }
 
         return games
     }
@@ -97,16 +105,20 @@ struct HistoryView: View {
                     } else {
                         if selectedGrouping == .none {
                             VStack(spacing: DesignSystem.Spacing.md) {
-                                ForEach(filteredGames.indices, id: \.self) { index in
-                                        NavigationLink(
-                                            value: GameHistoryDestination.gameDetail(filteredGames[index].id)
-                                        ) {
-                                            CompletedGameCard(game: filteredGames[index])
-                                        }
+                                ForEach(filteredGames, id: \.id) { game in
+                                    NavigationLink(
+                                        value:
+                                            GameHistoryDestination.gameDetail(
+                                                game.id
+                                            )
+                                    ) {
+                                        CompletedGameCard(game: game)
+                                    }
                                     .buttonStyle(.plain)
                                     .simultaneousGesture(
                                         TapGesture().onEnded {
-                                            navigationState.trackHistoryNavigation(filteredGames[index].id)
+                                            navigationState
+                                                .trackHistoryNavigation(game.id)
                                         }
                                     )
                                 }
@@ -122,49 +134,105 @@ struct HistoryView: View {
                 }
                 .scrollClipDisabled()
             }
-            .contentMargins(.horizontal, DesignSystem.Spacing.md, for: .scrollContent)
+            .contentMargins(
+                .horizontal,
+                DesignSystem.Spacing.md,
+                for: .scrollContent
+            )
             .contentMargins(.top, DesignSystem.Spacing.sm, for: .scrollContent)
             .navigationTitle("History")
             .viewContainerBackground()
             .toolbar {
                 ToolbarItem {
-                    HistoryFilterMenu(selectedFilter: $selectedFilter)
+                    MenuPicker(
+                        selection: $selectedFilter,
+                        options: GameFilter.allFilters,
+                        menuTitle: "Filter",
+                        menuIcon: "line.3.horizontal.decrease"
+                    )
                 }
 
                 ToolbarItem {
-                    HistoryGroupingMenu(selectedGrouping: $selectedGrouping)
+                    MenuPicker(
+                        selection: $selectedGrouping,
+                        options: Array(GroupingOption.allCases),
+                        menuTitle: "Grouping",
+                        menuIcon: "square.grid.2x2"
+                    )
                 }
 
                 ToolbarSpacer()
 
                 ToolbarItem {
-                    NavigationLink(value: GameHistoryDestination.archiveList) {
+                    Button {
+                        showArchiveSheet = true
+                    } label: {
                         Label("View Archive", systemImage: "archivebox")
                     }
                     .accessibilityIdentifier("NavLink.History.archiveList")
+                    .matchedTransitionSource(id: "archive", in: animation)
                 }
             }
             .navigationDestination(for: GameHistoryDestination.self) {
                 destination in
                 switch destination {
                 case .gameDetail(let gameId):
-                    if let game = try? modelContext.fetch(
+                    if hiddenGameIds.contains(gameId) {
+                        EmptyView()
+                    } else if let game = try? modelContext.fetch(
                         FetchDescriptor<Game>(
                             predicate: #Predicate { $0.id == gameId }
                         )
                     ).first {
                         CompletedGameDetailView(game: game)
                     } else {
-                        EmptyStateView(
-                            icon: "exclamationmark.triangle.fill",
-                            title: "Game Not Found",
-                            description: "This game could not be loaded."
-                        )
+                        // Guard against navigating to missing games without showing fallback
+                        EmptyView()
                     }
                 case .archiveList:
-                    ArchivedGamesView()
+                    EmptyView()
                 }
             }
+        }
+        .task {
+            // Observe delete requests and process them after navigation back
+            deletionObserver = HistoryDeletionRequestBus.observeDeleteRequests { id in
+                Task { @MainActor in
+                    hiddenGameIds.insert(id)
+                    await handleDeletion(id)
+                }
+            }
+        }
+        .onDisappear {
+            if let token = deletionObserver {
+                NotificationCenter.default.removeObserver(token)
+                deletionObserver = nil
+            }
+        }
+        .sheet(isPresented: $showArchiveSheet) {
+            NavigationStack {
+                ArchivedGamesView()
+                    .navigationDestination(for: GameHistoryDestination.self) {
+                        destination in
+                        switch destination {
+                        case .gameDetail(let gameId):
+                            if hiddenGameIds.contains(gameId) {
+                                EmptyView()
+                            } else if let game = try? modelContext.fetch(
+                                FetchDescriptor<Game>(
+                                    predicate: #Predicate { $0.id == gameId }
+                                )
+                            ).first {
+                                CompletedGameDetailView(game: game)
+                            } else {
+                                EmptyView()
+                            }
+                        case .archiveList:
+                            EmptyView()
+                        }
+                    }
+            }
+            .navigationTransition(.zoom(sourceID: "archive", in: animation))
         }
     }
 
@@ -227,75 +295,73 @@ struct HistoryView: View {
     }
 }
 
-// MARK: - Local Components (History)
+// MARK: - Deletion Handling
 
-@MainActor
-private struct HistoryFilterMenu: View {
-    @Binding var selectedFilter: GameFilter
-
-    var body: some View {
-        Menu {
-            Section("General") {
-                filterButton(for: .all)
+extension HistoryView {
+    private func handleDeletion(_ id: UUID) async {
+        do {
+            if let game = try? modelContext.fetch(
+                FetchDescriptor<Game>(
+                    predicate: #Predicate { $0.id == id }
+                )
+            ).first {
+                try await gameManager.deleteGame(game)
             }
-
-            Section("Game Types") {
-                ForEach(GameCatalog.allGameTypes, id: \.self) { gameType in
-                    filterButton(for: .gameType(gameType))
-                }
-            }
-
-            Section("Results") {
-                filterButton(for: .wins)
-                filterButton(for: .losses)
-            }
-        } label: {
-            Image(
-                systemName: selectedFilter == .all
-                    ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill"
-            )
-        }
-    }
-
-    private func filterButton(for filter: GameFilter) -> some View {
-        Button {
-            selectedFilter = filter
-        } label: {
-            HStack {
-                if selectedFilter == filter {
-                    Image(systemName: "checkmark")
-                }
-                Text(filter.displayName)
-            }
+        } catch {
+            // If deletion fails, unhide so user can try again
+            hiddenGameIds.remove(id)
+            Log.error(error, event: .saveFailed, context: .current(gameId: id), metadata: ["phase": "history.delete"])        
         }
     }
 }
 
+// MARK: - Components
+
+private protocol PickerOption: Identifiable, Hashable {
+    var displayName: String { get }
+    var systemImage: String { get }
+}
+
+extension GameFilter: PickerOption {}
+extension GroupingOption: PickerOption {}
+
 @MainActor
-private struct HistoryGroupingMenu: View {
-    @Binding var selectedGrouping: GroupingOption
+private struct MenuPicker<Selection: PickerOption>: View {
+    @Binding var selection: Selection
+    let options: [Selection]
+    let menuTitle: String
+    let menuIcon: String
+
+    init(
+        selection: Binding<Selection>,
+        options: [Selection],
+        menuTitle: String,
+        menuIcon: String,
+    ) {
+        self._selection = selection
+        self.options = options
+        self.menuTitle = menuTitle
+        self.menuIcon = menuIcon
+    }
 
     var body: some View {
         Menu {
-            ForEach(GroupingOption.allCases) { option in
-                groupingButton(for: option)
+            Picker(selection: $selection, label: EmptyView()) {
+                ForEach(options) { option in
+                    Label(
+                        option.displayName,
+                        systemImage: option.systemImage
+                    )
+                    .labelReservedIconWidth(46)
+                    .tag(option)
+                }
             }
+            .tint(.primary)
         } label: {
-            Image(
-                systemName: selectedGrouping == .none ? "square.grid.2x2" : "square.grid.2x2.fill"
-            )
+            Label(menuTitle, systemImage: menuIcon)
+                .labelStyle(.iconOnly)
         }
-    }
 
-    private func groupingButton(for option: GroupingOption) -> some View {
-        Button {
-            selectedGrouping = option
-        } label: {
-            Label(
-                option.displayName,
-                systemImage: selectedGrouping == option ? "checkmark.circle.fill" : option.systemImage
-            )
-        }
     }
 }
 
@@ -311,16 +377,16 @@ private struct GameHistoryGroupedList: View {
                 let group = groupedGames[groupIndex]
 
                 Section {
-                    ForEach(group.games.indices, id: \.self) { gameIndex in
+                    ForEach(group.games, id: \.id) { game in
                         NavigationLink(
-                            value: GameHistoryDestination.gameDetail(group.games[gameIndex].id)
+                            value: GameHistoryDestination.gameDetail(game.id)
                         ) {
-                            CompletedGameCard(game: group.games[gameIndex])
+                            CompletedGameCard(game: game)
                         }
                         .buttonStyle(.plain)
                         .simultaneousGesture(
                             TapGesture().onEnded {
-                                navigationState.trackHistoryNavigation(group.games[gameIndex].id)
+                                navigationState.trackHistoryNavigation(game.id)
                             }
                         )
                     }
@@ -344,7 +410,6 @@ private struct GameHistoryGroupedList: View {
         selectedGrouping != .none && !group.title.isEmpty
     }
 }
-
 
 // MARK: - Previews
 

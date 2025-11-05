@@ -2,7 +2,7 @@ import GameTrackerCore
 import SwiftUI
 
 struct GameControlsView: View {
-  @Bindable var game: Game
+  let game: Game
   @Environment(LiveGameStateManager.self) private var liveGameStateManager
   let isGamePaused: Bool
   let isGameInitial: Bool
@@ -19,44 +19,50 @@ struct GameControlsView: View {
             onToggleGame()
           } label: {
             VStack(spacing: DesignSystem.Spacing.xs) {
-              Image(systemName: gameStatusButtonIcon)
-                .font(.title2)
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .glassEffect(.regular.tint(gameStatusButtonColor))
+              Group {
+                Image(systemName: gameStatusButtonIcon)
+                  .font(.title2)
+                  .foregroundStyle(.white)
+                  .frame(width: 28, height: 28)
+              }
+              .frame(maxWidth: .infinity)
+              .padding(.vertical, 12)
+              .glassEffect(.regular.tint(gameStatusButtonColor.opacity(0.45)))
               Text(gameStatusButtonShortText)
                 .font(.caption)
                 .fontWeight(.medium)
                 .foregroundStyle(.white)
             }
-            .frame(maxWidth: .infinity)
             .opacity(dimOpacity(forDisabled: isGameStatusButtonDisabled))
           }
+          .buttonSizing(.flexible)
           .buttonStyle(.plain)
           .disabled(isGameStatusButtonDisabled)
 
           if !hasWinner {
             Button {
-              if !game.isCompleted {
+              if !game.safeIsCompleted {
                 showingCompleteAlert = true
               }
             } label: {
               VStack(spacing: DesignSystem.Spacing.xs) {
-                Image(systemName: "flag.checkered")
-                  .font(.title2)
-                  .foregroundStyle(.white)
-                  .frame(maxWidth: .infinity)
-                  .padding(.vertical, 12)
-                  .glassEffect(.regular.tint(.red.opacity(0.8)))
+                Group {
+                  Image(systemName: "flag.checkered")
+                    .font(.title2)
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .glassEffect(.regular.tint(.red.opacity(0.8)))
                 Text("End")
                   .font(.caption)
                   .fontWeight(.medium)
                   .foregroundStyle(.white)
               }
-              .frame(maxWidth: .infinity)
               .opacity(dimOpacity(forDisabled: isEndGameButtonDisabled))
             }
+            .buttonSizing(.flexible)
             .buttonStyle(.plain)
             .disabled(isEndGameButtonDisabled)
           } else {
@@ -64,19 +70,22 @@ struct GameControlsView: View {
               showingSettings = true
             } label: {
               VStack(spacing: DesignSystem.Spacing.xs) {
-                Image(systemName: "gearshape.fill")
-                  .font(.title2)
-                  .foregroundStyle(.white)
-                  .frame(maxWidth: .infinity)
-                  .padding(.vertical, 12)
-                  .glassEffect(.regular.tint(.gray.opacity(0.6)))
+                Group {
+                  Image(systemName: "gearshape.fill")
+                    .font(.title2)
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .glassEffect(.regular.tint(.gray.opacity(0.6)))
                 Text("Settings")
                   .font(.caption)
                   .fontWeight(.medium)
                   .foregroundStyle(.white)
               }
-              .frame(maxWidth: .infinity)
             }
+            .buttonSizing(.flexible)
             .buttonStyle(.plain)
           }
         }
@@ -87,19 +96,22 @@ struct GameControlsView: View {
               showingSettings = true
             } label: {
               VStack(spacing: DesignSystem.Spacing.xs) {
-                Image(systemName: "gearshape.fill")
-                  .font(.title2)
-                  .foregroundStyle(.white)
-                  .frame(maxWidth: .infinity)
-                  .padding(.vertical, 12)
-                  .glassEffect(.regular.tint(.gray.opacity(0.6)))
+                Group {
+                  Image(systemName: "gearshape.fill")
+                    .font(.title2)
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .glassEffect(.regular.tint(.gray.opacity(0.6)))
                 Text("Settings")
                   .font(.caption)
                   .fontWeight(.medium)
                   .foregroundStyle(.white)
               }
-              .frame(maxWidth: .infinity)
             }
+            .buttonSizing(.flexible)
             .buttonStyle(.plain)
             
             Color.clear
@@ -122,37 +134,31 @@ struct GameControlsView: View {
   // MARK: - Computed Properties
 
   private var gameStatusButtonText: String {
-    if game.isCompleted { return "Finish Game" }
+    if game.safeIsCompleted { return "Finish Game" }
     if isInitialState { return "Start Game" }
     if isGamePaused { return "Resume Game" }
     return "Pause Game"
   }
 
   private var gameStatusButtonShortText: String {
-    if game.isCompleted { return "Finish" }
+    if game.safeIsCompleted { return "Finish" }
     if isInitialState { return "Start" }
     if isGamePaused { return "Resume" }
     return "Pause"
   }
 
   private var gameStatusButtonIcon: String {
-    if game.isCompleted { return "flag.pattern.checkered" }
+    if game.safeIsCompleted { return "flag.pattern.checkered" }
     if isGamePaused || isInitialState { return "play.fill" }
     return "pause.fill"
   }
 
   private var gameStateColor: GameStateColor {
-    game.gameState.stateColor
+    game.safeGameState.stateColor
   }
 
   private var gameStatusButtonColor: Color {
-    switch gameStateColor {
-    case .readyToStart: return .blue
-    case .attention: return .orange
-    case .active: return .green
-    case .success: return .green
-    case .inactive: return .gray
-    }
+    gameStateColor.color
   }
 
   private var isGameStatusButtonDisabled: Bool {
@@ -160,14 +166,14 @@ struct GameControlsView: View {
   }
 
   private var isEndGameButtonDisabled: Bool {
-    game.isCompleted
+    game.safeIsCompleted
   }
 
   private func dimOpacity(forDisabled isDisabled: Bool) -> Double {
     isDisabled ? 0.6 : 1.0
   }
 
-  private var isInitialState: Bool { game.gameState == .initial }
+  private var isInitialState: Bool { game.safeGameState == .initial }
   
   private var hasWinner: Bool {
     guard game.isCompleted else { return false }

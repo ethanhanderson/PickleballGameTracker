@@ -246,7 +246,6 @@ public enum PreviewDataSeeder {
   }
   
   public static func seedStatisticsData(into context: ModelContext, store: GameStore) {
-    // TODO: Add comprehensive seeding when compilation issues are resolved
   }
   
   // MARK: - Container Methods

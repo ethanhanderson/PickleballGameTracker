@@ -4,47 +4,60 @@ import SwiftUI
 
 @MainActor
 struct ArchivedGamesView: View {
-  @Query private var allGames: [Game]
-
-  private static let sortByCompletedDateDesc: [SortDescriptor<Game>] = [
-    SortDescriptor(\.completedDate, order: .reverse)
-  ]
-
-  private var archivedGames: [Game] {
-    let filtered = allGames.filter { game in
-      game.isArchived && game.isCompleted
-    }
-    return filtered.sorted(using: Self.sortByCompletedDateDesc)
-  }
-
-  private var gamesList: [Game] {
-    archivedGames
-  }
+  @Query(
+    filter: #Predicate<Game> { $0.isArchived && $0.isCompleted },
+    sort: [SortDescriptor(\.completedDate, order: .reverse)]
+  ) private var archivedGames: [Game]
 
   private var isEmpty: Bool {
-    gamesList.isEmpty
+    archivedGames.isEmpty
   }
 
-  private var gameCards: some View {
-    ForEach(gamesList.indices, id: \.self) { index in
-      gameCard(for: index)
+  var body: some View {
+    Group {
+      if isEmpty {
+        ScrollView {
+          VStack {
+            EmptyStateView(
+              icon: "archivebox",
+              title: "No Archived Games",
+              description: "Archive completed games to hide them from History."
+            )
+          }
+        }
+        .contentMargins(.horizontal, DesignSystem.Spacing.md, for: .scrollContent)
+        .contentMargins(.top, DesignSystem.Spacing.sm, for: .scrollContent)
+        .scrollClipDisabled()
+      } else {
+        ScrollView {
+          VStack(spacing: DesignSystem.Spacing.md) {
+            ForEach(archivedGames) { game in
+              gameCard(for: game)
+            }
+          }
+        }
+        .contentMargins(.horizontal, DesignSystem.Spacing.md, for: .scrollContent)
+        .contentMargins(.vertical, DesignSystem.Spacing.md, for: .scrollContent)
+      }
     }
+    .navigationTitle("Archive")
+    .viewContainerBackground()
   }
 
-  private func gameCard(for index: Int) -> some View {
-    NavigationLink(value: GameHistoryDestination.gameDetail(gamesList[index].id)) {
+  private func gameCard(for game: Game) -> some View {
+    NavigationLink(value: GameHistoryDestination.gameDetail(game.id)) {
       HStack {
         VStack(alignment: .leading) {
-          Text(gamesList[index].gameType.displayName)
+          Text(game.gameType.displayName)
             .font(.body)
-          if let d = gamesList[index].completedDate {
+          if let d = game.completedDate {
             Text(d.formatted(date: .abbreviated, time: .shortened))
               .font(.caption)
               .foregroundStyle(.secondary)
           }
         }
         Spacer()
-        Text(gamesList[index].formattedScore)
+        Text(game.formattedScore)
           .font(.body)
           .fontWeight(.semibold)
       }
@@ -55,37 +68,5 @@ struct ArchivedGamesView: View {
       .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.md))
     }
     .buttonStyle(.plain)
-  }
-
-  private var emptyState: some View {
-    EmptyStateView(
-      icon: "archivebox",
-      title: "No Archived Games",
-      description: "Archive completed games to hide them from History."
-    )
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .padding(.top, 100)
-  }
-
-  private var content: some View {
-    if isEmpty {
-      return AnyView(emptyState)
-    } else {
-      return AnyView(
-        VStack(spacing: DesignSystem.Spacing.md) {
-          gameCards
-        }
-      )
-    }
-  }
-
-  var body: some View {
-    ScrollView {
-      content
-    }
-    .contentMargins(.horizontal, DesignSystem.Spacing.md, for: .scrollContent)
-    .contentMargins(.vertical, DesignSystem.Spacing.md, for: .scrollContent)
-    .navigationTitle("Archive")
-    .background(Color(UIColor.systemGroupedBackground))
   }
 }

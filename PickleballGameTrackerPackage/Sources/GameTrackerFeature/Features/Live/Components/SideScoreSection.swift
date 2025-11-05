@@ -40,7 +40,7 @@ struct SideScoreSection: View {
                 teamNumber: teamNumber,
                 teamName: teamName,
                 isGameLive: isGameLive,
-                showTapIndicator: game.gameState == .playing || game.gameState == .paused,
+                showTapIndicator: game.safeGameState == .playing || game.safeGameState == .paused,
                 tintOverride: teamTintColor
             )
             .animation(
@@ -48,7 +48,7 @@ struct SideScoreSection: View {
                 value: teamNumber == 1 ? game.score1 : game.score2
             )
 
-            if isGameLive && game.currentServer == teamNumber && game.gameState == .playing {
+            if isGameLive && game.currentServer == teamNumber && game.safeGameState == .playing {
                 EventButtonsCard(
                     game: game,
                     currentTimestamp: currentTimestamp,

@@ -61,6 +61,15 @@ enum GameFilter: Identifiable, Hashable {
     }
   }
 
+  var systemImage: String {
+    switch self {
+    case .all: return "line.3.horizontal.decrease"
+    case .gameType(let type): return type.iconName
+    case .wins: return "checkmark.circle.fill"
+    case .losses: return "xmark.circle.fill"
+    }
+  }
+
   static var allFilters: [GameFilter] {
     var filters: [GameFilter] = [.all]
     filters.append(contentsOf: GameCatalog.allGameTypes.map { .gameType($0) })

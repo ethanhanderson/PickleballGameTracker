@@ -126,8 +126,7 @@ struct DeepLinkDestinationView: View {
                       return Participants(side1: .players(game.side1PlayerIds), side2: .players(game.side2PlayerIds))
                     case .teams:
                       return Participants(side1: .team(game.side1TeamId!), side2: .team(game.side2TeamId!))
-                    case .anonymous:
-                      return Participants(side1: .players([]), side2: .players([]))
+                    
                     }
                   }(),
                   rules: try? GameRules.createValidated(

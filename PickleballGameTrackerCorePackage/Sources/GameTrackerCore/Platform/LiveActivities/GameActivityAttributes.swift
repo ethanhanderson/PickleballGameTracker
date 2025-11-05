@@ -41,6 +41,7 @@ public struct GameActivityAttributes: ActivityAttributes {
   public let gameId: UUID
   public let gameTypeIconName: String
   public let gameTypeDisplayName: String
+  public let gameTypeTintColor: StoredRGBAColor
   public let side1Name: String
   public let side2Name: String
   public let side1AvatarImageData: Data?
@@ -54,6 +55,7 @@ public struct GameActivityAttributes: ActivityAttributes {
     gameId: UUID,
     gameTypeIconName: String,
     gameTypeDisplayName: String,
+    gameTypeTintColor: StoredRGBAColor,
     side1Name: String,
     side2Name: String,
     side1AvatarImageData: Data?,
@@ -66,6 +68,7 @@ public struct GameActivityAttributes: ActivityAttributes {
     self.gameId = gameId
     self.gameTypeIconName = gameTypeIconName
     self.gameTypeDisplayName = gameTypeDisplayName
+    self.gameTypeTintColor = gameTypeTintColor
     self.side1Name = side1Name
     self.side2Name = side2Name
     self.side1AvatarImageData = side1AvatarImageData

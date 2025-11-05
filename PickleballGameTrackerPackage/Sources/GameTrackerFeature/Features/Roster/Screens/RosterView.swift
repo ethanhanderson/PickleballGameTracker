@@ -10,6 +10,7 @@ struct RosterView: View {
     @State private var showPlayerSheet = false
     @State private var showTeamSheet = false
     @State private var showArchiveSheet = false
+    @State private var globalNav = GlobalNavigationState.shared
     
     @Query(filter: #Predicate<PlayerProfile> { !$0.isArchived && !$0.isGuest })
     private var players: [PlayerProfile]
@@ -137,15 +138,35 @@ struct RosterView: View {
             IdentityEditorView(identity: .player(nil))
             .navigationTransition(.zoom(sourceID: "sheet", in: animation))
         }
+        .onChange(of: showPlayerSheet) { _, isPresented in
+            if isPresented {
+                globalNav.registerSheet("rosterPlayer")
+            } else {
+                globalNav.unregisterSheet("rosterPlayer")
+            }
+        }
         .sheet(isPresented: $showTeamSheet) {
             IdentityEditorView(identity: .team(nil))
             .navigationTransition(.zoom(sourceID: "sheet", in: animation))
+        }
+        .onChange(of: showTeamSheet) { _, isPresented in
+            if isPresented {
+                globalNav.registerSheet("rosterTeam")
+            } else {
+                globalNav.unregisterSheet("rosterTeam")
+            }
         }
         .sheet(isPresented: $showArchiveSheet) {
             ArchiveView()
                 .navigationTransition(.zoom(sourceID: "archive", in: animation))
         }
-        .tint(.accentColor)
+        .onChange(of: showArchiveSheet) { _, isPresented in
+            if isPresented {
+                globalNav.registerSheet("rosterArchive")
+            } else {
+                globalNav.unregisterSheet("rosterArchive")
+            }
+        }
     }
 
     private func teamCount(for player: PlayerProfile) -> Int? {
@@ -208,6 +229,7 @@ private struct IdentityNavigationRow: View {
     RosterView()
         .modelContainer(container)
         .environment(rosterManager)
+        .tint(.green)
 }
 
 #Preview("Empty") {
@@ -217,4 +239,5 @@ private struct IdentityNavigationRow: View {
     RosterView()
         .modelContainer(container)
         .environment(rosterManager)
+        .tint(.green)
 }

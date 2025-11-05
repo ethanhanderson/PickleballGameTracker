@@ -10,6 +10,7 @@ import Foundation
 @preconcurrency import ActivityKit
 #endif
 import SwiftData
+import SwiftUI
 
 #if canImport(ActivityKit)
 @available(iOS 16.1, watchOS 9.1, *)
@@ -124,6 +125,7 @@ public final class LiveActivityManager {
       gameId: game.id,
       gameTypeIconName: game.gameType.iconName,
       gameTypeDisplayName: game.gameType.displayName,
+      gameTypeTintColor: StoredRGBAColor(game.gameType.color),
       side1Name: side1Name,
       side2Name: side2Name,
       side1AvatarImageData: side1AvatarData,
@@ -147,8 +149,11 @@ public final class LiveActivityManager {
         : game.resolveSide2Players(context: context)
       
       guard let players, let firstPlayer = players.first else {
-        let fallbackName = teamNumber == 1 ? "Team 1" : "Team 2"
-        return (fallbackName, nil, "person.fill", StoredRGBAColor.fromSeed(UUID()))
+        throw LiveActivityError.failedToStart(NSError(
+          domain: "LiveActivity",
+          code: 1001,
+          userInfo: [NSLocalizedDescriptionKey: "Participants not resolvable for team \(teamNumber)"]
+        ))
       }
       
       let name = players.map { $0.name }.joined(separator: " & ")
@@ -165,8 +170,11 @@ public final class LiveActivityManager {
         : game.resolveSide2Team(context: context)
       
       guard let team else {
-        let fallbackName = teamNumber == 1 ? "Team 1" : "Team 2"
-        return (fallbackName, nil, "person.2.fill", StoredRGBAColor.fromSeed(UUID()))
+        throw LiveActivityError.failedToStart(NSError(
+          domain: "LiveActivity",
+          code: 1002,
+          userInfo: [NSLocalizedDescriptionKey: "Team not resolvable for team \(teamNumber)"]
+        ))
       }
       
       return (
@@ -176,9 +184,7 @@ public final class LiveActivityManager {
         team.accentColorStored
       )
       
-    case .anonymous:
-      let fallbackName = teamNumber == 1 ? "Team 1" : "Team 2"
-      return (fallbackName, nil, "person.fill", StoredRGBAColor.fromSeed(UUID()))
+    
     }
   }
 }

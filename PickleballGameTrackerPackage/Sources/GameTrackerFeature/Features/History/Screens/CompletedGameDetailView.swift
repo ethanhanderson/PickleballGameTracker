@@ -1,10 +1,3 @@
-//
-//  CompletedGameDetailView.swift
-//  Pickleball Score Tracking
-//
-//  Created by Ethan Anderson on 8/10/25.
-//
-
 import GameTrackerCore
 import SwiftData
 import SwiftUI
@@ -13,17 +6,24 @@ import SwiftUI
 struct CompletedGameDetailView: View {
   @Bindable var game: Game
   @Environment(SwiftDataGameManager.self) private var gameManager
+  @Environment(PlayerTeamManager.self) private var rosterManager
   @Environment(\.modelContext) private var modelContext
+  @Environment(\.dismiss) private var dismiss
   @State private var showNavigationTitle = false
   @State private var showDeleteConfirm = false
-  @State private var showConversionSheet = false
   @State private var selectedGuestPlayer: PlayerProfile?
+  @State private var isDeleted = false
 
   private var themeColor: Color { 
     game.isArchived ? Color(UIColor.systemGray) : game.gameType.color 
   }
 
   var body: some View {
+    if isDeleted {
+      // Avoid referencing deleted SwiftData objects; immediately dismiss
+      Color.clear
+        .task { dismiss() }
+    } else {
     ScrollView {
       VStack(alignment: .leading, spacing: DesignSystem.Spacing.lg) {
         GeometryReader { geometry in
@@ -101,7 +101,7 @@ struct CompletedGameDetailView: View {
           Button(role: .destructive) {
             Log.event(
               .actionTapped, level: .warn, message: "delete", context: .current(gameId: game.id))
-            Task { await confirmDelete() }
+            showDeleteConfirm = true
           } label: {
             Label("Delete Game", systemImage: "trash")
           }
@@ -124,6 +124,7 @@ struct CompletedGameDetailView: View {
     .sheet(item: $selectedGuestPlayer) { guestPlayer in
       IdentityEditorView(identity: .player(guestPlayer))
     }
+    }
   }
 
   private func toggleArchive() async {
@@ -142,12 +143,10 @@ struct CompletedGameDetailView: View {
   }
 
   private func confirmDelete() async {
-    do {
-      try await gameManager.deleteGame(game)
-    } catch {
-      Log.error(
-        error, event: .saveFailed, context: .current(gameId: game.id), metadata: ["phase": "delete"]
-      )
+    // Defer actual deletion to HistoryView to avoid fallback flashes during navigation pop.
+    await MainActor.run {
+      HistoryDeletionRequestBus.requestDelete(gameId: game.id)
+      isDeleted = true
     }
   }
 
@@ -207,8 +206,11 @@ struct CompletedGameDetailView: View {
             ForEach(side1Players) { player in
               if player.isGuest {
                 Button {
-                  selectedGuestPlayer = player
-                  showConversionSheet = true
+                  do {
+                    try rosterManager.convertGuestToPlayer(player)
+                    selectedGuestPlayer = player
+                  } catch {
+                    Log.error(error, event: .saveFailed, context: .current(gameId: game.id), metadata: ["phase": "convertGuest.side1"]) }
                 } label: {
                   HStack(spacing: DesignSystem.Spacing.sm) {
                     IdentityCard(identity: .player(player, teamCount: nil))
@@ -250,8 +252,11 @@ struct CompletedGameDetailView: View {
             ForEach(side2Players) { player in
               if player.isGuest {
                 Button {
-                  selectedGuestPlayer = player
-                  showConversionSheet = true
+                  do {
+                    try rosterManager.convertGuestToPlayer(player)
+                    selectedGuestPlayer = player
+                  } catch {
+                    Log.error(error, event: .saveFailed, context: .current(gameId: game.id), metadata: ["phase": "convertGuest.side2"]) }
                 } label: {
                   HStack(spacing: DesignSystem.Spacing.sm) {
                     IdentityCard(identity: .player(player, teamCount: nil))
@@ -325,24 +330,6 @@ struct CompletedGameDetailView: View {
                 )
             }
             .buttonStyle(.plain)
-          }
-        case .anonymous:
-          // Fallback to simple display for anonymous games
-          ForEach(game.teamsWithLabels(context: modelContext)) { teamConfig in
-            GameParticipantCard(
-              displayName: teamConfig.teamName,
-              teamNumber: teamConfig.teamNumber,
-              color: teamConfig.teamNumber == 1 ? .blue : .green
-            )
-            .padding(DesignSystem.Spacing.md)
-            .glassEffect(
-              .regular.tint(
-                Color(UIColor.secondarySystemFill).opacity(0.5)
-              ),
-              in: RoundedRectangle(
-                cornerRadius: DesignSystem.CornerRadius.xl
-              )
-            )
           }
         }
       }
