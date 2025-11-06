@@ -7,7 +7,6 @@ struct InlineMiniPreview: View {
     @Environment(LiveGameStateManager.self) private var activeGameStateManager
     @Environment(\.modelContext) private var modelContext
     let onTap: () -> Void
-    let animation: Namespace.ID
 
     var body: some View {
         if let gameTypeName = activeGameStateManager.currentGameTypeDisplayName,
@@ -20,7 +19,9 @@ struct InlineMiniPreview: View {
                             .fontWeight(.semibold)
 
                         if let game = activeGameStateManager.currentGame {
-                            let names = game.teamsWithLabels(context: modelContext).map { $0.teamName }.joined(separator: " vs ")
+                            let names = game.teamsWithLabels(
+                                context: modelContext
+                            ).map { $0.teamName }.joined(separator: " vs ")
                             if names.isEmpty == false {
                                 Text(names)
                                     .font(.caption)
@@ -70,15 +71,16 @@ struct InlineMiniPreview: View {
                 .padding(.horizontal)
             }
             .buttonStyle(.plain)
-            .matchedTransitionSource(id: "sheet", in: animation)
             .accessibilityIdentifier("LiveGameMiniPreview.inline.button")
         }
     }
 }
 
-private extension InlineMiniPreview {
-    func teamTintColor(forTeamIndex index: Int) -> Color {
-        guard let game = activeGameStateManager.currentGame else { return Color.accentColor }
+extension InlineMiniPreview {
+    fileprivate func teamTintColor(forTeamIndex index: Int) -> Color {
+        guard let game = activeGameStateManager.currentGame else {
+            return Color.accentColor
+        }
         return game.teamTintColor(for: index, context: modelContext)
     }
 }
@@ -88,7 +90,6 @@ struct ExpandedMiniPreview: View {
     @Environment(LiveGameStateManager.self) private var activeGameStateManager
     @Environment(\.modelContext) private var modelContext
     let onTap: () -> Void
-    let animation: Namespace.ID
 
     var body: some View {
         if let gameTypeName = activeGameStateManager.currentGameTypeDisplayName,
@@ -111,7 +112,9 @@ struct ExpandedMiniPreview: View {
                             .font(.headline)
 
                         if let game = activeGameStateManager.currentGame {
-                            let names = game.teamsWithLabels(context: modelContext).map { $0.teamName }.joined(separator: " vs ")
+                            let names = game.teamsWithLabels(
+                                context: modelContext
+                            ).map { $0.teamName }.joined(separator: " vs ")
                             if names.isEmpty == false {
                                 Text(names)
                                     .font(.caption)
@@ -181,15 +184,16 @@ struct ExpandedMiniPreview: View {
             }
             .buttonStyle(.borderless)
             .foregroundStyle(.primary)
-            .matchedTransitionSource(id: "sheet", in: animation)
             .accessibilityIdentifier("LiveGameMiniPreview.expanded.button")
         }
     }
 }
 
-private extension ExpandedMiniPreview {
-    func teamTintColor(forTeamIndex index: Int) -> Color {
-        guard let game = activeGameStateManager.currentGame else { return Color.accentColor }
+extension ExpandedMiniPreview {
+    fileprivate func teamTintColor(forTeamIndex index: Int) -> Color {
+        guard let game = activeGameStateManager.currentGame else {
+            return Color.accentColor
+        }
         return game.teamTintColor(for: index, context: modelContext)
     }
 }
@@ -198,29 +202,28 @@ private extension ExpandedMiniPreview {
 struct LiveGameMiniPreview: View {
     @Environment(\.tabViewBottomAccessoryPlacement) var placement
     let onTap: () -> Void
-    let animation: Namespace.ID
 
     var body: some View {
-        switch placement {
-        case .expanded:
-            ExpandedMiniPreview(onTap: onTap, animation: animation)
-        default:
-            InlineMiniPreview(onTap: onTap, animation: animation)
+        Group {
+            switch placement {
+            case .expanded:
+                ExpandedMiniPreview(onTap: onTap)
+            default:
+                InlineMiniPreview(onTap: onTap)
+            }
         }
     }
 }
 
 #Preview {
-  @Previewable @State var showSheet = false
-  @Previewable @Namespace var animation
-  
-  let setup = PreviewContainers.liveGameSetup()
-  
-  LiveGameMiniPreview(
-    onTap: { showSheet = true },
-    animation: animation
-  )
-  .modelContainer(setup.container)
-  .environment(setup.liveGameManager)
-  .tint(.green)
+    @Previewable @State var showSheet = false
+
+    let setup = PreviewContainers.liveGameSetup()
+
+    LiveGameMiniPreview(
+        onTap: { showSheet = true }
+    )
+    .modelContainer(setup.container)
+    .environment(setup.liveGameManager)
+    .tint(.green)
 }

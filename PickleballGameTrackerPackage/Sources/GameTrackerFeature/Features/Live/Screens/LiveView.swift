@@ -10,16 +10,13 @@ struct LiveView: View {
     @Environment(SwiftDataGameManager.self) private var gameManager
     @Environment(LiveSyncCoordinator.self) private var syncCoordinator
     let onDismiss: (() -> Void)?
-    var animation: Namespace.ID?
 
     init(
         game: Game,
-        onDismiss: (() -> Void)? = nil,
-        animation: Namespace.ID? = nil
+        onDismiss: (() -> Void)? = nil
     ) {
         self.game = game
         self.onDismiss = onDismiss
-        self.animation = animation
     }
 
     @State private var isResetting: Bool = false

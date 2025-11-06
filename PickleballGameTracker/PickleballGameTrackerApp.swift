@@ -29,7 +29,7 @@ struct PickleballGameTrackerApp: App {
 
   var body: some Scene {
     WindowGroup {
-      AppNavigationView()
+      AppRootView()
         .tint(.accentColor)
         .modelContainer(SwiftDataContainer.shared.modelContainer)
         .environment(liveGameStateManager)
