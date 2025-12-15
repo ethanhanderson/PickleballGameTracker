@@ -94,6 +94,125 @@ public struct PreviewEnvironmentSetup {
     }
 }
 
+// MARK: - Personalization Preview Profiles
+
+enum PersonalizationProfile {
+    case coldStart
+    case singlesHeavy        // favors 1v1
+    case doublesHeavy        // favors 2v2
+    case beginnerFriendly    // favors easier rules
+    case competitive         // favors win-by-two, higher winning scores
+    case mixedRecent         // mix of recent and older plays
+}
+
+struct PersonalizationPreview {
+    let container: ModelContainer
+    let engine: PersonalizationEngine
+}
+
+extension GameType {
+    fileprivate var isSinglesDefault: Bool {
+        (TeamSize(playersPerSide: self.defaultTeamSize) == .singles)
+    }
+    
+    fileprivate var isDoublesDefault: Bool {
+        (TeamSize(playersPerSide: self.defaultTeamSize) == .doubles)
+    }
+}
+
+@MainActor
+enum PersonalizationPreviewFactory {
+    /// Build a preview profile by seeding GameUsage and recalculating scores.
+    public static func build(
+        profile: PersonalizationProfile,
+        baseContainer: ModelContainer = PreviewContainers.standard()
+    ) -> PersonalizationPreview {
+        let ctx = baseContainer.mainContext
+        let engine = PersonalizationEngine()
+        
+        func seedUsage(
+            for type: GameType,
+            lastPlayedDaysAgo: Int?,
+            c7: Int,
+            c21: Int,
+            total: Int
+        ) {
+            let identity = GameIdentityCatalog.identity(for: type)
+            let usage = GameUsage(gameTypeId: type.rawValue, identity: identity)
+            usage.playCount7d = max(0, c7)
+            usage.playCount21d = max(0, c21)
+            usage.playCountTotal = max(total, max(c21, c7))
+            if let days = lastPlayedDaysAgo {
+                usage.lastPlayedAt = Calendar.current.date(byAdding: .day, value: -days, to: Date())
+            } else {
+                usage.lastPlayedAt = nil
+            }
+            ctx.insert(usage)
+        }
+        
+        // Seed according to the chosen profile
+        switch profile {
+        case .coldStart:
+            // No usage data at all; rely on default catalog ordering fallback
+            break
+            
+        case .singlesHeavy:
+            for t in GameType.allCases {
+                if t.isSinglesDefault {
+                    seedUsage(for: t, lastPlayedDaysAgo: Int.random(in: 0...2), c7: 4, c21: 8, total: 16)
+                } else {
+                    seedUsage(for: t, lastPlayedDaysAgo: Int.random(in: 10...20), c7: 0, c21: 1, total: 2)
+                }
+            }
+            
+        case .doublesHeavy:
+            for t in GameType.allCases {
+                if t.isDoublesDefault {
+                    seedUsage(for: t, lastPlayedDaysAgo: Int.random(in: 0...2), c7: 5, c21: 10, total: 20)
+                } else {
+                    seedUsage(for: t, lastPlayedDaysAgo: Int.random(in: 10...20), c7: 0, c21: 1, total: 2)
+                }
+            }
+            
+        case .beginnerFriendly:
+            for t in GameType.allCases {
+                let id = GameIdentityCatalog.identity(for: t)
+                if id.tags.contains(.beginnerFriendly) {
+                    seedUsage(for: t, lastPlayedDaysAgo: Int.random(in: 0...3), c7: 4, c21: 7, total: 14)
+                } else {
+                    seedUsage(for: t, lastPlayedDaysAgo: Int.random(in: 10...21), c7: 0, c21: 1, total: 2)
+                }
+            }
+            
+        case .competitive:
+            for t in GameType.allCases {
+                let id = GameIdentityCatalog.identity(for: t)
+                if id.tags.contains(.competitive) {
+                    seedUsage(for: t, lastPlayedDaysAgo: Int.random(in: 0...2), c7: 6, c21: 9, total: 18)
+                } else {
+                    seedUsage(for: t, lastPlayedDaysAgo: Int.random(in: 12...21), c7: 0, c21: 1, total: 2)
+                }
+            }
+            
+        case .mixedRecent:
+            // Pick 3 recent favorites, spread the rest older
+            let all = GameType.allCases.shuffled()
+            let recent = Set(all.prefix(3))
+            for t in all {
+                if recent.contains(t) {
+                    seedUsage(for: t, lastPlayedDaysAgo: Int.random(in: 0...1), c7: 5, c21: 7, total: 14)
+                } else {
+                    seedUsage(for: t, lastPlayedDaysAgo: Int.random(in: 7...21), c7: 1, c21: 3, total: 6)
+                }
+            }
+        }
+        
+        // Recompute scores once after seeding
+        engine.recalculate(context: ctx)
+        return PersonalizationPreview(container: baseContainer, engine: engine)
+    }
+}
+
 // MARK: - Standard Preview View Modifiers
 
 /// Standard modifiers for preview views

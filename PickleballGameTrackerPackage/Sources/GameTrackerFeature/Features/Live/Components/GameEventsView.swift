@@ -11,18 +11,29 @@ import SwiftUI
 @MainActor
 struct GameEventsView: View {
     @Bindable var game: Game
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                if game.events.isEmpty {
-                    emptyStateView
-                } else {
-                    eventsListView
+        Group {
+            if game.isDetachedFromContext {
+                Color.clear
+                    .task { dismiss() }
+            } else {
+                NavigationStack {
+                    ZStack {
+                        if game.events.isEmpty {
+                            emptyStateView
+                        } else {
+                            eventsListView
+                        }
+                    }
+                    .navigationTitle("Game Events")
+                    .navigationBarTitleDisplayMode(.inline)
                 }
             }
-            .navigationTitle("Game Events")
-            .navigationBarTitleDisplayMode(.inline)
+        }
+        .onChange(of: game.isDetachedFromContext) { _, detached in
+            if detached { dismiss() }
         }
     }
 

@@ -7,6 +7,7 @@ import SwiftUI
 
 struct LiveToolbar: ToolbarContent {
     let game: Game
+    let gameType: GameType
     let gameManager: SwiftDataGameManager
     let activeGameStateManager: LiveGameStateManager
     let onEndGame: () async -> Void
@@ -21,6 +22,7 @@ struct LiveToolbar: ToolbarContent {
             Button("Events", systemImage: "list.bullet.rectangle.portrait") {
                 showEventsHistory = true
             }
+            .tint(gameType.color)
             .sheet(isPresented: $showEventsHistory) {
                 GameEventsView(game: game)
                     .presentationDetents([.medium, .large])
@@ -44,8 +46,9 @@ struct LiveToolbar: ToolbarContent {
                 }
             } label: {
                 Image(systemName: "ellipsis")
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(gameType.color)
             }
+            .tint(gameType.color)
             .confirmationDialog(
                 "End Game",
                 isPresented: $showEndGameConfirmation,

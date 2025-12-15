@@ -80,7 +80,7 @@ private struct GameDetailDestinationView: View {
               matchup: matchup,
               rules: rules
             )
-            _ = try await activeGameStateManager.startNewGame(with: config)
+            let game = try await activeGameStateManager.startNewGame(with: config)
             Log.event(
               .viewAppear,
               level: .info,
@@ -98,8 +98,16 @@ private struct GameDetailDestinationView: View {
             if let roster = try? rosterBuilder.build(includeArchived: false) {
               try? await syncCoordinator.publishRoster(roster)
             }
-            // 2) Publish start configuration so watch can start locally with same setup
-            try? await syncCoordinator.publishStart(config)
+            // 2) Publish start configuration WITH gameId so watch tracks the same game instance
+            let mirrored = GameStartConfiguration(
+              gameId: game.id,
+              gameType: config.gameType,
+              teamSize: config.teamSize,
+              participants: config.participants,
+              notes: config.notes,
+              rules: config.rules
+            )
+            try? await syncCoordinator.publishStart(mirrored)
           } catch {
             Log.error(error, event: .saveFailed, metadata: ["action": "startNewGame"])
           }

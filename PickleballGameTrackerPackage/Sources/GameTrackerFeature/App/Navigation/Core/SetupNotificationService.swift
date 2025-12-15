@@ -65,4 +65,3 @@ public final class SetupNotificationService {
 extension Notification.Name {
     public static let setupNotificationTapped = Notification.Name("SetupNotificationTapped")
 }
-

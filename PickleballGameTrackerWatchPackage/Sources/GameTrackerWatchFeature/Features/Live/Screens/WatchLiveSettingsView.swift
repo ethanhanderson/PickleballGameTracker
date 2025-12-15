@@ -9,6 +9,7 @@ import GameTrackerCore
 import SwiftData
 import SwiftUI
 
+@MainActor
 struct WatchLiveSettingsView: View {
   @Bindable var game: Game
   let gameManager: SwiftDataGameManager
@@ -19,19 +20,29 @@ struct WatchLiveSettingsView: View {
   @AppStorage("watchHapticEnabled") private var hapticEnabled = true
 
   var body: some View {
-    NavigationStack {
-      List {
-        Section {
-          Toggle("Haptic Feedback", isOn: $hapticEnabled)
-            .font(.system(size: 14, weight: .medium))
-        } header: {
-          Text("Haptics")
-            .font(.caption)
-            .foregroundStyle(.white)
+    Group {
+      if game.modelContext == nil {
+        Color.clear
+          .task { dismiss() }
+      } else {
+        NavigationStack {
+          List {
+            Section {
+              Toggle("Haptic Feedback", isOn: $hapticEnabled)
+                .font(.system(size: 14, weight: .medium))
+            } header: {
+              Text("Haptics")
+                .font(.caption)
+                .foregroundStyle(.white)
+            }
+          }
+          .navigationTitle("Settings")
+          .navigationBarTitleDisplayMode(.inline)
         }
       }
-      .navigationTitle("Settings")
-      .navigationBarTitleDisplayMode(.inline)
+    }
+    .onChange(of: game.modelContext == nil) { _, detached in
+      if detached { dismiss() }
     }
   }
 }

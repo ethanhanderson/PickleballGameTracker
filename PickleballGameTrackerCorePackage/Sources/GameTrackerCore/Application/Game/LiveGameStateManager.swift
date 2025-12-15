@@ -52,7 +52,9 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
   private var isCompletingGame: Bool = false
 
   public var hasLiveGame: Bool {
-    currentGame != nil && currentGame?.isCompleted == false
+    guard let game = currentGame else { return false }
+    if game.isDetachedFromContext { return false }
+    return game.safeIsCompleted == false
   }
 
   /// Check if the current game will be deleted (not saved) when ended
@@ -361,6 +363,23 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
       throw GameRulesError.invalidTeamSize(size)
     }
 
+    // Cutthroat uses a per-player layout and can have uneven player counts per side.
+    // Only require that both sides are players-based and the total player count is valid.
+    if config.gameType == .cutthroat {
+      guard case .players(let side1) = config.participants.side1,
+            case .players(let side2) = config.participants.side2 else {
+        throw GameRulesError.invalidConfiguration("Cutthroat requires players on both sides")
+      }
+      let totalPlayers = side1.count + side2.count
+      guard totalPlayers >= config.gameType.minPlayersTotal else {
+        throw GameRulesError.invalidConfiguration("Cutthroat requires at least \(config.gameType.minPlayersTotal) players")
+      }
+      guard totalPlayers <= config.gameType.maxPlayersTotal else {
+        throw GameRulesError.invalidConfiguration("Cutthroat supports at most \(config.gameType.maxPlayersTotal) players")
+      }
+      return
+    }
+
     switch (config.participants.side1, config.participants.side2, config.teamSize) {
     case (.players(let a), .players(let b), .singles):
       guard a.count == 1 && b.count == 1 else {
@@ -400,6 +419,7 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
     timer.start()
     updateTimerProperties()
     persistSession()
+    syncCoordinator?.noteLocalLifecycleMutation()
     
     #if canImport(ActivityKit)
     if #available(iOS 16.1, watchOS 9.1, *) {
@@ -416,6 +436,7 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
     try await gm.updateGame(game)
     updateTimerProperties()
     persistSession()
+    syncCoordinator?.noteLocalLifecycleMutation()
   }
 
   public func resumeGame() async throws {
@@ -426,6 +447,7 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
     try await gm.updateGame(game)
     updateTimerProperties()
     persistSession()
+    syncCoordinator?.noteLocalLifecycleMutation()
   }
 
   public func completeCurrentGame() async throws {
@@ -444,17 +466,23 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
       return
     }
     
-    let willBeDeleted = game.isUnused(elapsedTime: elapsedTime)
+    let completionElapsedTime = elapsedTime
+    let willBeDeleted = game.isUnused(elapsedTime: completionElapsedTime)
+    let gameId = game.id
     
     if !willBeDeleted {
-      game.logEvent(.gameCompleted, at: elapsedTime)
+      game.logEvent(.gameCompleted, at: completionElapsedTime)
     }
     
     let wasRunning = timer.isRunning
     timer.stop()
     
     do {
-      try await gm.completeGame(game, elapsedTime: elapsedTime)
+      try await gm.completeGame(game, elapsedTime: completionElapsedTime)
+      if willBeDeleted {
+        await publishCompletionDelta(gameId: gameId, elapsedTime: completionElapsedTime)
+      }
+      syncCoordinator?.noteLocalLifecycleMutation()
     } catch {
       if wasRunning { timer.resume() }
       updateTimerProperties()
@@ -475,6 +503,7 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
   public func scorePoint(for team: Int) async throws {
     guard let game = currentGame, let gm = _gameManager else { throw GameError.noActiveGame }
     try await gm.scorePointAndLogEvent(for: team, in: game, at: elapsedTime)
+    syncCoordinator?.noteLocalScoreMutation()
     
     #if canImport(ActivityKit)
     if #available(iOS 16.1, watchOS 9.1, *) {
@@ -488,6 +517,7 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
   public func scorePoint(for team: Int, at timestamp: TimeInterval) async throws {
     guard let game = currentGame, let gm = _gameManager else { throw GameError.noActiveGame }
     try await gm.scorePointAndLogEvent(for: team, in: game, at: timestamp)
+    syncCoordinator?.noteLocalScoreMutation()
     
 #if canImport(ActivityKit)
     if #available(iOS 16.1, watchOS 9.1, *) {
@@ -500,6 +530,7 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
     guard let game = currentGame, let gm = _gameManager else { throw GameError.noActiveGame }
     try await gm.undoLastPoint(in: game)
     game.logEvent(.scoreUndone, at: elapsedTime)
+    syncCoordinator?.noteLocalScoreMutation()
     
     #if canImport(ActivityKit)
     if #available(iOS 16.1, watchOS 9.1, *) {
@@ -511,6 +542,7 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
   public func decrementScore(for team: Int) async throws {
     guard let game = currentGame, let gm = _gameManager else { throw GameError.noActiveGame }
     try await gm.decrementScore(for: team, in: game)
+    syncCoordinator?.noteLocalScoreMutation()
   }
 
   public func resetCurrentGame() async throws {
@@ -518,6 +550,7 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
     try await gm.resetGame(game)
     currentServeNumber = 1
     timer.reset()
+    syncCoordinator?.noteLocalLifecycleMutation()
   }
 
   // MARK: - Serving
@@ -526,21 +559,25 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
     guard let game = currentGame, let gm = _gameManager else { throw GameError.noActiveGame }
     try await gm.switchServer(in: game)
     currentServeNumber += 1
+    syncCoordinator?.noteLocalServeMutation()
   }
 
   public func setServer(to team: Int) async throws {
     guard let game = currentGame, let gm = _gameManager else { throw GameError.noActiveGame }
     try await gm.setServer(to: team, in: game)
+    syncCoordinator?.noteLocalServeMutation()
   }
 
   public func switchServingPlayer() async throws {
     guard let game = currentGame, let gm = _gameManager else { throw GameError.noActiveGame }
     try await gm.switchServingPlayer(in: game)
+    syncCoordinator?.noteLocalServeMutation()
   }
 
   public func startSecondServeForCurrentTeam() async throws {
     guard let game = currentGame, let gm = _gameManager else { throw GameError.noActiveGame }
     try await gm.startSecondServeForCurrentTeam(in: game)
+    syncCoordinator?.noteLocalServeMutation()
   }
 
   public func handleServiceFault() async throws {
@@ -548,11 +585,13 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
     let faultTeam = game.currentServer
     try await gm.handleServiceFault(in: game)
     game.logEvent(.serviceFault, at: elapsedTime, teamAffected: faultTeam)
+    syncCoordinator?.noteLocalServeMutation()
   }
 
   public func handleNonServingTeamTap(on tappedTeam: Int) async throws {
     guard let game = currentGame, let gm = _gameManager else { throw GameError.noActiveGame }
     try await gm.handleNonServingTeamTap(on: tappedTeam, in: game)
+    syncCoordinator?.noteLocalServeMutation()
   }
 
   // MARK: - Timer Controls
@@ -636,13 +675,91 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
     guard let gm = _gameManager else { return }
     guard currentGame == nil else { return }
     
-    if let state = sessionStore.load() {
+    // Load any locally persisted session
+    let persistedState = sessionStore.load()
+    var sessionCandidate: (game: Game, state: LiveSessionState)?
+    if let state = persistedState {
       if let game = try? await gm.storage.loadGame(id: state.gameId), game.isCompleted == false {
-        await restoreGame(game, elapsedTime: state.elapsedTime, wasTimerRunning: state.isTimerRunning)
-        return
+        sessionCandidate = (game, state)
+      } else {
+        // Stale or completed session; clear persisted state to avoid re-adding
+        sessionStore.clear()
       }
     }
     
+    // Also query database for any active game(s)
+    let activeGames = (try? await gm.storage.loadActiveGames()) ?? []
+    let playingDbGame = activeGames
+      .filter { $0.isCompleted == false && $0.gameState == .playing }
+      .sorted { $0.lastModified > $1.lastModified }
+      .first
+    let dbFallback = activeGames
+      .filter { $0.isCompleted == false }
+      .sorted { $0.lastModified > $1.lastModified }
+      .first
+    let dbCandidate = playingDbGame ?? dbFallback
+    
+    // Resolve conflicts between a persisted session and any database active game
+    if let session = sessionCandidate, let db = dbCandidate {
+      if session.game.id == db.id {
+        // Same game: use the richer session state (elapsed + timer flag) and rely on restore logic
+        await restoreGame(session.game, elapsedTime: session.state.elapsedTime, wasTimerRunning: session.state.isTimerRunning)
+        await reconcileWithPeerIfReachable()
+        return
+      } else {
+        // Different games: prefer the most recently modified source with sensible defaults:
+        // - Prefer a playing DB game
+        // - Otherwise, use LWW with a small threshold to avoid flapping
+        let threshold: TimeInterval = 2.0
+        let dbIsPlaying = (db.gameState == .playing)
+        let dbNewer = db.lastModified.timeIntervalSince(session.state.lastModified) > threshold
+        let chooseDb = dbIsPlaying || dbNewer
+        
+        if chooseDb {
+          // Choose DB game; estimate elapsed from events/duration and do not resurrect old session
+          let estimatedElapsedTime: TimeInterval = {
+            if let lastEvent = db.eventsByTimestamp.first {
+              return lastEvent.timestamp
+            } else if let duration = db.duration {
+              return duration
+            } else {
+              return 0
+            }
+          }()
+          
+          let shouldStartTimer = db.gameState == .playing
+          let anotherDeviceTracking = syncCoordinator?.isAnotherDeviceActivelyTracking() ?? false
+          
+          await setCurrentGame(db)
+          setElapsedTime(estimatedElapsedTime)
+          
+          if shouldStartTimer && !anotherDeviceTracking {
+            timer.resume()
+          } else {
+            timer.pause()
+          }
+          
+          // Since DB was chosen, clear the stale session to prevent future contention
+          sessionStore.clear()
+          await reconcileWithPeerIfReachable()
+          return
+        } else {
+          // Choose session; clear any ambiguity by restoring from persisted state
+          await restoreGame(session.game, elapsedTime: session.state.elapsedTime, wasTimerRunning: session.state.isTimerRunning)
+          await reconcileWithPeerIfReachable()
+          return
+        }
+      }
+    }
+    
+    // If only a session candidate exists, restore from session
+    if let session = sessionCandidate {
+      await restoreGame(session.game, elapsedTime: session.state.elapsedTime, wasTimerRunning: session.state.isTimerRunning)
+      await reconcileWithPeerIfReachable()
+      return
+    }
+    
+    // Otherwise, fall back to discovering from database
     await attemptRestoreActiveGameFromDatabase()
   }
   
@@ -720,6 +837,8 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
           "source": "database"
         ]
       )
+
+      await reconcileWithPeerIfReachable()
     } catch {
       Log.error(
         error,
@@ -727,6 +846,21 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
         metadata: ["phase": "attemptRestoreActiveGameFromDatabase"]
       )
     }
+  }
+
+  private func reconcileWithPeerIfReachable() async {
+    guard let sync = syncCoordinator, sync.reachability == .reachable else { return }
+    try? await sync.requestLiveStatus()
+  }
+
+  private func publishCompletionDelta(gameId: UUID, elapsedTime: TimeInterval) async {
+    guard let coordinator = syncCoordinator else { return }
+    let delta = LiveGameDeltaDTO(
+      gameId: gameId,
+      timestamp: elapsedTime,
+      operation: .setGameState(.completed)
+    )
+    try? await coordinator.publish(delta: delta)
   }
 
   public func persistSessionOnly() async {
@@ -777,6 +911,8 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
       isGameLive = false
       timer.stop()
       updateTimerProperties()
+      // Ensure any persisted live session is removed once the game completes
+      sessionStore.clear()
     case .initial, .serving:
       updateTimerProperties()
       break
@@ -784,8 +920,25 @@ public final class LiveGameStateManager: LiveGameCoordinator, Sendable {
   }
   public func gameDidComplete(_ game: Game) { 
     Task { @MainActor in
+      // Refresh local model first so derived UI state reflects the completed game
       await setCurrentGame(game)
+      
+      // Whenever a game completes locally (via scoring auto-complete or explicit end),
+      // broadcast a completion delta so the companion device can end its live session.
+      if let coordinator = syncCoordinator {
+        let completionElapsed = elapsedTime
+        try? await coordinator.publish(
+          delta: LiveGameDeltaDTO(
+            gameId: game.id,
+            timestamp: completionElapsed,
+            operation: .setGameState(.completed)
+          )
+        )
+      }
     }
+    
+    // Remove any persisted live session when a completion event is received
+    sessionStore.clear()
     
     #if canImport(ActivityKit)
     if #available(iOS 16.1, watchOS 9.1, *) {

@@ -6,6 +6,8 @@
 import Testing
 @testable import GameTrackerCore
 
+import Foundation
+
 @Suite("SwiftDataGameManager Tests")
 struct SwiftDataGameManagerTests {
   
@@ -76,6 +78,41 @@ struct SwiftDataGameManagerTests {
     #expect(lastEvent?.customDescription == nil)
   }
 
+  @Test("All serve-changing events advance the serve through the manager")
+  @MainActor
+  func serveChangingEventsAdvanceServe() async throws {
+    let storage = MockSwiftDataStorage()
+    let manager = SwiftDataGameManager(storage: storage)
+
+    let game = Game(gameType: .recreational)
+    game.teamSize = 2
+    game.gameState = .playing
+    game.currentServer = 1
+    game.serverNumber = 1
+    game.isFirstServiceSequence = false
+
+    try await storage.saveGame(game)
+
+    let serveChangingEvents = GameEventType.allCases.filter { $0.typicallyChangesServe }
+
+    for (index, event) in serveChangingEvents.enumerated() {
+      let serverBefore = game.currentServer
+      let serverNumberBefore = game.serverNumber
+
+      game.logEvent(event, at: TimeInterval(index), teamAffected: serverBefore)
+
+      try await manager.handleServiceFault(in: game)
+
+      let serverAfter = game.currentServer
+      let serverNumberAfter = game.serverNumber
+
+      #expect(
+        serverAfter != serverBefore || serverNumberAfter != serverNumberBefore,
+        "Event \(event.rawValue) should alter serve order"
+      )
+    }
+  }
+
   @Test("completeCurrentGame deletes unused game and clears current reference")
   @MainActor
   func completeCurrentGameDeletesUnusedGame() async throws {
@@ -95,6 +132,63 @@ struct SwiftDataGameManagerTests {
     #expect(liveManager.currentGame == nil)
     #expect(storage.deletedGameIds.contains(game.id))
     #expect(try await storage.loadGame(id: game.id) == nil)
+  }
+
+  @Test("completeCurrentGame completes used game without deleting and clears current reference")
+  @MainActor
+  func completeCurrentGameCompletesUsedGameWithoutDeletion() async throws {
+    let storage = MockSwiftDataStorage()
+    let manager = SwiftDataGameManager(storage: storage)
+    let liveManager = LiveGameStateManager()
+    liveManager.configure(gameManager: manager)
+
+    let game = try await manager.createGame(type: .recreational)
+    await liveManager.setCurrentGame(game)
+
+    // Simulate meaningful activity so the game is not considered unused.
+    game.score1 = 3
+    game.totalRallies = 5
+    liveManager.setElapsedTime(120)
+
+    #expect(game.isUnused(elapsedTime: liveManager.elapsedTime) == false)
+
+    try await liveManager.completeCurrentGame()
+
+    #expect(liveManager.currentGame == nil)
+    let persisted = try await storage.loadGame(id: game.id)
+    #require(persisted != nil)
+    #expect(persisted?.isCompleted == true)
+    #expect(!storage.deletedGameIds.contains(game.id))
+  }
+
+  @Test("attemptResumeFromSession clears persisted session when game is completed")
+  @MainActor
+  func attemptResumeFromSessionClearsCompletedGameSession() async throws {
+    LiveSessionStore.shared.clear()
+
+    let storage = MockSwiftDataStorage()
+    let manager = SwiftDataGameManager(storage: storage)
+    let liveManager = LiveGameStateManager()
+    liveManager.configure(gameManager: manager)
+
+    let game = try await manager.createGame(type: .recreational)
+    game.gameState = .completed
+    try await storage.updateGame(game)
+
+    let state = LiveSessionState(
+      gameId: game.id,
+      elapsedTime: 42,
+      isTimerRunning: false,
+      lastModified: Date()
+    )
+    LiveSessionStore.shared.save(state)
+
+    #expect(LiveSessionStore.shared.load() != nil)
+
+    await liveManager.attemptResumeFromSession()
+
+    #expect(liveManager.currentGame == nil)
+    #expect(LiveSessionStore.shared.load() == nil)
   }
 }
 

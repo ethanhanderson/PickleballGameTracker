@@ -8,16 +8,14 @@ public struct AppRootView: View {
     @Environment(LiveGameStateManager.self) private var activeGameStateManager
     @Environment(SwiftDataGameManager.self) private var gameManager
     @Environment(LiveSyncCoordinator.self) private var syncCoordinator
+    @Environment(PlayerTeamManager.self) private var rosterManager
+    @State private var personalizationEngine = PersonalizationEngine()
 
     @State private var globalNav = GlobalNavigationState.shared
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var showingLiveGameSheet = false
     @State private var setupSheet: SetupSheetToken?
-    @State private var deepLinkDestination: DeepLinkDestination?
-    @State private var showDeepLink: Bool = false
-    @State private var statisticsFilter: (gameId: String?, gameTypeId: String?)? = nil
-    @State private var deepLinkObserver: (any NSObjectProtocol)? = nil
     @State private var showPersistenceResetPrompt: Bool = false
     @State private var liveOpenObserver: (any NSObjectProtocol)? = nil
     @State private var setupRequestObserver: (any NSObjectProtocol)? = nil
@@ -89,25 +87,23 @@ public struct AppRootView: View {
 
     public var body: some View {
         mainTabView
+            .environment(personalizationEngine)
             .applyLiveGameSheet(
                 showingLiveGameSheet: $showingLiveGameSheet,
                 currentGame: activeGameStateManager.currentGame,
                 gameManager: gameManager,
+                personalizationEngine: personalizationEngine,
                 globalNav: globalNav
             )
             .applySetupSheet(
                 setupSheet: $setupSheet,
                 gameManager: gameManager,
                 activeGameStateManager: activeGameStateManager,
+                personalizationEngine: personalizationEngine,
+                rosterManager: rosterManager,
+                syncCoordinator: syncCoordinator,
                 globalNav: globalNav,
                 handleSetupGameStart: handleSetupGameStart
-            )
-            .applyDeepLinkSheet(
-                showDeepLink: $showDeepLink,
-                deepLinkDestination: deepLinkDestination,
-                gameManager: gameManager,
-                activeGameStateManager: activeGameStateManager,
-                globalNav: globalNav
             )
             .applyPersistenceResetSheet(
                 showPersistenceResetPrompt: $showPersistenceResetPrompt,
@@ -115,9 +111,6 @@ public struct AppRootView: View {
             )
             .task { await setupObservers() }
             .onDisappear { cleanupObservers() }
-            .onOpenURL { url in
-                handleDeepLink(url: url)
-            }
     }
 
     // MARK: - Setup & Coordination
@@ -155,10 +148,6 @@ public struct AppRootView: View {
     }
 
     private func openSetupSheet(for gameType: GameType) {
-        if showDeepLink {
-            showDeepLink = false
-            deepLinkDestination = nil
-        }
         setupSheet = SetupSheetToken(id: gameType.rawValue, gameType: gameType)
         SetupNotificationService.shared.clearPendingNotifications()
         Log.event(
@@ -167,42 +156,6 @@ public struct AppRootView: View {
             message: "Setup requested from watch → opening SetupView",
             metadata: ["gameType": gameType.rawValue]
         )
-    }
-
-    private func applyDeepLink(_ destination: DeepLinkDestination) {
-        switch destination {
-        case .statistics(let gameId, let gameTypeId):
-            statisticsFilter = (gameId, gameTypeId)
-            // The Statistics tab selection is managed by the destination view
-            showDeepLink = false
-            deepLinkDestination = nil
-        case .setup(let gameTypeId):
-            if let gameType = GameType(rawValue: gameTypeId) {
-                setupSheet = SetupSheetToken(id: gameType.rawValue, gameType: gameType)
-            }
-        default:
-            deepLinkDestination = destination
-            showDeepLink = true
-        }
-    }
-
-    private func handleDeepLink(url: URL) {
-        do {
-            let dest = try DeepLinkResolver().resolve(url)
-            Log.event(
-                .viewAppear,
-                level: .info,
-                message: "Deep link resolved",
-                metadata: ["url": url.absoluteString]
-            )
-            applyDeepLink(dest)
-        } catch {
-            Log.error(
-                error,
-                event: .loadFailed,
-                metadata: ["phase": "deepLinkResolve"]
-            )
-        }
     }
 
     private func handleSetupGameStart(gameType: GameType, rules: GameRules?, matchup: MatchupSelection) async {
@@ -231,19 +184,12 @@ public struct AppRootView: View {
                 object: nil
             )
 
-            let rosterBuilder = RosterSnapshotBuilder(storage: SwiftDataStorage.shared)
-            if let roster = try? rosterBuilder.build(includeArchived: false) {
-                try? await syncCoordinator.publishRoster(roster)
-            }
-            let cfg = GameStartConfiguration(
-                gameId: game.id,
-                gameType: config.gameType,
-                teamSize: config.teamSize,
-                participants: config.participants,
-                notes: config.notes,
-                rules: config.rules
+            await LiveGameStartSync.syncGameStart(
+                source: "setupFromWatch",
+                game: game,
+                liveManager: activeGameStateManager,
+                syncCoordinator: syncCoordinator
             )
-            try? await syncCoordinator.publishStart(cfg)
         } catch {
             Log.error(error, event: .saveFailed, metadata: ["phase": "setupFromWatch"])
         }
@@ -276,12 +222,6 @@ public struct AppRootView: View {
                     metadata: ["error": String(describing: error)]
                 )
                 await MainActor.run { showPersistenceResetPrompt = true }
-            }
-        }
-
-        deepLinkObserver = DeepLinkBus.observe { dest in
-            Task { @MainActor in
-                applyDeepLink(dest)
             }
         }
 
@@ -347,83 +287,18 @@ public struct AppRootView: View {
     }
 
     private func cleanupObservers() {
-        if let deepLinkObserver { NotificationCenter.default.removeObserver(deepLinkObserver) }
         if let liveOpenObserver { NotificationCenter.default.removeObserver(liveOpenObserver) }
         if let setupRequestObserver { NotificationCenter.default.removeObserver(setupRequestObserver) }
         if let setupNotificationObserver { NotificationCenter.default.removeObserver(setupNotificationObserver) }
-        deepLinkObserver = nil
         liveOpenObserver = nil
         setupRequestObserver = nil
         setupNotificationObserver = nil
     }
 }
 
-@MainActor
-private struct LiveGameBottomAccessory: View {
-    let hasLiveGame: Bool
-    let onTap: () -> Void
-    
-    var body: some View {
-        if hasLiveGame {
-            LiveGameMiniPreview(onTap: onTap)
-        }
-    }
-}
-
-@MainActor
-private struct CustomLiveGameView: View {
-    let hasLiveGame: Bool
-    let onTap: () -> Void
-    
-    var body: some View {
-        if hasLiveGame {
-            InlineMiniPreview(onTap: onTap)
-        }
-    }
-}
-
-private extension View {
-    func applyLiveGameBottomAccessory(
-        hasLiveGame: Bool,
-        onTap: @escaping () -> Void
-    ) -> some View {
-        if #available(iOS 26.1, *) {
-            return AnyView(
-                self.tabViewBottomAccessory(isEnabled: hasLiveGame) {
-                    LiveGameBottomAccessory(
-                        hasLiveGame: hasLiveGame,
-                        onTap: onTap
-                    )
-                }
-            )
-        } else if #available(iOS 26.0, *) {
-            return AnyView(
-                self.tabViewBottomAccessory {
-                    LiveGameBottomAccessory(
-                        hasLiveGame: hasLiveGame,
-                        onTap: onTap
-                    )
-                }
-            )
-        } else {
-            return AnyView(
-                self.safeAreaInset(edge: .bottom) {
-                    if hasLiveGame {
-                        CustomLiveGameView(
-                            hasLiveGame: hasLiveGame,
-                            onTap: onTap
-                        )
-                        .background(.regularMaterial)
-                    }
-                }
-            )
-        }
-    }
-}
-
 // MARK: - Previews
 
-#Preview {
+#Preview("Main") {
     let setup = PreviewContainers.liveGameSetup()
     let syncCoordinator = LiveSyncCoordinator(service: NoopSyncService())
 
@@ -436,4 +311,38 @@ private extension View {
         .environment(syncCoordinator)
 }
 
+#Preview("Blank") {
+    let setup = PreviewContainers.emptySetup()
+    let syncCoordinator = LiveSyncCoordinator(service: NoopSyncService())
 
+    AppRootView()
+        .tint(.green)
+        .modelContainer(setup.container)
+        .environment(setup.liveGameManager)
+        .environment(setup.gameManager)
+        .environment(setup.rosterManager)
+        .environment(syncCoordinator)
+}
+
+#Preview("Main • Randomized Profile (Seeded)") {
+    // Seeded daily randomization: rotate profile by day-of-year for stable daily variety
+    let dayOfYear = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 0
+    let profiles: [PersonalizationProfile] = [
+        .coldStart, .singlesHeavy, .doublesHeavy, .beginnerFriendly, .competitive, .mixedRecent
+    ]
+    let chosen = profiles[dayOfYear % profiles.count]
+    let p = PersonalizationPreviewFactory.build(profile: chosen)
+    
+    let (gameManager, liveGameManager) = PreviewContainers.managers(for: p.container)
+    let rosterManager = PreviewContainers.rosterManager(for: p.container)
+    let syncCoordinator = LiveSyncCoordinator(service: NoopSyncService())
+    
+    AppRootView()
+        .tint(.green)
+        .modelContainer(p.container)
+        .environment(liveGameManager)
+        .environment(gameManager)
+        .environment(rosterManager)
+        .environment(syncCoordinator)
+        .environment(p.engine)
+}

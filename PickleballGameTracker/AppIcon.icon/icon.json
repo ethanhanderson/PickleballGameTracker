@@ -36,6 +36,7 @@
       "blur-material" : null,
       "layers" : [
         {
+          "hidden" : false,
           "image-name" : "layer.svg",
           "name" : "layer"
         }

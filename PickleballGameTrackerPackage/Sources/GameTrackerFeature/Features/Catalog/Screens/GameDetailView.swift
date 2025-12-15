@@ -14,6 +14,8 @@ struct GameDetailView: View {
   let onStartGame: (GameType, GameRules?, MatchupSelection) -> Void
   @Environment(LiveGameStateManager.self) private var activeGameStateManager
   @Environment(LiveSyncCoordinator.self) private var syncCoordinator
+  @Environment(PersonalizationEngine.self) private var personalizationEngine
+  @Environment(\.modelContext) private var modelContext
 
   @State private var winningScore: Int = 11
   @State private var winByTwo: Bool = true
@@ -35,7 +37,19 @@ struct GameDetailView: View {
   @State private var pendingGameRules: GameRules?
   @State private var pendingMatchup: MatchupSelection?
   @State private var pendingLastGameStart = false
+  @State private var pendingSelectedGame: Game?
   @State private var showingSetupSheet = false
+  @State private var showingRecentGamesSheet = false
+  @State private var showingGroupSetupSheet = false
+  @State private var showingGroupSessionSheet = false
+  @State private var createdGroupSession: GroupPlaySession?
+
+  private static let completedSort: [SortDescriptor<GameSummary>] = [
+    SortDescriptor(\.completedDate, order: .reverse)
+  ]
+  @Query private var completedSummaries: [GameSummary]
+  
+  @State private var similarGames: [GameType] = []
 
   init(
     gameType: GameType,
@@ -51,6 +65,11 @@ struct GameDetailView: View {
     self._doubleBounceRule = State(initialValue: defaultRules.doubleBounceRule)
     self._servingRotation = State(initialValue: defaultRules.servingRotation)
     self._sideSwitchingRule = State(initialValue: defaultRules.sideSwitchingRule)
+
+    let predicate: Predicate<GameSummary> = #Predicate { summary in
+      summary.gameTypeId == gameType.rawValue
+    }
+    self._completedSummaries = Query(filter: predicate, sort: Self.completedSort)
   }
 
   var body: some View {
@@ -66,8 +85,94 @@ struct GameDetailView: View {
         }
         .frame(height: 60)
 
-        HStack(spacing: DesignSystem.Spacing.md) {
-          Button(action: { showingSetupSheet = true }) {
+        if completedSummaries.isEmpty == false {
+          HStack(spacing: DesignSystem.Spacing.md) {
+            Button(action: { 
+              if gameType == .groupPlay {
+                showingGroupSetupSheet = true
+              } else {
+                showingSetupSheet = true
+              }
+            }) {
+              Label {
+                Text("Start Game")
+              } icon: {
+                Image(systemName: "play.fill")
+                  .frame(width: 20, height: 20)
+              }
+              .font(.headline)
+              .frame(maxWidth: .infinity)
+            }
+            .controlSize(.large)
+            .buttonStyle(.glassProminent)
+            .tint(Color(UIColor.secondarySystemBackground).opacity(0.4))
+            .foregroundStyle(gameType.color)
+            .disabled(isCreatingGame)
+
+            Button(action: { showingRecentGamesSheet = true }) {
+              Label {
+                Text("Last Game")
+              } icon: {
+                Image(systemName: "arrow.trianglehead.2.clockwise")
+                  .frame(width: 20, height: 20)
+              }
+              .font(.headline)
+              .frame(maxWidth: .infinity)
+            }
+            .controlSize(.large)
+            .buttonStyle(.glassProminent)
+            .tint(Color(UIColor.secondarySystemBackground).opacity(0.4))
+            .foregroundStyle(gameType.color)
+            .disabled(isCreatingGame)
+            .confirmationDialog(
+              "An active game is in progress",
+              isPresented: $showingLiveGameConflict,
+              titleVisibility: .visible
+            ) {
+              Button("End current game and start new", role: .destructive) {
+                Task { @MainActor in
+                  do {
+                    try await activeGameStateManager.completeCurrentGame()
+                  } catch {
+                    Log.error(
+                      error,
+                      event: .saveFailed,
+                      metadata: ["phase": "completeBeforeStart"]
+                    )
+                  }
+                  
+                  if let selected = pendingSelectedGame {
+                    pendingSelectedGame = nil
+                    await startFromCompleted(selected)
+                  } else if pendingLastGameStart {
+                    await performLastGameStart()
+                    pendingLastGameStart = false
+                  } else if let rules = pendingGameRules, let matchup = pendingMatchup {
+                    onStartGame(gameType, rules, matchup)
+                    pendingGameRules = nil
+                    pendingMatchup = nil
+                  }
+                }
+              }
+              
+              Button("Keep current game", role: .cancel) {
+                pendingGameRules = nil
+                pendingMatchup = nil
+                pendingLastGameStart = false
+              }
+            } message: {
+              Text("You already have a game running. What would you like to do?")
+            }
+          }
+          .padding(.bottom, DesignSystem.Spacing.sm)
+        } else {
+          Button(action: { 
+            if gameType == .groupPlay {
+              showingGroupSetupSheet = true
+            } else {
+              showingSetupSheet = true
+            }
+          }) {
             Label {
               Text("Start Game")
             } icon: {
@@ -82,22 +187,7 @@ struct GameDetailView: View {
           .tint(Color(UIColor.secondarySystemBackground).opacity(0.4))
           .foregroundStyle(gameType.color)
           .disabled(isCreatingGame)
-
-          Button(action: handleLastGameStart) {
-            Label {
-              Text("Last Game")
-            } icon: {
-              Image(systemName: "arrow.trianglehead.2.clockwise")
-                .frame(width: 20, height: 20)
-            }
-            .font(.headline)
-            .frame(maxWidth: .infinity)
-          }
-          .controlSize(.large)
-          .buttonStyle(.glassProminent)
-          .tint(Color(UIColor.secondarySystemBackground).opacity(0.4))
-          .foregroundStyle(gameType.color)
-          .disabled(isCreatingGame)
+          .padding(.bottom, DesignSystem.Spacing.sm)
           .confirmationDialog(
             "An active game is in progress",
             isPresented: $showingLiveGameConflict,
@@ -106,16 +196,7 @@ struct GameDetailView: View {
             Button("End current game and start new", role: .destructive) {
               Task { @MainActor in
                 do {
-                  let gameId = activeGameStateManager.currentGame?.id
-                  let elapsed = activeGameStateManager.elapsedTime
                   try await activeGameStateManager.completeCurrentGame()
-                  if let gameId {
-                    try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
-                      gameId: gameId,
-                      timestamp: elapsed,
-                      operation: .setGameState(.completed)
-                    ))
-                  }
                 } catch {
                   Log.error(
                     error,
@@ -124,7 +205,10 @@ struct GameDetailView: View {
                   )
                 }
                 
-                if pendingLastGameStart {
+                if let selected = pendingSelectedGame {
+                  pendingSelectedGame = nil
+                  await startFromCompleted(selected)
+                } else if pendingLastGameStart {
                   await performLastGameStart()
                   pendingLastGameStart = false
                 } else if let rules = pendingGameRules, let matchup = pendingMatchup {
@@ -144,7 +228,6 @@ struct GameDetailView: View {
             Text("You already have a game running. What would you like to do?")
           }
         }
-        .padding(.bottom, DesignSystem.Spacing.sm)
 
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.xl) {
           VStack(
@@ -171,6 +254,30 @@ struct GameDetailView: View {
             sideSwitchingRule: $sideSwitchingRule,
             hasTimeLimit: $hasTimeLimit
           )
+          
+          if similarGames.isEmpty == false {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+              Text("Similar games")
+                .font(.headline)
+                .padding(.bottom, DesignSystem.Spacing.xs)
+              ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: DesignSystem.Spacing.md) {
+                  ForEach(similarGames, id: \.self) { gt in
+                    NavigationLink(
+                      value: GameSectionDestination.gameDetail(gt)
+                    ) {
+                      GameTypeCard(gameType: gt)
+                    }
+                    .accessibilityIdentifier("NavLink.Games.similar.\(gt.rawValue)")
+                  }
+                }
+                .scrollTargetLayout()
+              }
+              .contentMargins(.horizontal, DesignSystem.Spacing.md, for: .scrollContent)
+              .scrollTargetBehavior(.viewAligned)
+              .scrollClipDisabled()
+            }
+          }
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
@@ -216,6 +323,39 @@ struct GameDetailView: View {
           handleGameStart(gameType, rules: rules, matchup: matchup)
         }
       )
+      .environment(personalizationEngine)
+    }
+    .sheet(isPresented: $showingRecentGamesSheet) {
+      RecentGamesSheet(
+        gameType: gameType,
+        onSelect: { game in
+          Task { @MainActor in
+            showingRecentGamesSheet = false
+            if activeGameStateManager.hasLiveGame {
+              pendingSelectedGame = game
+              showingLiveGameConflict = true
+            } else {
+              await startFromCompleted(game)
+            }
+          }
+        },
+        onStartNewGame: { showingSetupSheet = true }
+      )
+    }
+    .sheet(isPresented: $showingGroupSetupSheet) {
+      GroupPlaySetupView { session in
+        createdGroupSession = session
+        showingGroupSessionSheet = true
+      }
+      .environment(personalizationEngine)
+    }
+    .sheet(isPresented: $showingGroupSessionSheet) {
+      if let session = createdGroupSession {
+        NavigationStack {
+          GroupPlaySessionView(session: session)
+        }
+        .environment(personalizationEngine)
+      }
     }
     .toolbar {
       ToolbarItem(placement: .principal) {
@@ -233,6 +373,10 @@ struct GameDetailView: View {
       }
     } message: {
       Text(errorMessage)
+    }
+    .task(id: gameType.rawValue) {
+      // Load similar games for this detail view
+      similarGames = personalizationEngine.recommendations(for: gameType, context: modelContext, max: 8)
     }
   }
 
@@ -285,38 +429,14 @@ struct GameDetailView: View {
         object: nil
       )
 
-      // Mirror game start on companion
-      // 1) Publish roster snapshot first to ensure identities exist
-      let rosterBuilder = RosterSnapshotBuilder(storage: SwiftDataStorage.shared)
-      if let roster = try? rosterBuilder.build(includeArchived: false) {
-        try? await syncCoordinator.publishRoster(roster)
-      }
-      // 2) Publish start configuration with gameId for id alignment
-      let config = GameStartConfiguration(
-        gameId: game.id,
-        gameType: game.gameType,
-        teamSize: TeamSize(playersPerSide: game.effectiveTeamSize) ?? .doubles,
-        participants: {
-          switch game.participantMode {
-          case .players:
-            return Participants(side1: .players(game.side1PlayerIds), side2: .players(game.side2PlayerIds))
-          case .teams:
-            return Participants(side1: .team(game.side1TeamId!), side2: .team(game.side2TeamId!))
-          }
-        }(),
-        rules: try? GameRules.createValidated(
-          winningScore: game.winningScore,
-          winByTwo: game.winByTwo,
-          kitchenRule: game.kitchenRule,
-          doubleBounceRule: game.doubleBounceRule,
-          servingRotation: game.servingRotation,
-          sideSwitchingRule: game.sideSwitchingRule,
-          scoringType: game.scoringType,
-          timeLimit: game.timeLimit,
-          maxRallies: game.maxRallies
-        )
+      // Personalization start is now deferred to first meaningful activity or 5-minute threshold
+
+      await LiveGameStartSync.syncGameStart(
+        source: "startLastGame",
+        game: game,
+        liveManager: activeGameStateManager,
+        syncCoordinator: syncCoordinator
       )
-      try? await syncCoordinator.publishStart(config)
     } catch let error as GameRulesError {
       errorMessage = error.localizedDescription
       if let suggestion = error.recoverySuggestion {
@@ -330,6 +450,48 @@ struct GameDetailView: View {
         metadata: ["phase": "startLastGame"]
       )
       errorMessage = "Failed to start last game: \(error.localizedDescription)"
+      showingError = true
+    }
+  }
+
+  private func startFromCompleted(_ lastGame: Game) async {
+    do {
+      let game = try await activeGameStateManager.startGameFromCompleted(lastGame)
+
+      Log.event(
+        .viewAppear,
+        level: .info,
+        message: "Selected recent game started",
+        context: .current(gameId: game.id),
+        metadata: ["gameType": gameType.rawValue]
+      )
+
+      NotificationCenter.default.post(
+        name: Notification.Name("OpenLiveGameRequested"),
+        object: nil
+      )
+
+      // Personalization start is now deferred to first meaningful activity or 5-minute threshold
+
+      await LiveGameStartSync.syncGameStart(
+        source: "startFromCompleted",
+        game: game,
+        liveManager: activeGameStateManager,
+        syncCoordinator: syncCoordinator
+      )
+    } catch let error as GameRulesError {
+      errorMessage = error.localizedDescription
+      if let suggestion = error.recoverySuggestion {
+        errorMessage += "\n\n" + suggestion
+      }
+      showingError = true
+    } catch {
+      Log.error(
+        error,
+        event: .saveFailed,
+        metadata: ["phase": "startFromCompleted"]
+      )
+      errorMessage = "Failed to start selected game: \(error.localizedDescription)"
       showingError = true
     }
   }
@@ -359,7 +521,8 @@ struct GameDetailView: View {
 }
 
 #Preview("Recreational Game Setup") {
-  let container = PreviewContainers.standard()
+  let p = PersonalizationPreviewFactory.build(profile: .mixedRecent)
+  let container = p.container
   let (gameManager, liveGameManager) = PreviewContainers.managers(for: container)
   liveGameManager.configure(gameManager: gameManager)
   
@@ -379,5 +542,6 @@ struct GameDetailView: View {
   .modelContainer(container)
   .environment(liveGameManager)
   .environment(gameManager)
+  .environment(p.engine)
   .accentColor(.green)
 }

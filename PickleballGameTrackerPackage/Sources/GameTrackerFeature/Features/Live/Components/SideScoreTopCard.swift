@@ -10,6 +10,9 @@ struct SideScoreTopCard: View {
     let isGameLive: Bool
     let showTapIndicator: Bool
     let tintOverride: Color?
+    let isServingPlayer: Bool
+    let onTapped: (() -> Void)?
+    let displayScore: Int?
 
     @State private var matchLabelVisible: Bool = false
     @State private var serveLabelVisible: Bool = false
@@ -29,11 +32,20 @@ struct SideScoreTopCard: View {
         tintOverride ?? game.teamTintColor(for: teamNumber, context: modelContext)
     }
 
-    private var score: Int { game.score(for: teamNumber) }
+    private var score: Int { displayScore ?? game.score(for: teamNumber) }
     private var isAtMatchPoint: Bool { game.isAtMatchPoint(for: teamNumber) }
     private var isServing: Bool { game.isServing(teamNumber: teamNumber) }
     private var servingIndicatorVisible: Bool {
-        game.shouldShowServingIndicator(for: teamNumber)
+        if game.layoutStyle == .players { return isServingPlayer }
+        return game.shouldShowServingIndicator(for: teamNumber)
+    }
+    private var matchPointVisible: Bool {
+        guard !game.isCompleted else { return false }
+        if game.layoutStyle == .players {
+            return isAtMatchPoint && isServingPlayer
+        } else {
+            return isAtMatchPoint && isServing
+        }
     }
     private var servingAnimate: Bool {
         game.safeGameState == .playing && !wasJustResumed
@@ -78,7 +90,7 @@ struct SideScoreTopCard: View {
                         icon: "target",
                         label: "MATCH POINT",
                         tint: cardTintColor.opacity(0.14),
-                        visible: isAtMatchPoint,
+                        visible: matchPointVisible,
                         animate: !hasAppeared || isGameLive,
                         triggerAnimationId: matchAnimationTick,
                         accessibilityId:
@@ -105,7 +117,7 @@ struct SideScoreTopCard: View {
                             serveLabelVisible = isVisible
                         },
                         shouldDefer: {
-                            (isAtMatchPoint && isGameLive)
+                            (matchPointVisible && isGameLive)
                                 && matchLabelVisible
                         }
                     )
@@ -179,6 +191,7 @@ struct SideScoreTopCard: View {
                     // Always delegate to manager; it enforces allowed states
                     if game.currentServer != teamNumber {
                         try await gameManager.setServer(to: teamNumber, in: game)
+                        syncCoordinator.noteLocalServeMutation()
                         
                         // Publish server change to sync with companion device
                         Task { @MainActor in
@@ -189,6 +202,7 @@ struct SideScoreTopCard: View {
                             ))
                         }
                     }
+                    await MainActor.run { onTapped?() }
                 } catch {
                     print("Failed to update server: \(error.localizedDescription)")
                 }

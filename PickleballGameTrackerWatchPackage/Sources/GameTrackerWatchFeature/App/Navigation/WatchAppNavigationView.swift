@@ -17,6 +17,7 @@ public struct WatchAppNavigationView: View {
     
     @State private var lastRequestError: (any Error)? = nil
   @State private var isBootstrapping = false
+  @State private var lastReachability: SyncReachability? = nil
     
     // MARK: - Computed Properties
     
@@ -24,8 +25,15 @@ public struct WatchAppNavigationView: View {
         ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
     }
     
+    private var activeLiveGame: Game? {
+      guard liveGameStateManager.hasLiveGame,
+            let game = liveGameStateManager.currentGame,
+            !game.isDetachedFromContext else { return nil }
+      return game
+    }
+
     private var shouldShowLiveGame: Bool {
-        liveGameStateManager.currentGame != nil
+      activeLiveGame != nil
     }
     
     // Connectivity UI removed
@@ -38,24 +46,26 @@ public struct WatchAppNavigationView: View {
     
     public var body: some View {
         Group {
-            if shouldShowLiveGame, let liveGame = liveGameStateManager.currentGame {
-                WatchLiveView(
-                    game: liveGame,
-                    onCompleted: {
-                        liveGameStateManager.clearCurrentGame()
-                    }
-                )
+            if let liveGame = activeLiveGame {
+        WatchLiveView(game: liveGame)
             } else {
-        switch syncCoordinator.reachability {
+        let reach = syncCoordinator.reachability
+        let shouldShowConnecting = (reach == .connecting) && (lastReachability == .unavailable)
+        switch reach {
         case .reachable:
           WatchCatalogView()
         case .connecting:
-          WatchMessageView(
-            icon: "iphone",
-            message: "Connecting to iPhone…",
-            showSpinner: true,
-            color: .blue
-          )
+          if shouldShowConnecting {
+            WatchMessageView(
+              icon: "iphone",
+              message: "Connecting to iPhone…",
+              showSpinner: true,
+              color: .blue
+            )
+          } else {
+            // Stay on catalog to avoid flashing the connecting UI during transient state changes (e.g., AOD)
+            WatchCatalogView()
+          }
         case .unavailable:
           WatchMessageView(
             icon: "iphone.slash",
@@ -70,6 +80,10 @@ public struct WatchAppNavigationView: View {
                 liveGameStateManager.configure(gameManager: gameManager)
             }
           await attemptBootstrapIfNeeded()
+        }
+        .onChange(of: syncCoordinator.reachability) { oldValue, newValue in
+          // Track the previous reachability to decide when to show the connecting view
+          lastReachability = oldValue
         }
     }
     
@@ -159,6 +173,17 @@ public struct WatchAppNavigationView: View {
                     ]
                 )
                 try await syncCoordinator.requestRoster()
+            }
+            // Ensure recent history is available for ranking and recent lists
+            let summaryCount = try modelContext.fetchCount(FetchDescriptor<GameSummary>())
+            if summaryCount == 0 {
+                Log.event(
+                    .loadStarted,
+                    level: .info,
+                    message: "history.sync.requested",
+                    metadata: ["existing.summaries": "\(summaryCount)"]
+                )
+                try await syncCoordinator.requestHistory()
             }
         } catch {
             lastRequestError = error

@@ -72,7 +72,11 @@ public enum GameEventType: String, Codable, CaseIterable, Sendable {
         }
     }
 
-    /// Whether this event typically results in a serve change
+    /// Whether this event should advance the serve rotation under standard rules.
+    ///
+    /// UI components such as `EventButtonsCard` rely on this flag to determine which
+    /// quick-action buttons must call into `SwiftDataGameManager.handleServiceFault`
+    /// so that the serving team and player state stay in sync with the logged event.
     public var typicallyChangesServe: Bool {
         switch self {
         case .playerScored:

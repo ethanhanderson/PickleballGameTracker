@@ -1,4 +1,3 @@
-import GameTrackerCore
 //
 //  WatchLiveView.swift
 //  Pickleball Score Tracking Watch App
@@ -6,9 +5,11 @@ import GameTrackerCore
 //  Created by Ethan Anderson on 7/9/25.
 //
 
+import GameTrackerCore
 import SwiftData
 import SwiftUI
 
+@MainActor
 struct WatchLiveView: View {
   @Environment(\.modelContext) private var modelContext
   @Environment(\.dismiss) private var dismiss
@@ -16,13 +17,21 @@ struct WatchLiveView: View {
   @Environment(LiveGameStateManager.self) private var liveGameStateManager
   @Environment(LiveSyncCoordinator.self) private var syncCoordinator
   @Environment(\.isLuminanceReduced) private var isLuminanceReduced
+  @Environment(WorkoutManager.self) private var workoutManager
+  @Environment(ExtendedRuntimeManager.self) private var extendedRuntimeManager
+  @Environment(\.scenePhase) private var scenePhase
 
   let initialGame: Game
+  private let gameIdSnapshot: UUID
+  private let gameTypeSnapshot: GameType
   @State private var showingCompleteAlert = false
   @State private var selectedTab: String = "controls"
   @State private var isToggling = false
-  @State private var pulseAnimation = false
   @State private var showingSettings = false
+  @State private var showingWorkoutSheet = false
+  @State private var hasEndedGame = false
+  @State private var didStartLiveSession = false
+  @State private var isWorkoutSetupInFlight = false
 
   // Haptic feedback triggers
   @State private var scoreClickTrigger = false
@@ -39,11 +48,23 @@ struct WatchLiveView: View {
   let onCompleted: (() -> Void)?
   
   private var game: Game? {
-    liveGameStateManager.currentGame
+    guard let current = liveGameStateManager.currentGame else { return nil }
+    if current.isDetachedFromContext { return nil }
+    return current
+  }
+
+  private var fallbackMessaging: (icon: String, message: String, showSpinner: Bool, color: Color) {
+    if hasEndedGame {
+      return ("flag.checkered", "Game no longer available", false, .green)
+    } else {
+      return ("arrow.triangle.2.circlepath", "Syncing live game…", true, .blue)
+    }
   }
 
   init(game: Game, onCompleted: (() -> Void)? = nil) {
     self.initialGame = game
+    self.gameIdSnapshot = game.id
+    self.gameTypeSnapshot = game.gameType
     self.onCompleted = onCompleted
   }
 
@@ -52,38 +73,22 @@ struct WatchLiveView: View {
       if let game = game {
         TabView(selection: $selectedTab) {
           Tab(value: "controls") {
-            NavigationStack {
-              GameControlsView(
-                game: game,
-                isGamePaused: !liveGameStateManager.isGameLive,
-                isGameInitial: liveGameStateManager.isGameInitial,
-                isToggling: isToggling,
-                showingCompleteAlert: $showingCompleteAlert,
-                showingSettings: $showingSettings,
-                onToggleGame: toggleGame
-              )
-            }
+            controlsTab(for: game)
           }
 
           Tab(value: "score") {
-            NavigationStack {
-              ScoreControlsView(
-                game: game,
-                liveGameStateManager: liveGameStateManager,
-                onScorePoint: scorePoint,
-                onDecrementScore: decrementScore,
-                onSetServer: setServer,
-                onHapticFeedback: triggerScoreControlsHaptic
-              )
-            }
+            scoreTab(for: game)
           }
         }
         .animation(.easeInOut(duration: 0.3), value: selectedTab)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.black)
+        .onAppear {
+          didStartLiveSession = true
+        }
         .alert("End Game", isPresented: $showingCompleteAlert) {
           Button("End", role: .destructive) {
-            Task {
+            Task { @MainActor in
               await completeGame()
             }
           }
@@ -102,17 +107,50 @@ struct WatchLiveView: View {
             liveGameStateManager: liveGameStateManager
           )
         }
-        .onChange(of: liveGameStateManager.currentGame?.id) { _, newId in
-          // If the current game is cleared externally, dismiss safely
-          if newId == nil {
-            Task { @MainActor in
-              dismiss()
+        .sheet(isPresented: $showingWorkoutSheet) {
+          WorkoutInfoSheetView()
+        }
+        .onChange(of: liveGameStateManager.currentGame?.gameState) { _, newState in
+          guard let state = newState else { return }
+          Task { @MainActor in
+            let anotherDevice = syncCoordinator.isAnotherDeviceActivelyTracking()
+            switch state {
+            case .playing:
+              if anotherDevice {
+                await teardownWorkoutIfNeeded()
+                extendedRuntimeManager.stopSessionIfNeeded()
+              } else if workoutManager.isAuthorized, let activeGame = liveGameStateManager.currentGame {
+                extendedRuntimeManager.stopSessionIfNeeded()
+                await ensureWorkoutRunning(for: activeGame)
+              } else {
+                extendedRuntimeManager.startFrontmostSessionIfNeeded()
+              }
+              await switchToScoreTabAfterResume()
+            case .paused:
+              pauseWorkoutIfNeeded()
+              extendedRuntimeManager.stopSessionIfNeeded()
+            case .completed:
+              await teardownWorkoutIfNeeded()
+              extendedRuntimeManager.stopSessionIfNeeded()
+            case .initial, .serving:
+              break
             }
           }
         }
       } else {
-        ProgressView("Loading game...")
+        if hasEndedGame || didStartLiveSession {
+          let fallback = fallbackMessaging
+          WatchMessageView(
+            icon: fallback.icon,
+            message: fallback.message,
+            showSpinner: fallback.showSpinner,
+            color: fallback.color
+          )
           .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+          ProgressView("Loading game...")
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
       }
     }
     .task {
@@ -121,6 +159,25 @@ struct WatchLiveView: View {
       if liveGameStateManager.currentGame == nil {
         await liveGameStateManager.setCurrentGame(initialGame)
       }
+      guard let activeGame = liveGameStateManager.currentGame else {
+        hasEndedGame = true
+        Task { @MainActor in
+          dismiss()
+        }
+        return
+      }
+      didStartLiveSession = true
+      syncCoordinator.setLiveViewForeground(scenePhase == .active)
+      Log.event(
+        .viewAppear,
+        level: .debug,
+        message: "WatchLiveView task configured",
+        context: .current(gameId: activeGame.id),
+        metadata: [
+          "initialGame.type": initialGame.gameType.rawValue,
+          "currentGame.type": activeGame.gameType.rawValue
+        ]
+      )
 
       // Configure timer tick based on AOD state
       liveGameStateManager.setTimerUpdateInterval(isLuminanceReduced ? 1.0 : 0.01)
@@ -131,6 +188,12 @@ struct WatchLiveView: View {
         message: "Watch live view ready for sync",
         context: .current(gameId: initialGame.id)
       )
+
+      // Prepare HealthKit workout in background (do not start yet)
+      let prepared = await authorizeAndPrepareWorkout(for: activeGame)
+      if prepared {
+        extendedRuntimeManager.stopSessionIfNeeded()
+      }
     }
     .onChange(of: isLuminanceReduced) { _, reduced in
       liveGameStateManager.setTimerUpdateInterval(reduced ? 1.0 : 0.01)
@@ -145,16 +208,138 @@ struct WatchLiveView: View {
     .sensoryFeedback(.error, trigger: completeFailureTrigger)
     .sensoryFeedback(.success, trigger: completionSuccessTrigger)
     .sensoryFeedback(.impact(weight: .light), trigger: scoreControlsTrigger)
+    .onChange(of: liveGameStateManager.currentGame?.id) { _, newId in
+      guard didStartLiveSession else { return }
+      if newId == nil {
+        handleLiveGameRemoval()
+      }
+    }
+    .onChange(of: liveGameStateManager.currentGame?.isDetachedFromContext ?? false) { _, isDetached in
+      guard didStartLiveSession else { return }
+      if isDetached {
+        handleLiveGameRemoval()
+      }
+    }
+    .onChange(of: scenePhase) { _, phase in
+      syncCoordinator.setLiveViewForeground(phase == .active)
+    }
+  }
+
+  // MARK: - Extracted Tabs
+
+  @ViewBuilder
+  private func controlsTab(for game: Game) -> some View {
+    NavigationStack {
+      GameControlsView(
+        game: game,
+        isGamePaused: !liveGameStateManager.isGameLive,
+        isGameInitial: liveGameStateManager.isGameInitial,
+        isToggling: isToggling,
+        showingCompleteAlert: $showingCompleteAlert,
+        showingSettings: $showingSettings,
+        onToggleGame: toggleGame,
+        onOpenWorkout: { showingWorkoutSheet = true }
+      )
+    }
+  }
+
+  @ViewBuilder
+  private func scoreTab(for game: Game) -> some View {
+    NavigationStack {
+      VStack(spacing: DesignSystem.Spacing.md) {
+        WatchGameTimerCard(
+          game: game,
+          liveGameStateManager: liveGameStateManager,
+          isLuminanceReduced: isLuminanceReduced
+        )
+
+        gameTypeSpecificScoreControls(for: game)
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+      .padding(.top, DesignSystem.Spacing.sm)
+      .onAppear {
+        Log.event(
+          .viewAppear,
+          level: .debug,
+          message: "Rendering \(game.gameType.displayName) score tab on Watch",
+          context: .current(gameId: game.id),
+          metadata: [
+            "watch.liveView.gameType": game.gameType.rawValue,
+            "liveManager.currentGameType": liveGameStateManager.currentGame?.gameType.rawValue ?? "nil"
+          ]
+        )
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func gameTypeSpecificScoreControls(for game: Game) -> some View {
+    switch game.gameType {
+    case .cutthroat:
+      ScrollView(.vertical) {
+        PlayerListControlsView(
+          game: game,
+          liveGameStateManager: liveGameStateManager,
+          isGamePaused: !liveGameStateManager.isGameLive,
+          onHapticFeedback: triggerScoreControlsHaptic
+        )
+        .frame(maxWidth: .infinity, alignment: .top)
+        .padding(.bottom, DesignSystem.Spacing.lg)
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+      
+    case .recreational, .tournament, .training, .social, .custom, .groupPlay:
+      ScoreControlsView(
+        game: game,
+        liveGameStateManager: liveGameStateManager,
+        onScorePoint: scorePoint,
+        onDecrementScore: decrementScore,
+        onSetServer: setServer,
+        onHapticFeedback: triggerScoreControlsHaptic
+      )
+    }
   }
 
   private func triggerScoreControlsHaptic() {
     scoreControlsTrigger.toggle()
   }
 
+  private func handleLiveGameRemoval() {
+    guard didStartLiveSession else { return }
+    if hasEndedGame { return }
+    hasEndedGame = true
+    syncCoordinator.setLiveViewForeground(false)
+
+    Task { @MainActor in
+      await teardownWorkoutIfNeeded()
+      extendedRuntimeManager.stopSessionIfNeeded()
+      onCompleted?()
+      dismiss()
+    }
+  }
+
+  @MainActor
+  private func switchToScoreTabAfterResume(delay: Duration? = nil) async {
+    if let delay {
+      try? await Task.sleep(for: delay)
+    }
+
+    guard selectedTab != "score" else { return }
+
+    withAnimation(.easeInOut(duration: 0.4)) {
+      selectedTab = "score"
+    }
+
+    Task { @MainActor in
+      try? await Task.sleep(for: .milliseconds(200))
+      directionUpTrigger.toggle()
+    }
+  }
+
   // MARK: - Actions
 
   private func scorePoint(for team: Int) {
-    guard let game = game, !game.isCompleted else {
+    guard let game = game, !game.safeIsCompleted else {
       return
     }
 
@@ -166,7 +351,7 @@ struct WatchLiveView: View {
       scoreClickTrigger.toggle()
     }
 
-    Task {
+    Task { @MainActor in
       do {
         try await liveGameStateManager.scorePoint(for: team, at: timestamp)
 
@@ -177,7 +362,7 @@ struct WatchLiveView: View {
           }
         }
 
-        if game.isCompleted {
+        if game.safeIsCompleted {
           let gameId = game.id
           await handleGameCompletion(gameId: gameId)
         }
@@ -196,16 +381,18 @@ struct WatchLiveView: View {
     }
     Task { @MainActor in
       guard let game = self.game else { return }
-      try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
-        gameId: game.id,
-        timestamp: timestamp,
-        operation: .score(team: team)
-      ))
+      let target = LiveScoreTarget.side(team)
+      try? await syncCoordinator.publishScoreEvent(
+        for: game,
+        target: target,
+        assignsServe: false,
+        timestamp: timestamp
+      )
     }
   }
 
   private func decrementScore(for team: Int) {
-    guard let game = game, !game.isCompleted else {
+    guard let game = game, !game.safeIsCompleted else {
       return
     }
 
@@ -220,7 +407,7 @@ struct WatchLiveView: View {
       decrementClickTrigger.toggle()
     }
 
-    Task {
+    Task { @MainActor in
       do {
         try await liveGameStateManager.decrementScore(for: team)
       } catch {
@@ -238,22 +425,22 @@ struct WatchLiveView: View {
     }
     Task { @MainActor in
       guard let game = self.game else { return }
-      try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
-        gameId: game.id,
-        timestamp: timestamp,
-        operation: .decrement(team: team)
-      ))
+      try? await syncCoordinator.publishDecrementDelta(
+        for: game,
+        team: team,
+        timestamp: timestamp
+      )
     }
   }
 
   private func setServer(to team: Int) {
-    guard let game = game, !game.isCompleted else {
+    guard let game = game, !game.safeIsCompleted else {
       return
     }
 
     let timestamp = liveGameStateManager.elapsedTime
 
-    Task {
+    Task { @MainActor in
       do {
         try await liveGameStateManager.setServer(to: team)
       } catch {
@@ -278,9 +465,9 @@ struct WatchLiveView: View {
   private func toggleGame() {
     guard let game = game, !isToggling else { return }
 
-    if game.isCompleted {
+    if game.safeIsCompleted {
       let gameId = game.id
-      Task {
+      Task { @MainActor in
         await handleGameCompletion(gameId: gameId)
       }
       return
@@ -293,15 +480,7 @@ struct WatchLiveView: View {
       try? await liveGameStateManager.toggleGameState()
 
       if liveGameStateManager.isGameLive {
-        try? await Task.sleep(for: .milliseconds(150))
-
-        withAnimation(.easeInOut(duration: 0.4)) {
-          selectedTab = "score"
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-          directionUpTrigger.toggle()
-        }
+        await switchToScoreTabAfterResume(delay: .milliseconds(150))
       }
 
       try? await Task.sleep(for: .milliseconds(100))
@@ -334,20 +513,17 @@ struct WatchLiveView: View {
     do {
       try await liveGameStateManager.completeCurrentGame()
       completeSuccessTrigger.toggle()
-
-      // Immediately clear and dismiss to avoid rendering stale objects
+      hasEndedGame = true
       await MainActor.run {
         onCompleted?()
         dismiss()
       }
-      // Publish completion so the paired device ends the live game
-      Task { @MainActor in
-        try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
-          gameId: gameId,
-          timestamp: elapsed,
-          operation: .setGameState(.completed)
-        ))
-      }
+      Log.event(
+        .gameCompleted,
+        level: .info,
+        context: .current(gameId: gameId),
+        metadata: ["platform": "watchOS", "source": "explicitEnd", "elapsed": "\(elapsed)"]
+      )
     } catch {
       Log.error(
         error,
@@ -360,8 +536,9 @@ struct WatchLiveView: View {
   }
 
   private func handleGameCompletion(gameId: UUID) async {
-    // Retained for external triggers; now performs immediate dismiss
+    hasEndedGame = true
     await MainActor.run {
+      liveGameStateManager.clearCurrentGame()
       onCompleted?()
       dismiss()
     }
@@ -369,53 +546,131 @@ struct WatchLiveView: View {
       .gameCompleted,
       level: .info,
       context: .current(gameId: gameId),
-      metadata: ["platform": "watchOS"]
+      metadata: ["platform": "watchOS", "source": "autoComplete"]
     )
+  }
+
+  // MARK: - Workout Helpers
+
+  @MainActor
+  private func authorizeAndPrepareWorkout(for game: Game) async -> Bool {
+    await workoutManager.requestAuthorizationIfNeeded()
+    guard workoutManager.isAuthorized else { return false }
+    if !workoutManager.isPrepared {
+      await workoutManager.prepare(for: game.gameType)
+    }
+    return workoutManager.isPrepared
+  }
+
+  @MainActor
+  private func ensureWorkoutRunning(for game: Game) async {
+    guard !isWorkoutSetupInFlight else { return }
+    isWorkoutSetupInFlight = true
+    defer { isWorkoutSetupInFlight = false }
+    guard await authorizeAndPrepareWorkout(for: game) else { return }
+    extendedRuntimeManager.stopSessionIfNeeded()
+    await workoutManager.start()
+  }
+
+  @MainActor
+  private func pauseWorkoutIfNeeded() {
+    guard workoutManager.sessionState == .running else { return }
+    workoutManager.pause()
+  }
+
+  @MainActor
+  private func teardownWorkoutIfNeeded() async {
+    if workoutManager.sessionState != .notStarted {
+      await workoutManager.endAndSave()
+    }
+    extendedRuntimeManager.stopSessionIfNeeded()
   }
 }
 
 // MARK: - Previews
 
 #Preview {
-  let setup = PreviewContainers.liveGameSetup()
-  let ctx = setup.container.mainContext
-  let fetched = (try? ctx.fetch(FetchDescriptor<Game>())) ?? []
-  let game = fetched.first(where: { $0.gameState == .playing })
-    ?? fetched.first
-    ?? { preconditionFailure("Preview requires at least one game") }()
+  let setup = PreviewContainers.standardSetup()
+  let syncCoordinator = LiveSyncCoordinator(service: NoopSyncService())
+  // Randomized preview across types, team formats, and participants
+  let possibleTypes = Array(GameType.allCases)
+  let chosenType = possibleTypes.randomElement()
+  let preferTeamSize: Int? = [nil, 1, 2].randomElement() ?? nil
+  let nearEndOffset = Int.random(in: 0...4)
+  let cutthroatPlayers: Int? = (chosenType == .cutthroat) ? Int.random(in: 3...6) : nil
+  let customSizes: (Int, Int)? = (chosenType == .custom) ? (Int.random(in: 1...2), Int.random(in: 1...2)) : nil
+
+  let game = PreviewContainers.exampleGame(
+    in: setup.container,
+    type: chosenType,
+    preferTeamSize: preferTeamSize,
+    desiredState: .playing,
+    showWonGame: false,
+    nearEndOffset: nearEndOffset,
+    cutthroatPlayers: cutthroatPlayers,
+    customSideSizes: customSizes,
+    randomizeParticipants: true
+  )
+  let workoutManager = WorkoutManager()
 
   WatchLiveView(game: game)
     .modelContainer(setup.container)
     .environment(setup.liveGameManager)
     .environment(setup.gameManager)
+    .environment(syncCoordinator)
+    .environment(workoutManager)
 }
 
 #Preview("Singles Game") {
-  let setup = PreviewContainers.liveGameSetup()
-  let ctx = setup.container.mainContext
-  let fetched = (try? ctx.fetch(FetchDescriptor<Game>())) ?? []
-  let game = fetched.first(where: { $0.effectiveTeamSize == 1 && !$0.isCompleted })
-    ?? fetched.first(where: { !$0.isCompleted })
-    ?? fetched.first
-    ?? { preconditionFailure("Preview requires at least one game") }()
+  let setup = PreviewContainers.standardSetup()
+  let syncCoordinator = LiveSyncCoordinator(service: NoopSyncService())
+  let game = PreviewContainers.exampleGame(
+    in: setup.container,
+    type: nil,
+    preferTeamSize: 1,
+    desiredState: .playing,
+    randomizeParticipants: true
+  )
+  let workoutManager = WorkoutManager()
 
   WatchLiveView(game: game)
     .modelContainer(setup.container)
     .environment(setup.liveGameManager)
     .environment(setup.gameManager)
+    .environment(syncCoordinator)
+    .environment(workoutManager)
 }
 
 #Preview("Doubles Game") {
-  let setup = PreviewContainers.liveGameSetup()
-  let ctx = setup.container.mainContext
-  let fetched = (try? ctx.fetch(FetchDescriptor<Game>())) ?? []
-  let game = fetched.first(where: { $0.effectiveTeamSize > 1 && !$0.isCompleted })
-    ?? fetched.first(where: { !$0.isCompleted })
-    ?? fetched.first
-    ?? { preconditionFailure("Preview requires at least one game") }()
+  let setup = PreviewContainers.standardSetup()
+  let syncCoordinator = LiveSyncCoordinator(service: NoopSyncService())
+  let game = PreviewContainers.exampleGame(
+    in: setup.container,
+    type: nil,
+    preferTeamSize: 2,
+    desiredState: .playing,
+    randomizeParticipants: true
+  )
+  let workoutManager = WorkoutManager()
 
   WatchLiveView(game: game)
     .modelContainer(setup.container)
     .environment(setup.liveGameManager)
     .environment(setup.gameManager)
+    .environment(syncCoordinator)
+    .environment(workoutManager)
+}
+
+#Preview("Cutthroat Game") {
+  let setup = PreviewContainers.standardSetup()
+  let syncCoordinator = LiveSyncCoordinator(service: NoopSyncService())
+  let game = PreviewContainers.exampleGame(in: setup.container, type: .cutthroat)
+  let workoutManager = WorkoutManager()
+
+  WatchLiveView(game: game)
+    .modelContainer(setup.container)
+    .environment(setup.liveGameManager)
+    .environment(setup.gameManager)
+    .environment(syncCoordinator)
+    .environment(workoutManager)
 }

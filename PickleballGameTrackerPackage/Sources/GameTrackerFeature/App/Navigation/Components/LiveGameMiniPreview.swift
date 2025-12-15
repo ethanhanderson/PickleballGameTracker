@@ -1,3 +1,4 @@
+import Foundation
 import GameTrackerCore
 import SwiftData
 import SwiftUI
@@ -19,9 +20,19 @@ struct InlineMiniPreview: View {
                             .fontWeight(.semibold)
 
                         if let game = activeGameStateManager.currentGame {
-                            let names = game.teamsWithLabels(
-                                context: modelContext
-                            ).map { $0.teamName }.joined(separator: " vs ")
+                            let names: String = {
+                                if game.gameType == .cutthroat {
+                                    let side1Players = game.resolveSide1Players(context: modelContext) ?? []
+                                    let side2Players = game.resolveSide2Players(context: modelContext) ?? []
+                                    let allPlayers = side1Players + side2Players
+                                    let playerNames = allPlayers.map { $0.name }
+                                    return formatPlayerList(playerNames)
+                                } else {
+                                    return game.teamsWithLabels(
+                                        context: modelContext
+                                    ).map { $0.teamName }.joined(separator: " vs ")
+                                }
+                            }()
                             if names.isEmpty == false {
                                 Text(names)
                                     .font(.caption)
@@ -31,7 +42,7 @@ struct InlineMiniPreview: View {
                     }
                     .padding(.leading, 4)
 
-                    Spacer()
+                    Spacer(minLength: DesignSystem.Spacing.sm)
 
                     HStack(spacing: DesignSystem.Spacing.xs) {
                         let scoreComponents = score.split(separator: " - ")
@@ -83,6 +94,18 @@ extension InlineMiniPreview {
         }
         return game.teamTintColor(for: index, context: modelContext)
     }
+    
+    fileprivate func formatPlayerList(_ names: [String]) -> String {
+        guard !names.isEmpty else { return "" }
+        if names.count == 1 {
+            return names[0]
+        } else if names.count == 2 {
+            return "\(names[0]) and \(names[1])"
+        } else {
+            let allButLast = names.dropLast().joined(separator: ", ")
+            return "\(allButLast), and \(names.last!)"
+        }
+    }
 }
 
 @MainActor
@@ -112,9 +135,19 @@ struct ExpandedMiniPreview: View {
                             .font(.headline)
 
                         if let game = activeGameStateManager.currentGame {
-                            let names = game.teamsWithLabels(
-                                context: modelContext
-                            ).map { $0.teamName }.joined(separator: " vs ")
+                            let names: String = {
+                                if game.gameType == .cutthroat {
+                                    let side1Players = game.resolveSide1Players(context: modelContext) ?? []
+                                    let side2Players = game.resolveSide2Players(context: modelContext) ?? []
+                                    let allPlayers = side1Players + side2Players
+                                    let playerNames = allPlayers.map { $0.name }
+                                    return formatPlayerList(playerNames)
+                                } else {
+                                    return game.teamsWithLabels(
+                                        context: modelContext
+                                    ).map { $0.teamName }.joined(separator: " vs ")
+                                }
+                            }()
                             if names.isEmpty == false {
                                 Text(names)
                                     .font(.caption)
@@ -142,7 +175,7 @@ struct ExpandedMiniPreview: View {
                         .foregroundStyle(.secondary)
                     }
 
-                    Spacer()
+                    Spacer(minLength: DesignSystem.Spacing.md)
 
                     HStack(spacing: DesignSystem.Spacing.xs) {
                         let scoreComponents = score.split(separator: " - ")
@@ -195,6 +228,18 @@ extension ExpandedMiniPreview {
             return Color.accentColor
         }
         return game.teamTintColor(for: index, context: modelContext)
+    }
+    
+    fileprivate func formatPlayerList(_ names: [String]) -> String {
+        guard !names.isEmpty else { return "" }
+        if names.count == 1 {
+            return names[0]
+        } else if names.count == 2 {
+            return "\(names[0]) and \(names[1])"
+        } else {
+            let allButLast = names.dropLast().joined(separator: ", ")
+            return "\(allButLast), and \(names.last!)"
+        }
     }
 }
 

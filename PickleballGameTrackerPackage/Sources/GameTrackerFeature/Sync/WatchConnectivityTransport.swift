@@ -8,7 +8,7 @@ import UserNotifications
 @MainActor
 public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionDelegate {
   private let session: WCSession = .default
-  private var sessionId: UUID = UUID()
+  private var sessionId: UUID? = nil
   private var isActivated: Bool = false
   private var pendingSends: [(data: Data, preferContext: Bool)] = []
   private var retryTask: Task<Void, Never>? = nil
@@ -50,6 +50,8 @@ public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionD
   public func start() async {
     guard WCSession.isSupported() else { return }
     session.delegate = self
+    // Publish initial reachability immediately so UI can reflect current state
+    onReachabilityChanged?(currentReachability)
     session.activate()
     // Reachability will be reported upon activation completion
     Log.event(
@@ -60,12 +62,14 @@ public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionD
     )
     // On iOS, the activation delegate may not fire; ensure we eventually mark as activated
     await ensureActivationReady()
+    // Ensure consumers receive a reachability update even if activation delegate didn't fire
+    onReachabilityChanged?(currentReachability)
     startAutoConnectRetriesIfNeeded()
   }
 
   public func stop() async {
     // WCSession has no explicit stop; rotate sessionId to partition streams
-    sessionId = UUID()
+    sessionId = nil
     retryTask?.cancel()
     retryTask = nil
   }
@@ -192,6 +196,13 @@ public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionD
   }
 
   private func send<T: Codable>(envelopeFor value: T, type: SyncMessageType, preferContext: Bool) async throws {
+    // Preconditions for diagnostics
+    guard WCSession.isSupported() else { throw SyncTransportError.notSupported }
+    if !session.isPaired || !session.isWatchAppInstalled {
+      throw SyncTransportError.companionUnavailable
+    }
+    // Lazily establish a session identifier for this activation window
+    if sessionId == nil { sessionId = UUID() }
     let data = try MessageCodec.encode(value, type: type, sessionId: sessionId)
     if !isActivated {
       pendingSends.append((data, preferContext))
@@ -213,15 +224,21 @@ public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionD
           metadata: ["type": type.rawValue]
         )
       } catch {
-        // Fallback to message if context update fails
-        try await sendData(data)
+        // Fallback to interactive/background message only; avoid duplicating via context
+        try await sendData(data, allowContextFallback: false)
       }
     } else {
-      try await sendData(data)
+      // For non-context messages (e.g., deltas), never use application context
+      try await sendData(data, allowContextFallback: false)
+      // If we're not reachable for a live delta, throw for observability after scheduling transfer
+      if case .liveDelta = type, session.isReachable == false {
+        throw SyncTransportError.reachabilityUnavailable
+      }
     }
   }
 
   private func send(typeOnly: SyncMessageType) async throws {
+    guard WCSession.isSupported() else { throw SyncTransportError.notSupported }
     // Encode a single envelope directly for type-only messages (no nested envelope)
     let encoder = JSONEncoder()
     encoder.dateEncodingStrategy = .iso8601
@@ -237,10 +254,11 @@ public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionD
       )
       return
     }
-    try await sendData(data)
+    // Type-only requests are not idempotent; avoid using application context
+    try await sendData(data, allowContextFallback: false)
   }
 
-  private func sendData(_ data: Data) async throws {
+  private func sendData(_ data: Data, allowContextFallback: Bool) async throws {
     // Prefer interactive messaging for small payloads when reachable; otherwise use background transfer
     let interactiveLimit = 60 * 1024
     if data.count > interactiveLimit {
@@ -266,13 +284,15 @@ public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionD
         metadata: nil
       )
     } else {
-      // When not reachable, push latest state via application context for faster delivery, and also queue background transfer
-      _ = try? session.updateApplicationContext(["data": data])
+      // When not reachable, optionally push via application context (idempotent types only)
+      if allowContextFallback {
+        _ = try? session.updateApplicationContext(["data": data])
+      }
       session.transferUserInfo(["data": data])
       Log.event(
         .saveSucceeded,
         level: .debug,
-        message: "wc.contextAndTransfer",
+        message: allowContextFallback ? "wc.contextAndTransfer" : "wc.transferUserInfo",
         metadata: nil
       )
     }
@@ -283,7 +303,7 @@ public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionD
     { _ in
       Task { @MainActor in
         let sess = WCSession.default
-        _ = try? sess.updateApplicationContext(["data": data])
+        // On error, avoid using application context; rely on background transfer
         sess.transferUserInfo(["data": data])
       }
     }
@@ -313,6 +333,31 @@ public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionD
   }
 
   private func handleInbound(data: Data) {
+    // Validate envelope/session before decoding payload
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    guard let envelope = try? decoder.decode(SyncEnvelope.self, from: data) else { return }
+    if let incomingSession = envelope.sessionId {
+      if let currentSession = self.sessionId {
+        if incomingSession != currentSession {
+          Log.event(
+            .loadFailed,
+            level: .warn,
+            message: "wc.envelope.sessionId.mismatch",
+            metadata: [
+              "incomingSessionId": incomingSession.uuidString,
+              "currentSessionId": self.sessionId?.uuidString ?? "nil",
+              "type": envelope.type.rawValue,
+              "platform": "iOS"
+            ]
+          )
+          return
+        }
+      } else {
+        // Adopt peer session if we haven't established one yet
+        self.sessionId = incomingSession
+      }
+    }
     guard let (type, anyValue) = try? MessageCodec.decode(data) else { return }
     Log.event(
       .loadSucceeded,
@@ -368,9 +413,9 @@ public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionD
         self.pendingSends.removeAll()
         for item in queued {
           if item.preferContext {
-            do { try self.session.updateApplicationContext(["data": item.data]) } catch { try? await self.sendData(item.data) }
+            do { try self.session.updateApplicationContext(["data": item.data]) } catch { try? await self.sendData(item.data, allowContextFallback: false) }
           } else {
-            try? await self.sendData(item.data)
+            try? await self.sendData(item.data, allowContextFallback: false)
           }
         }
       }
@@ -452,9 +497,9 @@ public final class WatchConnectivityTransport: NSObject, SyncService, WCSessionD
     pendingSends.removeAll()
     for item in queued {
       if item.preferContext {
-        do { try session.updateApplicationContext(["data": item.data]) } catch { try? await sendData(item.data) }
+        do { try session.updateApplicationContext(["data": item.data]) } catch { try? await sendData(item.data, allowContextFallback: false) }
       } else {
-        try? await sendData(item.data)
+        try? await sendData(item.data, allowContextFallback: false)
       }
     }
   }

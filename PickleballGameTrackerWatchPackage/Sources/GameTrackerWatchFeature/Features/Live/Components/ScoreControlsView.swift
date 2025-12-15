@@ -2,6 +2,7 @@ import GameTrackerCore
 import SwiftData
 import SwiftUI
 
+@MainActor
 struct ScoreControlsView: View {
   @Bindable var game: Game
   @Environment(\.modelContext) private var modelContext
@@ -25,89 +26,68 @@ struct ScoreControlsView: View {
   @State private var wasJustResumed: Bool = false
 
   var body: some View {
-    VStack(spacing: DesignSystem.Spacing.sm) {
-      timerDisplay()
+    Group {
+      if game.isDetachedFromContext {
+        Color.clear
+      } else {
+        HStack(spacing: DesignSystem.Spacing.sm) {
+            teamScoreSection(
+              teamNumber: 1,
+              teamName: teamName(for: 1),
+              score: game.score1,
+              color: game.teamTintColor(for: 1, context: modelContext),
+              isServing: game.currentServer == 1 && !game.safeIsCompleted,
+              previousScore: previousScore1,
+              matchLabelVisible: $matchLabelVisible1,
+              serveLabelVisible: $serveLabelVisible1,
+              onScoreChange: { newScore in
+                previousScore1 = newScore
+              }
+            )
 
-      HStack(spacing: DesignSystem.Spacing.sm) {
-        teamScoreSection(
-          teamNumber: 1,
-          teamName: teamName(for: 1),
-          score: game.score1,
-          color: game.teamTintColor(for: 1, context: modelContext),
-          isServing: game.currentServer == 1 && !game.safeIsCompleted,
-          previousScore: previousScore1,
-          matchLabelVisible: $matchLabelVisible1,
-          serveLabelVisible: $serveLabelVisible1,
-          onScoreChange: { newScore in
-            previousScore1 = newScore
+            teamScoreSection(
+              teamNumber: 2,
+              teamName: teamName(for: 2),
+              score: game.score2,
+              color: game.teamTintColor(for: 2, context: modelContext),
+              isServing: game.currentServer == 2 && !game.safeIsCompleted,
+              previousScore: previousScore2,
+              matchLabelVisible: $matchLabelVisible2,
+              serveLabelVisible: $serveLabelVisible2,
+              onScoreChange: { newScore in
+                previousScore2 = newScore
+              }
+            )
           }
-        )
-
-        teamScoreSection(
-          teamNumber: 2,
-          teamName: teamName(for: 2),
-          score: game.score2,
-          color: game.teamTintColor(for: 2, context: modelContext),
-          isServing: game.currentServer == 2 && !game.safeIsCompleted,
-          previousScore: previousScore2,
-          matchLabelVisible: $matchLabelVisible2,
-          serveLabelVisible: $serveLabelVisible2,
-          onScoreChange: { newScore in
-            previousScore2 = newScore
-          }
-        )
+          .animation(
+            isLuminanceReduced ? nil : .spring(response: 0.3, dampingFraction: 0.8),
+            value: game.score1
+          )
+          .animation(
+            isLuminanceReduced ? nil : .spring(response: 0.3, dampingFraction: 0.8),
+            value: game.score2
+          )
+          .animation(
+            isLuminanceReduced ? nil : .spring(response: 0.3, dampingFraction: 0.8),
+            value: game.currentServer
+          )
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .contentShape(.rect)
       }
-      .animation(
-        isLuminanceReduced ? nil : .spring(response: 0.3, dampingFraction: 0.8),
-        value: game.score1
-      )
-      .animation(
-        isLuminanceReduced ? nil : .spring(response: 0.3, dampingFraction: 0.8),
-        value: game.score2
-      )
-      .animation(
-        isLuminanceReduced ? nil : .spring(response: 0.3, dampingFraction: 0.8),
-        value: game.currentServer
-      )
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .contentShape(.rect)
-  }
-
-  // MARK: - Timer Display (read-only)
-
-  @ViewBuilder
-  private func timerDisplay() -> some View {
-    let isPlaying = liveGameStateManager.isGameLive
-
-    HStack(spacing: 4) {
-      Image(systemName: "timer")
-        .font(.system(size: 12, weight: .semibold))
-        .foregroundStyle(isLuminanceReduced ? .secondary : .primary)
-
-      Text(isLuminanceReduced
-           ? liveGameStateManager.formattedElapsedTime
-           : liveGameStateManager.formattedElapsedTimeWithCentiseconds)
-        .font(.system(size: 14, weight: .semibold, design: .monospaced))
-        .foregroundStyle(isLuminanceReduced ? .secondary : .primary)
-    }
-    .frame(maxWidth: .infinity)
-    .scaleEffect(isPlaying ? 1.0 : 0.95)
-    .padding(.horizontal, DesignSystem.Spacing.sm)
-    .padding(.vertical, DesignSystem.Spacing.xs)
-    .glassEffect()
-    .opacity(game.safeIsCompleted ? 0.6 : 1.0)
-    .animation(isLuminanceReduced ? nil : .easeInOut(duration: 0.2), value: game.safeIsCompleted)
   }
 
   // MARK: - Helper Functions
 
   private func teamName(for teamNumber: Int) -> String {
+    guard !game.isDetachedFromContext else {
+      return teamNumber == 1 ? "Team 1" : "Team 2"
+    }
     let teamConfigs = game.teamsWithLabels(context: modelContext)
     if let config = teamConfigs.first(where: { $0.teamNumber == teamNumber }) {
       return config.teamName
     }
-    preconditionFailure("Team display name not resolvable for team=\(teamNumber). Ensure participants are set.")
+    return teamNumber == 1 ? game.effectivePlayerLabel1 : game.effectivePlayerLabel2
   }
   
   private func isWinner(teamNumber: Int) -> Bool {
@@ -283,6 +263,16 @@ struct ScoreControlsView: View {
         }
     )
       .onAppear {
+        Log.event(
+          .viewAppear,
+          level: .debug,
+          message: "ScoreControlsView appeared",
+          context: .current(gameId: game.id),
+          metadata: [
+            "scoreControls.gameType": game.gameType.rawValue,
+            "participantMode": (game.participantMode == .players ? "players" : "teams")
+          ]
+        )
         previousScore1 = game.score1
         previousScore2 = game.score2
         hasAppeared = true

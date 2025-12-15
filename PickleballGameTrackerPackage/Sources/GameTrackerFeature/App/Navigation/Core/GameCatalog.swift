@@ -19,5 +19,3 @@ enum GameCatalog {
 
   static let allGameTypes: [GameType] = GameType.allTypes
 }
-
-

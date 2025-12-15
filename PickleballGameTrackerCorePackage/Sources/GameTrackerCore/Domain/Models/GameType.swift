@@ -14,6 +14,8 @@ public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
   case training = "training"
   case social = "social"
   case custom = "custom"
+  case cutthroat = "cutthroat"
+  case groupPlay = "groupPlay"
 
   public var displayName: String {
     switch self {
@@ -27,6 +29,10 @@ public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
       return "Social"
     case .custom:
       return "Custom"
+    case .cutthroat:
+      return "Cutthroat"
+    case .groupPlay:
+      return "Group Play"
     }
   }
 
@@ -42,6 +48,10 @@ public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
       return "Fun variations and group play formats"
     case .custom:
       return "Create your own rules and game format"
+    case .cutthroat:
+      return "Rotating play with 3+ players (2v1 style)"
+    case .groupPlay:
+      return "Schedule multiple matches for a group (random pairings or bracket)"
     }
   }
 
@@ -54,6 +64,8 @@ public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
     case .training: return "figure.strengthtraining.traditional"
     case .social: return "person.3.fill"
     case .custom: return "slider.horizontal.3"
+    case .cutthroat: return "person.3.sequence"
+    case .groupPlay: return "square.grid.2x2.fill"
     }
   }
 
@@ -65,6 +77,8 @@ public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
     case .training: return 0.25  // Practice
     case .social: return 0.6  // Variable
     case .custom: return 1.0  // Variable (max to indicate complexity)
+    case .cutthroat: return 0.7  // Group play
+    case .groupPlay: return 0.75  // Session orchestration
     }
   }
 
@@ -75,6 +89,8 @@ public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
     case .training: return "2-4 Players"
     case .social: return "2-6 Players"
     case .custom: return "1-6 Players"
+    case .cutthroat: return "3-20 Players"
+    case .groupPlay: return "2-20 Players"
     }
   }
 
@@ -85,6 +101,8 @@ public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
     case .training: return "8-15 min"
     case .social: return "10-30 min"
     case .custom: return "5-60 min"
+    case .cutthroat: return "10-60 min"
+    case .groupPlay: return "30-120 min"
     }
   }
 
@@ -95,6 +113,8 @@ public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
     case .training: return "Practice"
     case .social: return "Variable"
     case .custom: return "Variable"
+    case .cutthroat: return "Variable"
+    case .groupPlay: return "Competitive"
     }
   }
 
@@ -109,6 +129,8 @@ public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
     case .training: return "2-4"
     case .social: return "2-6"
     case .custom: return "1-6"
+    case .cutthroat: return "3-20"
+    case .groupPlay: return "2-20"
     }
   }
 
@@ -119,12 +141,14 @@ public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
     case .training: return "8-15"
     case .social: return "10-30"
     case .custom: return "5-60"
+    case .cutthroat: return "10-60"
+    case .groupPlay: return "30-120"
     }
   }
 
   public var timeUnitLabel: String {
     switch self {
-    case .recreational, .tournament, .training, .social, .custom:
+    case .recreational, .tournament, .training, .social, .custom, .cutthroat, .groupPlay:
       return "Minutes"
     }
   }
@@ -137,6 +161,8 @@ public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
     case .training: return 7
     case .social: return 11
     case .custom: return 11  // Default, but customizable
+    case .cutthroat: return 11
+    case .groupPlay: return 11
     }
   }
 
@@ -147,20 +173,22 @@ public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
     case .training: return false  // Faster completion for practice
     case .social: return true
     case .custom: return true  // Default, but customizable
+    case .cutthroat: return true
+    case .groupPlay: return true
     }
   }
 
   // All game types follow official pickleball rules (kept for backward compatibility)
   public var defaultKitchenRule: Bool {
     switch self {
-    case .recreational, .tournament, .training, .social, .custom:
+    case .recreational, .tournament, .training, .social, .custom, .cutthroat, .groupPlay:
       return true  // No exceptions - all use official rules
     }
   }
 
   public var defaultDoubleBounceRule: Bool {
     switch self {
-    case .recreational, .tournament, .training, .social, .custom:
+    case .recreational, .tournament, .training, .social, .custom, .cutthroat, .groupPlay:
       return true  // No exceptions - all use official rules
     }
   }
@@ -172,6 +200,8 @@ public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
     case .training: return .never  // In-game logic handles switching for training
     case .social: return .never  // In-game logic handles switching for social
     case .custom: return .never  // Default to never; user variations can override
+    case .cutthroat: return .never
+    case .groupPlay: return .at6Points
     }
   }
   
@@ -189,6 +219,8 @@ public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
     case .training: return true  // 1-4 players per team
     case .social: return true  // 1-6 players per team for group formats
     case .custom: return true  // Full customization
+    case .cutthroat: return false  // Player list only
+    case .groupPlay: return true  // Sessions can run singles/doubles via players or teams
     }
   }
 
@@ -199,6 +231,8 @@ public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
     case .training: return 2  // Practice doubles most common
     case .social: return 2  // Doubles for social play
     case .custom: return 2  // Default, but customizable
+    case .cutthroat: return 1  // N/A but keep singles for engine
+    case .groupPlay: return 2  // Default to doubles; session setup can choose singles or 2v1
     }
   }
 
@@ -209,6 +243,8 @@ public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
     case .training: return 1
     case .social: return 1
     case .custom: return 1
+    case .cutthroat: return 1
+    case .groupPlay: return 1
     }
   }
 
@@ -219,6 +255,28 @@ public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
     case .training: return 4  // Full range
     case .social: return 6  // Extended for group formats
     case .custom: return 6  // Extended for testing
+    case .cutthroat: return 2  // Engine supports up to doubles per side
+    case .groupPlay: return 2  // Singles or doubles (2v1 supported via teams)
+    }
+  }
+
+  // MARK: - Total Players Constraints (for formats like cutthroat)
+
+  /// Minimum total players supported for this game type (not per side)
+  public var minPlayersTotal: Int {
+    switch self {
+    case .cutthroat: return 2
+    case .groupPlay: return 2
+    default: return 2
+    }
+  }
+
+  /// Maximum total players supported for this game type (not per side)
+  public var maxPlayersTotal: Int {
+    switch self {
+    case .cutthroat: return 20
+    case .groupPlay: return 20
+    default: return 4
     }
   }
 
@@ -273,6 +331,10 @@ public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
       return "Group formats, social variations, flexible rules"
     case .custom:
       return "Edge cases, boundary testing, rule combinations"
+    case .cutthroat:
+      return "Rotating 2v1 scenarios with 3+ players"
+    case .groupPlay:
+      return "Session scheduling with randomized pairings and tournament brackets"
     }
   }
 }
@@ -287,7 +349,7 @@ extension GameType {
   public static let beginnerTypes: [GameType] = [.training, .recreational]
 
   /// Competitive game types
-  public static let competitiveTypes: [GameType] = [.tournament]
+  public static let competitiveTypes: [GameType] = [.tournament, .groupPlay]
 
   /// Social/group game types
   public static let socialTypes: [GameType] = [.social, .recreational]

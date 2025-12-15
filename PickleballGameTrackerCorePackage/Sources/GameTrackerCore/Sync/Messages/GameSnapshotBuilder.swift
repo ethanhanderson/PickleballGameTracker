@@ -13,6 +13,7 @@ public struct GameSnapshotBuilder {
   ) -> LiveGameSnapshotDTO {
     return LiveGameSnapshotDTO(
       gameId: game.id,
+      snapshotCreatedAt: game.lastModified,
       elapsedTime: elapsedTime,
       isTimerRunning: isTimerRunning,
       gameType: game.gameType,

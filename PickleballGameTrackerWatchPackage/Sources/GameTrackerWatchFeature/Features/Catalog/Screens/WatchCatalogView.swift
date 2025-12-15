@@ -9,6 +9,7 @@ import SwiftUI
 //  Created by Ethan Anderson on 7/9/25.
 //
 
+@MainActor
 public struct WatchCatalogView: View {
     // MARK: - Environment
     
@@ -33,6 +34,8 @@ public struct WatchCatalogView: View {
     @State private var isStartingNewGame = false
     @State private var isLastGameAvailable = false
     @State private var isStartingLastGame = false
+    @State private var showingRecentGamesSheet = false
+    @State private var pendingSelectedGame: Game?
     
     // MARK: - Conflict & Error State
     
@@ -43,7 +46,9 @@ public struct WatchCatalogView: View {
     
     // MARK: - Constants
     
-    private let gameTypes = GameType.watchSupportedCases
+    @Query(
+        sort: [SortDescriptor<GameSummary>(\.completedDate, order: .reverse)]
+    ) private var recentSummaries: [GameSummary]
 
     // MARK: - Initialization
     
@@ -99,7 +104,7 @@ public struct WatchCatalogView: View {
                             
                             Button {
                                 if isLastGameAvailable {
-                                    handleStartLastGameTapped()
+                                    showingRecentGamesSheet = true
                                 } else {
                                     handlePlayButtonTapped()
                                 }
@@ -165,9 +170,14 @@ public struct WatchCatalogView: View {
         .task {
             await refreshLastGameAvailability()
         }
+        .onChange(of: liveGameStateManager.hasLiveGame) { _, hasLive in
+            if hasLive {
+                isStartingNewGame = false
+            }
+        }
         .onChange(of: selectedTab) { _, newValue in
             withAnimation(.easeInOut) { showTopBarActions = true }
-            Task {
+            Task { @MainActor in
                 await refreshLastGameAvailability()
             }
         }
@@ -179,16 +189,7 @@ public struct WatchCatalogView: View {
             Button("Complete current game") {
                 Task { @MainActor in
                     do {
-                        let gameId = liveGameStateManager.currentGame?.id
-                        let elapsed = liveGameStateManager.elapsedTime
                         try await liveGameStateManager.completeCurrentGame()
-                        if let gameId {
-                            try? await syncCoordinator.publish(delta: LiveGameDeltaDTO(
-                                gameId: gameId,
-                                timestamp: elapsed,
-                                operation: .setGameState(.completed)
-                            ))
-                        }
                     } catch {
                         Log.error(
                             error,
@@ -197,7 +198,10 @@ public struct WatchCatalogView: View {
                         )
                     }
                     
-                    if pendingLastGameStart {
+                    if let selected = pendingSelectedGame {
+                        pendingSelectedGame = nil
+                        await startFromCompleted(selected)
+                    } else if pendingLastGameStart {
                         await performLastGameStart()
                         pendingLastGameStart = false
                     }
@@ -215,6 +219,24 @@ public struct WatchCatalogView: View {
         } message: {
             Text(errorMessage)
         }
+        .sheet(isPresented: $showingRecentGamesSheet) {
+            WatchRecentGamesSheet(gameType: uiGameTypeForTint) { game in
+                Task { @MainActor in
+                    showingRecentGamesSheet = false
+                    guard game.modelContext != nil else {
+                        errorMessage = "Selected game is no longer available."
+                        showingError = true
+                        return
+                    }
+                    if liveGameStateManager.hasLiveGame {
+                        pendingSelectedGame = game
+                        showingLiveGameConflict = true
+                    } else {
+                        await startFromCompleted(game)
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Tab Content
@@ -222,7 +244,7 @@ public struct WatchCatalogView: View {
     @ViewBuilder
     private func tabViewContent() -> some View {
         TabView(selection: $selectedTab) {
-            ForEach(gameTypes, id: \.self) { gameType in
+            ForEach(rankedGameTypes, id: \.self) { gameType in
                 GameTypeCard(gameType: gameType)
                     .frame(
                         maxWidth: .infinity,
@@ -281,33 +303,7 @@ public struct WatchCatalogView: View {
         }
     }
     
-    private func handleStartLastGameTapped() {
-        Log.event(
-            .actionTapped,
-            level: .debug,
-            message: "Start last game tapped",
-            metadata: ["platform": "watchOS", "gameType": uiGameTypeForTint.rawValue]
-        )
-        
-        if isPreviewing {
-            // Start last game is allowed in previews
-        }
-        
-        guard !isStartingLastGame else { return }
-        isStartingLastGame = true
-        
-        Task { @MainActor in
-            defer { isStartingLastGame = false }
-            
-            if liveGameStateManager.hasLiveGame {
-                pendingLastGameStart = true
-                showingLiveGameConflict = true
-                return
-            }
-            
-            await performLastGameStart()
-        }
-    }
+    private func handleStartLastGameTapped() { /* replaced by sheet */ }
     
     private func performLastGameStart() async {
         do {
@@ -349,18 +345,67 @@ public struct WatchCatalogView: View {
             showingError = true
         }
     }
+
+    private func startFromCompleted(_ lastGame: Game) async {
+        guard lastGame.modelContext != nil else {
+            errorMessage = "Selected game is no longer available."
+            showingError = true
+            return
+        }
+        do {
+            let game = try await liveGameStateManager.startGameFromCompleted(lastGame)
+
+            Log.event(
+                .viewAppear,
+                level: .info,
+                message: "Selected recent game started",
+                context: .current(gameId: game.id),
+                metadata: ["gameType": uiGameTypeForTint.rawValue, "platform": "watchOS"]
+            )
+
+            NotificationCenter.default.post(
+                name: Notification.Name("OpenLiveGameRequested"),
+                object: nil
+            )
+
+            let snapshot = GameSnapshotBuilder.make(
+                from: game,
+                elapsedTime: liveGameStateManager.elapsedTime,
+                isTimerRunning: liveGameStateManager.isTimerRunning
+            )
+            try? await syncCoordinator.publish(snapshot: snapshot)
+        } catch let error as GameRulesError {
+            errorMessage = error.localizedDescription
+            if let suggestion = error.recoverySuggestion {
+                errorMessage += "\n\n" + suggestion
+            }
+            showingError = true
+        } catch {
+            Log.error(
+                error,
+                event: .saveFailed,
+                metadata: ["phase": "startFromCompleted", "platform": "watchOS"]
+            )
+            errorMessage = "Failed to start selected game: \(error.localizedDescription)"
+            showingError = true
+        }
+    }
     
     private func refreshLastGameAvailability() async {
-        let hasRecent = (try? await gameManager.mostRecentCompletedGame(of: uiGameTypeForTint)) != nil
-        await MainActor.run {
-            isLastGameAvailable = hasRecent
-        }
+        let hasRecent: Bool = {
+            var fd = FetchDescriptor<GameSummary>(
+                predicate: #Predicate { $0.gameTypeId == uiGameTypeForTint.rawValue }
+            )
+            fd.fetchLimit = 1
+            return (try? modelContext.fetch(fd))?.isEmpty == false
+        }()
+        await MainActor.run { isLastGameAvailable = hasRecent }
     }
 
     private func startLocalPreviewGame() {
         guard !isCreatingGame else { return }
         isCreatingGame = true
-        Task {
+        Task { @MainActor in
             do {
                 let newGame = try await gameManager.createGame(
                     type: uiGameTypeForTint
@@ -396,6 +441,29 @@ public struct WatchCatalogView: View {
     
     private var isPreviewing: Bool {
         ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
+    }
+
+    // Rank all game types by recent play (21 days), then by last played date
+    private var rankedGameTypes: [GameType] {
+        let all = GameType.allTypes
+        let now = Date()
+        let cutoff = Calendar.current.date(byAdding: .day, value: -21, to: now) ?? .distantPast
+        var countsById: [String: Int] = [:]
+        var lastPlayedById: [String: Date] = [:]
+        for s in recentSummaries {
+            lastPlayedById[s.gameTypeId] = max(lastPlayedById[s.gameTypeId] ?? .distantPast, s.completedDate)
+            if s.completedDate >= cutoff {
+                countsById[s.gameTypeId, default: 0] += 1
+            }
+        }
+        return all.sorted { lhs, rhs in
+            let lc = countsById[lhs.rawValue] ?? 0
+            let rc = countsById[rhs.rawValue] ?? 0
+            if lc != rc { return lc > rc }
+            let ld = lastPlayedById[lhs.rawValue] ?? .distantPast
+            let rd = lastPlayedById[rhs.rawValue] ?? .distantPast
+            return ld > rd
+        }
     }
 }
 

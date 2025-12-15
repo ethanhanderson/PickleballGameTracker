@@ -316,6 +316,8 @@ struct CurrentMatchupSection: View {
     let sideBEntities: [any GameEntity]
     let sideAHasTeam: Bool
     let sideBHasTeam: Bool
+    let sideATeam: TeamProfile?
+    let sideBTeam: TeamProfile?
     let onRemove: (any GameEntity) -> Void
 
     private var maxPlayersPerSide: Int {
@@ -334,43 +336,106 @@ struct CurrentMatchupSection: View {
         if hasSelections {
             Section {
                 VStack(spacing: DesignSystem.Spacing.md) {
-                    ForEach(Array(allEntities.enumerated()), id: \.element.id) {
-                        index,
-                        entity in
-                        MatchupEntityRow(
-                            entity: entity,
-                            onRemove: { onRemove(entity) }
-                        )
-
-                        if index == sideAEntities.count - 1
-                            && !sideBEntities.isEmpty
-                        {
-                            ZStack(alignment: .center) {
-                                Text("vs")
-                                    .font(.caption)
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(.secondary)
-                                    .padding(
-                                        .horizontal,
-                                        DesignSystem.Spacing.sm
-                                    )
-                                    .padding(.vertical, DesignSystem.Spacing.xs)
-
-                                ZStack(alignment: .center) {
-                                    Capsule()
-                                        .fill(.primary)
-                                        .frame(
-                                            width: 40,
-                                            height: 25
-                                        )
-
-                                    Capsule()
-                                        .fill(.primary)
-                                        .frame(height: 2)
+                    if !sideAEntities.isEmpty {
+                        HStack {
+                            Text("South")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, DesignSystem.Spacing.sm)
+                                .padding(.vertical, DesignSystem.Spacing.xs)
+                                .glassEffect(
+                                    .regular.tint(Color.gray.opacity(0.15).opacity(0.2))
+                                )
+                            Spacer()
+                            if let team = sideATeam {
+                                HStack(spacing: DesignSystem.Spacing.sm) {
+                                    Circle()
+                                        .fill(team.accentColorStored.swiftUIColor.gradient)
+                                        .frame(width: 16, height: 16)
+                                    Text(team.name)
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .foregroundStyle(.secondary)
                                 }
-                                .compositingGroup()
-                                .opacity(0.03)
+                                .padding(.horizontal, DesignSystem.Spacing.sm)
+                                .padding(.vertical, DesignSystem.Spacing.xs)
+                                .glassEffect(
+                                    .regular.tint(team.accentColorStored.swiftUIColor.opacity(0.08))
+                                )
                             }
+                        }
+                        ForEach(sideAEntities, id: \.id) { entity in
+                            MatchupEntityRow(
+                                entity: entity,
+                                onRemove: { onRemove(entity) }
+                            )
+                        }
+                    }
+
+                    if !sideAEntities.isEmpty && !sideBEntities.isEmpty {
+                        ZStack(alignment: .center) {
+                            Text("vs")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.secondary)
+                                .padding(
+                                    .horizontal,
+                                    DesignSystem.Spacing.sm
+                                )
+                                .padding(.vertical, DesignSystem.Spacing.xs)
+
+                            ZStack(alignment: .center) {
+                                Capsule()
+                                    .fill(.primary)
+                                    .frame(
+                                        width: 40,
+                                        height: 25
+                                    )
+
+                                Capsule()
+                                    .fill(.primary)
+                                    .frame(height: 2)
+                            }
+                            .compositingGroup()
+                            .opacity(0.03)
+                        }
+                    }
+
+                    if !sideBEntities.isEmpty {
+                        HStack {
+                            Text("North")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, DesignSystem.Spacing.sm)
+                                .padding(.vertical, DesignSystem.Spacing.xs)
+                                .glassEffect(
+                                    .regular.tint(Color.gray.opacity(0.15).opacity(0.2))
+                                )
+                            Spacer()
+                            if let team = sideBTeam {
+                                HStack(spacing: DesignSystem.Spacing.sm) {
+                                    Circle()
+                                        .fill(team.accentColorStored.swiftUIColor.gradient)
+                                        .frame(width: 16, height: 16)
+                                    Text(team.name)
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(.horizontal, DesignSystem.Spacing.sm)
+                                .padding(.vertical, DesignSystem.Spacing.xs)
+                                .glassEffect(
+                                    .regular.tint(team.accentColorStored.swiftUIColor.opacity(0.08))
+                                )
+                            }
+                        }
+                        ForEach(sideBEntities, id: \.id) { entity in
+                            MatchupEntityRow(
+                                entity: entity,
+                                onRemove: { onRemove(entity) }
+                            )
                         }
                     }
                 }
@@ -378,6 +443,183 @@ struct CurrentMatchupSection: View {
             } header: {
                 Text("Current Matchup")
             }
+        }
+    }
+}
+
+@MainActor
+struct GameFormatOptionsView: View {
+    let gameType: GameType
+    @Binding var selectedTeamSize: Int
+    @Binding var selectedTeamSizeA: Int
+    @Binding var selectedTeamSizeB: Int
+    @Binding var cutthroatPlayerCount: Int
+    @Binding var isCutthroatPickerExpanded: Bool
+    let teamSizeOptions: [TeamSizeOption]
+
+    var body: some View {
+        Group {
+            if gameType == .custom {
+                Section("Team Format") {
+                    Picker("South Size", selection: $selectedTeamSizeA) {
+                        ForEach(teamSizeOptions, id: \.size) { option in
+                            Text(option.displayName).tag(option.size)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .tint(gameType.color)
+
+                    Picker("North Size", selection: $selectedTeamSizeB) {
+                        ForEach(teamSizeOptions, id: \.size) { option in
+                            Text(option.displayName).tag(option.size)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .tint(gameType.color)
+                }
+            } else if gameType == .cutthroat {
+                Section("Number of Players") {
+                    HStack {
+                        Text("Players")
+                            .font(.title3)
+                            .foregroundStyle(.primary)
+
+                        Spacer()
+
+                        Button(action: {
+                            withAnimation {
+                                isCutthroatPickerExpanded.toggle()
+                            }
+                        }) {
+                            Text("\(cutthroatPlayerCount)")
+                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.primary)
+                                .padding(.horizontal, DesignSystem.Spacing.md)
+                                .frame(height: 32)
+                                .background(
+                                    Capsule().fill(.gray.opacity(0.1))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    if isCutthroatPickerExpanded {
+                        Picker("Players", selection: $cutthroatPlayerCount) {
+                            ForEach(gameType.minPlayersTotal...gameType.maxPlayersTotal, id: \.self) { n in
+                                Text("\(n)").tag(n)
+                            }
+                        }
+                        .pickerStyle(.wheel)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .tint(gameType.color)
+                    }
+                }
+            } else {
+                TeamFormatSection(
+                    gameType: gameType,
+                    selectedTeamSize: $selectedTeamSize,
+                    teamSizeOptions: teamSizeOptions
+                )
+            }
+        }
+    }
+}
+
+@MainActor
+struct TeamPickerSectionView: View {
+    let teams: [TeamProfile]
+    let selectedTeamIds: Set<UUID>
+    let isEntityDisabled: (any GameEntity) -> Bool
+    let selectionColor: Color
+    let onCreateNew: () -> Void
+    let onToggleTeam: (TeamProfile) -> Void
+
+    var body: some View {
+        EntitySelectionSection(
+            title: "Select Teams",
+            entities: teams,
+            selectedEntityIds: selectedTeamIds,
+            isEntityDisabled: isEntityDisabled,
+            onToggleSelection: { entity in
+                if let team = entity as? TeamProfile {
+                    onToggleTeam(team)
+                }
+            },
+            selectionNumbers: nil,
+            selectionColor: selectionColor,
+            createButtonLabel: "New Team",
+            createButtonIcon: "person.2.badge.plus.fill",
+            onCreateNew: onCreateNew
+        )
+    }
+}
+
+@MainActor
+struct PlayerPickerSectionView: View {
+    let players: [PlayerProfile]
+    let selectedPlayerIds: Set<UUID>
+    let selectionNumbers: [UUID: Int]
+    let selectionColor: Color
+    let isEntityDisabled: (any GameEntity) -> Bool
+    let onCreateNew: () -> Void
+    let onTogglePlayer: (PlayerProfile) -> Void
+
+    var body: some View {
+        EntitySelectionSection(
+            title: "Select Players",
+            entities: players,
+            selectedEntityIds: selectedPlayerIds,
+            isEntityDisabled: isEntityDisabled,
+            onToggleSelection: { entity in
+                if let player = entity as? PlayerProfile {
+                    onTogglePlayer(player)
+                }
+            },
+            selectionNumbers: selectionNumbers,
+            selectionColor: selectionColor,
+            createButtonLabel: "New Player",
+            createButtonIcon: "person.fill.badge.plus",
+            onCreateNew: onCreateNew
+        )
+    }
+}
+
+@MainActor
+struct CutthroatMatchupSection: View {
+    let entities: [any GameEntity]
+    let onRemove: (any GameEntity) -> Void
+
+    var body: some View {
+        if !entities.isEmpty {
+            Section {
+                VStack(spacing: DesignSystem.Spacing.md) {
+                    ForEach(entities, id: \.id) { entity in
+                        MatchupEntityRow(
+                            entity: entity,
+                            onRemove: { onRemove(entity) }
+                        )
+                    }
+                }
+                .padding(.vertical, DesignSystem.Spacing.sm)
+            } header: {
+                Text("Players")
+            }
+        }
+    }
+}
+
+@MainActor
+struct FillRemainingSlotsButton: View {
+    let accentColor: Color
+    let action: () -> Void
+
+    var body: some View {
+        Section {
+            Button(action: action) {
+                Text("Fill remaining slots with guests")
+            }
+            .foregroundStyle(accentColor)
+            .accessibilityIdentifier("setup.fillGuests")
         }
     }
 }
@@ -397,6 +639,9 @@ struct SetupView: View {
     @Environment(PlayerTeamManager.self) private var rosterManager
 
     @State private var selectedTeamSize: Int = 1
+    @State private var selectedTeamSizeA: Int = 1
+    @State private var selectedTeamSizeB: Int = 1
+    @State private var cutthroatPlayerCount: Int = 3
     @State private var selectedPlayerOrder: [UUID: Int] = [:]
     @State private var selectedPlayers: [PlayerProfile] = []
     @State private var selectedTeam1: TeamProfile?
@@ -413,6 +658,10 @@ struct SetupView: View {
     @State private var showPlayerSheet = false
     @State private var showTeamSheet = false
     @State private var globalNav = GlobalNavigationState.shared
+    @State private var isCutthroatPickerExpanded = false
+    @State private var isCutthroatScorePickerExpanded = false
+    @State private var cutthroatTargetScore: Int = 11
+    @State private var cutthroatNoLimit: Bool = false
 
     @Environment(\.dismiss) private var dismiss
 
@@ -446,66 +695,71 @@ struct SetupView: View {
         Set(selectedPlayers.map { $0.id })
     }
 
-    private var slotsPerSide: Int {
-        selectedTeamSize
-    }
+    private var slotsPerSide: Int { selectedTeamSize }
+    private var slotsPerSideA: Int { gameType == .custom ? selectedTeamSizeA : selectedTeamSize }
+    private var slotsPerSideB: Int { gameType == .custom ? selectedTeamSizeB : selectedTeamSize }
 
     private var totalSlots: Int {
-        slotsPerSide * 2
+        if gameType == .cutthroat {
+            return cutthroatPlayerCount
+        }
+        return slotsPerSideA + slotsPerSideB
     }
 
     private var totalSlotsFilled: Int {
         var count = 0
 
-        if selectedTeam1 != nil {
-            count += selectedTeamSize
+        if gameType == .cutthroat {
+            count = selectedPlayers.count
         } else {
-            count += min(sideAPlayers.count, slotsPerSide)
-        }
+            if selectedTeam1 != nil {
+                count += slotsPerSideA
+            } else {
+                count += min(sideAPlayers.count, slotsPerSideA)
+            }
 
-        if selectedTeam2 != nil {
-            count += selectedTeamSize
-        } else {
-            count += min(sideBPlayers.count, slotsPerSide)
+            if selectedTeam2 != nil {
+                count += slotsPerSideB
+            } else {
+                count += min(sideBPlayers.count, slotsPerSideB)
+            }
         }
 
         return count
     }
 
-    private var slotsRemaining: Int {
-        totalSlots - totalSlotsFilled
-    }
+    private var slotsRemaining: Int { max(0, totalSlots - totalSlotsFilled) }
 
     private var sideASlotsFilled: Int {
-        if selectedTeam1 != nil {
-            return selectedTeamSize
-        }
-        return min(selectedPlayers.count, slotsPerSide)
+        if gameType == .cutthroat { return min(selectedPlayers.count, max(1, cutthroatPlayerCount / 2 + (cutthroatPlayerCount % 2))) }
+        if selectedTeam1 != nil { return slotsPerSideA }
+        return min(selectedPlayers.count, slotsPerSideA)
     }
 
     private var sideBSlotsFilled: Int {
-        if selectedTeam2 != nil {
-            return selectedTeamSize
-        }
+        if gameType == .cutthroat { return max(0, selectedPlayers.count - sideASlotsFilled) }
+        if selectedTeam2 != nil { return slotsPerSideB }
         let playersForSideB = max(0, selectedPlayers.count - sideASlotsFilled)
-        return min(playersForSideB, slotsPerSide)
+        return min(playersForSideB, slotsPerSideB)
     }
 
     private var sideAPlayers: [PlayerProfile] {
-        if selectedTeam1 != nil {
-            return []
+        if selectedTeam1 != nil { return [] }
+        if gameType == .cutthroat {
+            // Alternate assignment: even indices to side A
+            return selectedPlayers.enumerated().compactMap { idx, p in idx % 2 == 0 ? p : nil }
         }
-        return Array(
-            selectedPlayers.prefix(min(selectedPlayers.count, slotsPerSide))
-        )
+        return Array(selectedPlayers.prefix(min(selectedPlayers.count, slotsPerSideA)))
     }
 
     private var sideBPlayers: [PlayerProfile] {
-        if selectedTeam2 != nil {
-            return []
+        if selectedTeam2 != nil { return [] }
+        if gameType == .cutthroat {
+            // Alternate assignment: odd indices to side B
+            return selectedPlayers.enumerated().compactMap { idx, p in idx % 2 == 1 ? p : nil }
         }
         let offset = selectedTeam1 != nil ? 0 : sideAPlayers.count
-        return Array(selectedPlayers.dropFirst(offset).prefix(slotsPerSide))
+        return Array(selectedPlayers.dropFirst(offset).prefix(slotsPerSideB))
     }
 
     private var sideAEntities: [any GameEntity] {
@@ -527,8 +781,13 @@ struct SetupView: View {
             return false
         }
 
+        if gameType == .cutthroat {
+            // Disable when we've reached the selected total count
+            return slotsRemaining < 1
+        }
+
         if entity is TeamProfile {
-            return slotsRemaining < selectedTeamSize
+            return slotsRemaining < 1 || (slotsPerSideA - sideASlotsFilled < selectedTeamSize && slotsPerSideB - sideBSlotsFilled < selectedTeamSize)
         } else {
             return slotsRemaining < 1
         }
@@ -552,78 +811,15 @@ struct SetupView: View {
         self.gameType = gameType
         self.onStartGame = onStartGame
         self._selectedTeamSize = State(initialValue: gameType.defaultTeamSize)
+        self._selectedTeamSizeA = State(initialValue: gameType.defaultTeamSize)
+        self._selectedTeamSizeB = State(initialValue: gameType.defaultTeamSize)
+        self._cutthroatPlayerCount = State(initialValue: 3)
     }
 
     var body: some View {
         NavigationStack {
             Form {
-                TeamFormatSection(
-                    gameType: gameType,
-                    selectedTeamSize: $selectedTeamSize,
-                    teamSizeOptions: teamSizeOptions
-                )
-                .onChange(of: selectedTeamSize) { _, _ in
-                    selectedPlayerOrder = [:]
-                    selectedPlayers = []
-                    selectedTeam1 = nil
-                    selectedTeam2 = nil
-                }
-
-                CurrentMatchupSection(
-                    teamSize: selectedTeamSize,
-                    sideAEntities: sideAEntities,
-                    sideBEntities: sideBEntities,
-                    sideAHasTeam: selectedTeam1 != nil,
-                    sideBHasTeam: selectedTeam2 != nil,
-                    onRemove: removeEntity
-                )
-
-                if slotsRemaining > 0
-                    && (!sideAEntities.isEmpty || !sideBEntities.isEmpty)
-                {
-                    Section {
-                        Button(action: fillRemainingWithGuests) {
-                            Text("Fill remaining slots with guests")
-                        }
-                        .accessibilityIdentifier("setup.fillGuests")
-                    }
-                }
-
-                if selectedTeamSize > 1 {
-                    EntitySelectionSection(
-                        title: "Select Teams",
-                        entities: activeTeams,
-                        selectedEntityIds: selectedTeamIds,
-                        isEntityDisabled: isEntityDisabled,
-                        onToggleSelection: { entity in
-                            if let team = entity as? TeamProfile {
-                                toggleTeamSelection(team)
-                            }
-                        },
-                        selectionNumbers: nil,
-                        selectionColor: gameType.color,
-                        createButtonLabel: "New Team",
-                        createButtonIcon: "person.2.badge.plus.fill",
-                        onCreateNew: { showTeamSheet = true }
-                    )
-                }
-
-                EntitySelectionSection(
-                    title: "Select Players",
-                    entities: activePlayers,
-                    selectedEntityIds: selectedPlayerIds,
-                    isEntityDisabled: isEntityDisabled,
-                    onToggleSelection: { entity in
-                        if let player = entity as? PlayerProfile {
-                            togglePlayerSelection(player)
-                        }
-                    },
-                    selectionNumbers: playerSelectionNumbers,
-                    selectionColor: gameType.color,
-                    createButtonLabel: "New Player",
-                    createButtonIcon: "person.fill.badge.plus",
-                    onCreateNew: { showPlayerSheet = true }
-                )
+                gameTypeContent
             }
             .navigationTitle("Set Up Game")
             .toolbar {
@@ -649,27 +845,11 @@ struct SetupView: View {
                             role: .destructive
                         ) {
                             guard let rules = pendingRules,
-                                let matchup = pendingMatchup
+                                  let matchup = pendingMatchup
                             else { return }
                             Task { @MainActor in
                                 do {
-                                    let gameId = activeGameStateManager
-                                        .currentGame?.id
-                                    let elapsed = activeGameStateManager
-                                        .elapsedTime
-                                    try await activeGameStateManager
-                                        .completeCurrentGame()
-                                    if let gameId {
-                                        try? await syncCoordinator.publish(
-                                            delta: LiveGameDeltaDTO(
-                                                gameId: gameId,
-                                                timestamp: elapsed,
-                                                operation: .setGameState(
-                                                    .completed
-                                                )
-                                            )
-                                        )
-                                    }
+                                    try await activeGameStateManager.completeCurrentGame()
                                 } catch {
                                     Log.error(
                                         error,
@@ -737,6 +917,230 @@ struct SetupView: View {
 
     }
 
+    @ViewBuilder
+    private var gameTypeContent: some View {
+        if gameType == .custom {
+            Group {
+                GameFormatOptionsView(
+                    gameType: gameType,
+                    selectedTeamSize: $selectedTeamSize,
+                    selectedTeamSizeA: $selectedTeamSizeA,
+                    selectedTeamSizeB: $selectedTeamSizeB,
+                    cutthroatPlayerCount: $cutthroatPlayerCount,
+                    isCutthroatPickerExpanded: $isCutthroatPickerExpanded,
+                    teamSizeOptions: teamSizeOptions
+                )
+                .onChange(of: selectedTeamSizeA) { _, _ in
+                    selectedPlayerOrder = [:]
+                    selectedPlayers = []
+                    selectedTeam1 = nil
+                    selectedTeam2 = nil
+                }
+                .onChange(of: selectedTeamSizeB) { _, _ in
+                    selectedPlayerOrder = [:]
+                    selectedPlayers = []
+                    selectedTeam1 = nil
+                    selectedTeam2 = nil
+                }
+
+                CurrentMatchupSection(
+                    teamSize: max(selectedTeamSizeA, selectedTeamSizeB),
+                    sideAEntities: sideAEntities,
+                    sideBEntities: sideBEntities,
+                    sideAHasTeam: selectedTeam1 != nil,
+                    sideBHasTeam: selectedTeam2 != nil,
+                    sideATeam: selectedTeam1,
+                    sideBTeam: selectedTeam2,
+                    onRemove: removeEntity
+                )
+
+                if slotsRemaining > 0 && (!sideAEntities.isEmpty || !sideBEntities.isEmpty) {
+                    FillRemainingSlotsButton(
+                        accentColor: gameType.color,
+                        action: fillRemainingWithGuests
+                    )
+                }
+
+                if max(selectedTeamSizeA, selectedTeamSizeB) > 1 {
+                    TeamPickerSectionView(
+                        teams: activeTeams,
+                        selectedTeamIds: selectedTeamIds,
+                        isEntityDisabled: isEntityDisabled,
+                        selectionColor: gameType.color,
+                        onCreateNew: { showTeamSheet = true },
+                        onToggleTeam: { team in
+                            toggleTeamSelection(team)
+                        }
+                    )
+                }
+
+                PlayerPickerSectionView(
+                    players: activePlayers,
+                    selectedPlayerIds: selectedPlayerIds,
+                    selectionNumbers: playerSelectionNumbers,
+                    selectionColor: gameType.color,
+                    isEntityDisabled: isEntityDisabled,
+                    onCreateNew: { showPlayerSheet = true },
+                    onTogglePlayer: { player in
+                        togglePlayerSelection(player)
+                    }
+                )
+            }
+        } else if gameType == .cutthroat {
+            Group {
+                Section("Target Score") {
+                    HStack {
+                        Text("Play to")
+                            .font(.title3)
+                            .foregroundStyle(.primary)
+                        
+                        Spacer()
+                        
+                        Button(action: {
+                            withAnimation {
+                                isCutthroatScorePickerExpanded.toggle()
+                            }
+                        }) {
+                            Text(cutthroatNoLimit ? "No limit" : "\(cutthroatTargetScore)")
+                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.primary)
+                                .padding(.horizontal, DesignSystem.Spacing.md)
+                                .frame(height: 32)
+                                .background(
+                                    Capsule().fill(.gray.opacity(0.1))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    
+                    if isCutthroatScorePickerExpanded {
+                        VStack(alignment: .leading, spacing: DesignSystem.Spacing.md) {
+                            Picker("Target Score", selection: $cutthroatTargetScore) {
+                                ForEach(1...50, id: \.self) { n in
+                                    Text("\(n)").tag(n)
+                                }
+                            }
+                            .pickerStyle(.wheel)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .tint(gameType.color)
+                            .disabled(cutthroatNoLimit)
+                            .opacity(cutthroatNoLimit ? 0.3 : 1.0)
+                            
+                            Toggle(isOn: $cutthroatNoLimit) {
+                                Text("No limit")
+                            }
+                            .tint(gameType.color)
+                        }
+                    }
+                }
+
+                GameFormatOptionsView(
+                    gameType: gameType,
+                    selectedTeamSize: $selectedTeamSize,
+                    selectedTeamSizeA: $selectedTeamSizeA,
+                    selectedTeamSizeB: $selectedTeamSizeB,
+                    cutthroatPlayerCount: $cutthroatPlayerCount,
+                    isCutthroatPickerExpanded: $isCutthroatPickerExpanded,
+                    teamSizeOptions: teamSizeOptions
+                )
+                .onChange(of: cutthroatPlayerCount) { _, _ in
+                    if selectedPlayers.count > cutthroatPlayerCount {
+                        selectedPlayers = Array(selectedPlayers.prefix(cutthroatPlayerCount))
+                        updatePlayerOrder()
+                    }
+                }
+
+                CutthroatMatchupSection(
+                    entities: selectedPlayers.map { $0 as any GameEntity },
+                    onRemove: removeEntity
+                )
+
+                if slotsRemaining > 0 && !selectedPlayers.isEmpty {
+                    FillRemainingSlotsButton(
+                        accentColor: gameType.color,
+                        action: fillRemainingWithGuests
+                    )
+                }
+
+                PlayerPickerSectionView(
+                    players: activePlayers,
+                    selectedPlayerIds: selectedPlayerIds,
+                    selectionNumbers: playerSelectionNumbers,
+                    selectionColor: gameType.color,
+                    isEntityDisabled: { entity in
+                        if selectedEntityIds.contains(entity.id) { return false }
+                        return selectedPlayers.count >= cutthroatPlayerCount
+                    },
+                    onCreateNew: { showPlayerSheet = true },
+                    onTogglePlayer: { player in
+                        togglePlayerSelection(player)
+                    }
+                )
+            }
+        } else {
+            Group {
+                GameFormatOptionsView(
+                    gameType: gameType,
+                    selectedTeamSize: $selectedTeamSize,
+                    selectedTeamSizeA: $selectedTeamSizeA,
+                    selectedTeamSizeB: $selectedTeamSizeB,
+                    cutthroatPlayerCount: $cutthroatPlayerCount,
+                    isCutthroatPickerExpanded: $isCutthroatPickerExpanded,
+                    teamSizeOptions: teamSizeOptions
+                )
+                .onChange(of: selectedTeamSize) { _, _ in
+                    selectedPlayerOrder = [:]
+                    selectedPlayers = []
+                    selectedTeam1 = nil
+                    selectedTeam2 = nil
+                }
+
+                CurrentMatchupSection(
+                    teamSize: selectedTeamSize,
+                    sideAEntities: sideAEntities,
+                    sideBEntities: sideBEntities,
+                    sideAHasTeam: selectedTeam1 != nil,
+                    sideBHasTeam: selectedTeam2 != nil,
+                    sideATeam: selectedTeam1,
+                    sideBTeam: selectedTeam2,
+                    onRemove: removeEntity
+                )
+
+                if slotsRemaining > 0 && (!sideAEntities.isEmpty || !sideBEntities.isEmpty) {
+                    FillRemainingSlotsButton(
+                        accentColor: gameType.color,
+                        action: fillRemainingWithGuests
+                    )
+                }
+
+                if selectedTeamSize > 1 {
+                    TeamPickerSectionView(
+                        teams: activeTeams,
+                        selectedTeamIds: selectedTeamIds,
+                        isEntityDisabled: isEntityDisabled,
+                        selectionColor: gameType.color,
+                        onCreateNew: { showTeamSheet = true },
+                        onToggleTeam: { team in
+                            toggleTeamSelection(team)
+                        }
+                    )
+                }
+
+                PlayerPickerSectionView(
+                    players: activePlayers,
+                    selectedPlayerIds: selectedPlayerIds,
+                    selectionNumbers: playerSelectionNumbers,
+                    selectionColor: gameType.color,
+                    isEntityDisabled: isEntityDisabled,
+                    onCreateNew: { showPlayerSheet = true },
+                    onTogglePlayer: { player in
+                        togglePlayerSelection(player)
+                    }
+                )
+            }
+        }
+    }
+
     private var teamSizeOptions: [TeamSizeOption] {
         let minSize = gameType.minTeamSize
         let maxSize = gameType.maxTeamSize
@@ -752,6 +1156,14 @@ struct SetupView: View {
     }
 
     private var canStartGame: Bool {
+        if gameType == .cutthroat {
+            return selectedPlayers.count >= gameType.minPlayersTotal && selectedPlayers.count == cutthroatPlayerCount
+        }
+        if gameType == .custom {
+            let sideAFilled = sideASlotsFilled == slotsPerSideA
+            let sideBFilled = sideBSlotsFilled == slotsPerSideB
+            return sideAFilled && sideBFilled
+        }
         let sideAFilled = sideASlotsFilled == slotsPerSide
         let sideBFilled = sideBSlotsFilled == slotsPerSide
         return sideAFilled && sideBFilled
@@ -783,9 +1195,10 @@ struct SetupView: View {
         } else if selectedTeam2?.id == team.id {
             selectedTeam2 = nil
         } else {
-            if slotsRemaining >= selectedTeamSize {
-                let sideAAvailable = slotsPerSide - sideASlotsFilled
-                let sideBAvailable = slotsPerSide - sideBSlotsFilled
+            if gameType == .cutthroat { return }
+            if slotsRemaining >= 1 {
+                let sideAAvailable = slotsPerSideA - sideASlotsFilled
+                let sideBAvailable = slotsPerSideB - sideBSlotsFilled
 
                 if sideAAvailable >= selectedTeamSize {
                     selectedTeam1 = team
@@ -860,7 +1273,7 @@ struct SetupView: View {
             do {
                 let (rules, matchup) =
                     try await createGameRulesAndMatchup()
-                // If there is a live game, confirm with the user before starting
+                
                 if activeGameStateManager.hasLiveGame {
                     pendingRules = rules
                     pendingMatchup = matchup
@@ -889,7 +1302,6 @@ struct SetupView: View {
         guard remaining > 0 else { return }
 
         func extractGuestNumber(from name: String) -> Int? {
-            // Expect names like "Guest 1"
             let parts = name.split(separator: " ")
             guard parts.count == 2, parts[0].lowercased() == "guest",
                 let num = Int(parts[1])
@@ -925,17 +1337,24 @@ struct SetupView: View {
         async throws(GameRulesError)
         -> (GameRules?, MatchupSelection)
     {
-        guard
-            sideASlotsFilled == slotsPerSide && sideBSlotsFilled == slotsPerSide
-        else {
-            throw GameRulesError.invalidConfiguration(
-                "Please fill all slots for both sides"
-            )
+        if gameType == .cutthroat {
+            guard selectedPlayers.count >= 2 else {
+                throw GameRulesError.invalidConfiguration("Please select at least 2 players")
+            }
+            let rules = gameType.defaultRules
+            let sideAIds = sideAPlayers.map { $0.id }
+            let sideBIds = sideBPlayers.map { $0.id }
+            let matchup = MatchupSelection(teamSize: 1, mode: .players(sideA: sideAIds, sideB: sideBIds))
+            return (rules, matchup)
+        }
+
+        guard sideASlotsFilled == slotsPerSideA && sideBSlotsFilled == slotsPerSideB else {
+            throw GameRulesError.invalidConfiguration("Please fill all slots for both sides")
         }
 
         let rules = gameType.defaultRules
 
-        if selectedTeamSize == 1 {
+        if (gameType == .custom ? max(selectedTeamSizeA, selectedTeamSizeB) : selectedTeamSize) == 1 {
             guard sideAPlayers.count == 1 && sideBPlayers.count == 1 else {
                 throw GameRulesError.invalidConfiguration(
                     "Please select exactly 1 player per side"
@@ -956,7 +1375,7 @@ struct SetupView: View {
         } else {
             if let team1 = selectedTeam1, let team2 = selectedTeam2 {
                 let matchup = MatchupSelection(
-                    teamSize: selectedTeamSize,
+                    teamSize: gameType == .custom ? max(selectedTeamSizeA, selectedTeamSizeB) : selectedTeamSize,
                     mode: .teams(team1Id: team1.id, team2Id: team2.id)
                 )
                 return (rules, matchup)
@@ -967,9 +1386,9 @@ struct SetupView: View {
                 if let team1 = selectedTeam1 {
                     sideAPlayerIds = team1.players.map { $0.id }
                 } else {
-                    guard sideAPlayers.count == 2 else {
+                    guard sideAPlayers.count == (gameType == .custom ? selectedTeamSizeA : 2) else {
                         throw GameRulesError.invalidConfiguration(
-                            "Please select 2 players for the first side"
+                            gameType == .custom ? "Please select \(selectedTeamSizeA) players for the South side" : "Please select 2 players for the first side"
                         )
                     }
                     sideAPlayerIds = sideAPlayers.map { $0.id }
@@ -978,16 +1397,16 @@ struct SetupView: View {
                 if let team2 = selectedTeam2 {
                     sideBPlayerIds = team2.players.map { $0.id }
                 } else {
-                    guard sideBPlayers.count == 2 else {
+                    guard sideBPlayers.count == (gameType == .custom ? selectedTeamSizeB : 2) else {
                         throw GameRulesError.invalidConfiguration(
-                            "Please select 2 players for the second side"
+                            gameType == .custom ? "Please select \(selectedTeamSizeB) players for the North side" : "Please select 2 players for the second side"
                         )
                     }
                     sideBPlayerIds = sideBPlayers.map { $0.id }
                 }
 
                 let matchup = MatchupSelection(
-                    teamSize: 2,
+                    teamSize: gameType == .custom ? max(selectedTeamSizeA, selectedTeamSizeB) : 2,
                     mode: .players(
                         sideA: sideAPlayerIds,
                         sideB: sideBPlayerIds
@@ -997,8 +1416,6 @@ struct SetupView: View {
             }
         }
     }
-
-    // removed manual "Start on Watch" flow; normal start triggers cross-device sync
 }
 
 #Preview {
@@ -1009,6 +1426,32 @@ struct SetupView: View {
     let syncCoordinator = LiveSyncCoordinator(service: NoopSyncService())
 
     SetupView(gameType: randomType) { _, _, _ in }
+        .modelContainer(container)
+        .environment(liveGameManager)
+        .environment(rosterManager)
+        .environment(syncCoordinator)
+}
+
+#Preview("Custom Game Type") {
+    let container = PreviewContainers.roster()
+    let (_, liveGameManager) = PreviewContainers.managers(for: container)
+    let rosterManager = PreviewContainers.rosterManager(for: container)
+    let syncCoordinator = LiveSyncCoordinator(service: NoopSyncService())
+
+    SetupView(gameType: .custom) { _, _, _ in }
+        .modelContainer(container)
+        .environment(liveGameManager)
+        .environment(rosterManager)
+        .environment(syncCoordinator)
+}
+
+#Preview("Cutthroat Game Type") {
+    let container = PreviewContainers.roster()
+    let (_, liveGameManager) = PreviewContainers.managers(for: container)
+    let rosterManager = PreviewContainers.rosterManager(for: container)
+    let syncCoordinator = LiveSyncCoordinator(service: NoopSyncService())
+
+    SetupView(gameType: .cutthroat) { _, _, _ in }
         .modelContainer(container)
         .environment(liveGameManager)
         .environment(rosterManager)

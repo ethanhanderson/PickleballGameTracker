@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import Observation
 
 @MainActor
@@ -9,20 +10,48 @@ public final class LiveSyncCoordinator {
   private weak var gameManager: SwiftDataGameManager?
   private var storage: (any SwiftDataStorageProtocol)?
   // Timer sync: pulse sender leadership and LWW timestamp tracking
+  private enum TimerLeadership {
+    case none
+    case local
+    case remote
+  }
+
+  private var timerLeadership: TimerLeadership = .none {
+    didSet {
+      guard timerLeadership != oldValue else { return }
+      switch timerLeadership {
+      case .local:
+        isTimerPulseLeader = true
+      default:
+        isTimerPulseLeader = false
+      }
+      recordTimerLeadershipChange(for: timerLeadership)
+    }
+  }
   private var isTimerPulseLeader: Bool = false
   private var timerPulseTask: Task<Void, Never>? = nil
   private var lastTimerSetReceivedAt: Date = .distantPast
-  private let timerPulseInterval: TimeInterval = 1.0       // 1 Hz pulses
-  private let timerDriftThreshold: TimeInterval = 0.25     // snap if > 250ms off
+  private let timerPulseInterval: TimeInterval = 0.5       // 2 Hz pulses for tighter drift
+  private let timerDriftResolver = TimerDriftResolver()
   // Store last received elapsed (authoritative from peer) and a window to force-snap on resume
   private var lastTimerElapsedAdjustedReceived: TimeInterval? = nil
   private var pendingForceSnapUntil: Date? = nil
+  private let timerForceSnapWindow: TimeInterval = 1.5
   
   // Server sync: LWW timestamp tracking for conflict resolution
-  private var lastServerSetReceivedAt: Date = .distantPast
-  private var lastServerValueReceived: Int? = nil
-  // Track last time we applied any serve mutation (faults, switches) to avoid rapid flip-flops
-  private var lastServeMutationAppliedAt: Date = .distantPast
+  private var scoreMutationSnapshot = MutationPrioritySnapshot.empty
+  private var serveMutationSnapshot = MutationPrioritySnapshot.empty
+  private var serverAssignmentSnapshot = MutationPrioritySnapshot.empty
+  private var lifecycleMutationSnapshot = MutationPrioritySnapshot.empty
+  private var timerMutationSnapshot = MutationPrioritySnapshot.empty
+
+  // Activity tracking
+  private var localActivityState = DeviceActivityState(role: .local)
+  private var peerActivityState = DeviceActivityState(role: .peer)
+  private let activityLookbackWindow: TimeInterval = 90
+  private let activityTieBreakerEpsilon: Double = 0.2
+  private let mutationTieWindow: TimeInterval = 0.4
+  private let activityDominanceThreshold: Double = 0.35
 
   // Roster sync: track what watch knows about (phone side only)
   private var knownWatchRoster: (players: [UUID: Date], teams: [UUID: Date], presets: [UUID: Date]) = ([:], [:], [:])
@@ -76,25 +105,120 @@ public final class LiveSyncCoordinator {
       }
     }
 
+    // History summaries request handler (phone side): build and send recent summaries
+    self.service.onReceiveHistoryRequest = { [weak self] in
+      Task { @MainActor in
+        guard let self, let storage = self.storage as? SwiftDataStorage else { return }
+        do {
+          let context = storage.modelContainer.mainContext
+          var fd = FetchDescriptor<GameSummary>(
+            sortBy: [SortDescriptor(\.completedDate, order: .reverse)]
+          )
+          fd.fetchLimit = 50
+          let rows = try context.fetch(fd)
+          let dtos: [HistorySummaryDTO] = rows.map {
+            HistorySummaryDTO(
+              gameId: $0.gameId,
+              gameTypeId: $0.gameTypeId,
+              completedDate: $0.completedDate,
+              winningTeam: $0.winningTeam,
+              pointDifferential: $0.pointDifferential,
+              duration: $0.duration,
+              totalRallies: $0.totalRallies
+            )
+          }
+          try await self.publishHistory(HistorySummariesDTO(summaries: dtos))
+          Log.event(
+            .saveSucceeded,
+            level: .info,
+            message: "history.summaries.sent",
+            metadata: ["count": "\(dtos.count)"]
+          )
+        } catch {
+          Log.error(error, event: .saveFailed, metadata: ["phase": "onReceiveHistoryRequest"])
+        }
+      }
+    }
+
+    // History summaries import handler (watch side): upsert into local store
+    self.service.onReceiveHistorySummaries = { [weak self] payload in
+      Task { @MainActor in
+        guard let self, let gm = self.gameManager else { return }
+        do {
+          if let storage = gm.storage as? SwiftDataStorage {
+            let context = storage.modelContainer.mainContext
+            for s in payload.summaries {
+              let descriptor = FetchDescriptor<GameSummary>(
+                predicate: #Predicate<GameSummary> { $0.gameId == s.gameId }
+              )
+              if let existing = try context.fetch(descriptor).first {
+                existing.gameTypeId = s.gameTypeId
+                existing.completedDate = s.completedDate
+                existing.winningTeam = s.winningTeam
+                existing.pointDifferential = s.pointDifferential
+                existing.duration = s.duration
+                existing.totalRallies = s.totalRallies
+              } else {
+                let row = GameSummary(
+                  gameId: s.gameId,
+                  gameTypeId: s.gameTypeId,
+                  completedDate: s.completedDate,
+                  winningTeam: s.winningTeam,
+                  pointDifferential: s.pointDifferential,
+                  duration: s.duration,
+                  totalRallies: s.totalRallies
+                )
+                context.insert(row)
+              }
+            }
+            try context.save()
+            Log.event(
+              .saveSucceeded,
+              level: .info,
+              message: "history.summaries.imported",
+              metadata: ["count": "\(payload.summaries.count)"]
+            )
+          }
+        } catch {
+          Log.error(error, event: .saveFailed, metadata: ["phase": "onReceiveHistorySummaries"])
+        }
+      }
+    }
+
     // Reachability: when transport becomes reachable, send inventory (watch) or handle status (phone)
     self.service.onReachabilityChanged = { [weak self] reach in
       Task { @MainActor in
         guard let self else { return }
         self.reachability = reach
         if reach == .reachable {
-          // Watch side: send inventory on first reachability (has gameManager but not storage)
-          if self.gameManager != nil && self.storage == nil && !self.inventorySentThisSession {
-            try? await self.sendRosterInventory()
-            self.inventorySentThisSession = true
+          // Watch side: has a game manager but no bound storage
+          if self.gameManager != nil && self.storage == nil {
+            if !self.inventorySentThisSession {
+              try? await self.sendRosterInventory()
+              self.inventorySentThisSession = true
+            }
+            // Whenever the watch becomes reachable, ask the phone for live status so we can
+            // sync into an in-progress game (including its current timer value).
+            try? await self.requestLiveStatus()
+            Log.event(
+              .loadStarted,
+              level: .debug,
+              message: "sync.watch.reachability.requestLiveStatus",
+              metadata: nil
+            )
           }
-          // Phone side: if no current game, request status
-          if self.liveManager?.currentGame == nil && self.storage != nil {
+          // Phone side: storage bound, acts as roster and status source of truth.
+          // Always request live status on reachability so we converge to the latest state,
+          // even if this device already has a current game.
+          if self.storage != nil {
             try? await self.requestLiveStatus()
             Log.event(
               .loadStarted,
               level: .debug,
               message: "sync.reachability.requestLiveStatus",
-              metadata: nil
+              metadata: [
+                "hasCurrentGame": String(self.liveManager?.currentGame != nil)
+              ]
             )
           }
         }
@@ -104,6 +228,18 @@ public final class LiveSyncCoordinator {
     self.service.onReceiveLiveStatusRequest = { [weak self] in
       Task { @MainActor in
         guard let self, let live = self.liveManager, let current = live.currentGame else { return }
+        if self.preferredDeviceRole() == .peer {
+          Log.event(
+            .realtimeEvent,
+            level: .debug,
+            message: "live.statusRequest.skipped_lowPriority",
+            metadata: [
+              "reason": "peerPreferred",
+              "gameId": current.id.uuidString
+            ]
+          )
+          return
+        }
         // If no inventory received yet, fallback to old snapshot path for backward compatibility
         if !self.hasReceivedInventory {
           if let storage = self.storage {
@@ -230,53 +366,90 @@ public final class LiveSyncCoordinator {
     stopTimerPulse()
   }
 
+  public func noteLocalScoreMutation(at date: Date = Date()) {
+    localActivityState.recordScoreMutation(at: date)
+    updateMutationSnapshot(&scoreMutationSnapshot, source: .local, appliedAt: date)
+  }
+
+  public func noteLocalServeMutation(at date: Date = Date()) {
+    localActivityState.recordServeMutation(at: date)
+    updateMutationSnapshot(&serveMutationSnapshot, source: .local, appliedAt: date)
+    updateMutationSnapshot(&serverAssignmentSnapshot, source: .local, appliedAt: date)
+  }
+
+  public func noteLocalLifecycleMutation(at date: Date = Date()) {
+    localActivityState.recordLifecycleMutation(at: date)
+    updateMutationSnapshot(&lifecycleMutationSnapshot, source: .local, appliedAt: date)
+  }
+
+  public func noteLocalUserInteraction(at date: Date = Date()) {
+    localActivityState.recordUserInteraction(at: date)
+  }
+
+  public func setLiveViewForeground(_ isForeground: Bool, at date: Date = Date()) {
+    localActivityState.setForeground(isForeground, at: date)
+  }
+
   /// Check if another device is actively tracking the timer
   /// Returns true if another device is reachable and has recently sent timer updates
   public func isAnotherDeviceActivelyTracking() -> Bool {
-    // If we are the timer pulse leader, another device is not actively tracking
-    if isTimerPulseLeader {
-      return false
-    }
-    
-    // Check if another device is reachable
     guard service.currentReachability == .reachable else {
       return false
     }
-    
-    // Check if we've received timer updates recently (within last 3 seconds)
-    // This indicates another device is actively tracking
+    if timerLeadership == .local {
+      return false
+    }
     let recentThreshold: TimeInterval = 3.0
-    let timeSinceLastUpdate = Date().timeIntervalSince(lastTimerSetReceivedAt)
-    return timeSinceLastUpdate < recentThreshold
+    let now = Date()
+    let timeSinceLastTimerSet = now.timeIntervalSince(lastTimerSetReceivedAt)
+    let timeSincePeerPulse = now.timeIntervalSince(peerActivityState.lastTimerPulseAt)
+    let peerTier = peerActivityState.activityTier(now: now, lookbackWindow: activityLookbackWindow)
+    let peerScore = peerActivityScore(now: now)
+    _ = preferredDeviceRole(now: now)
+    if min(timeSinceLastTimerSet, timeSincePeerPulse) < recentThreshold {
+      return true
+    }
+    if peerScore < 0.35 {
+      return false
+    }
+    return peerTier == .active
   }
 
   // MARK: - Outbound helpers
 
   public func publish(delta: LiveGameDeltaDTO) async throws {
+    // Invariant: only publish deltas for the currently active game
+    if let current = liveManager?.currentGame?.id, current != delta.gameId {
+      Log.event(
+        .loadFailed,
+        level: .error,
+        message: "sync.publish.mismatchedGameContext",
+        context: .current(gameId: delta.gameId),
+        metadata: ["expectedGameId": current.uuidString, "gotGameId": delta.gameId.uuidString]
+      )
+      throw SyncInvariantError.mismatchedGameContext(expected: current, got: delta.gameId)
+    }
     try await service.sendLiveDelta(delta)
     // Manage timer pulse leadership based on outbound lifecycle
     switch delta.operation {
     case .setGameState(let state):
       switch state {
       case .playing:
-        isTimerPulseLeader = true
-        startTimerPulse()
+        assumeLocalTimerLeadership()
       case .paused, .completed:
-        isTimerPulseLeader = false
-        stopTimerPulse()
+        clearTimerLeadership()
       default:
         break
       }
+      updateMutationSnapshot(&lifecycleMutationSnapshot, source: .local, appliedAt: delta.createdAt)
     case .setElapsedTime(_, let isRunning):
       // If we publish setElapsedTime running=true, assume leadership
       if isRunning {
-        isTimerPulseLeader = true
-        // No need to start a new pulse if one is running; start if missing
-        startTimerPulse()
+        assumeLocalTimerLeadership()
       } else {
-        isTimerPulseLeader = false
-        stopTimerPulse()
+        clearTimerLeadership()
       }
+      updateMutationSnapshot(&timerMutationSnapshot, source: .local, appliedAt: delta.createdAt)
     default:
       break
     }
@@ -287,9 +460,27 @@ public final class LiveSyncCoordinator {
   }
 
   public func publishStart(_ config: GameStartConfiguration) async throws {
+    Log.event(
+      .saveStarted,
+      level: .info,
+      message: "sync.start.publish",
+      metadata: [
+        "gameId": config.gameId?.uuidString ?? "nil",
+        "gameType": config.gameType.rawValue
+      ]
+    )
     // Ensure participants exist on watch before sending start config
     try await ensureParticipantsOnWatch(for: config)
     try await service.sendStartConfiguration(config)
+    Log.event(
+      .saveSucceeded,
+      level: .info,
+      message: "sync.start.sent",
+      metadata: [
+        "gameId": config.gameId?.uuidString ?? "nil",
+        "gameType": config.gameType.rawValue
+      ]
+    )
   }
 
   public func publishRoster(_ roster: RosterSnapshotDTO) async throws {
@@ -347,6 +538,15 @@ public final class LiveSyncCoordinator {
 
   private func handle(startConfig: GameStartConfiguration) async {
     guard let live = liveManager, let gm = gameManager else { return }
+    Log.event(
+      .loadStarted,
+      level: .info,
+      message: "start.config.received",
+      metadata: [
+        "gameId": startConfig.gameId?.uuidString ?? "nil",
+        "gameType": startConfig.gameType.rawValue
+      ]
+    )
     
     // Verify participants exist locally before starting
     let canStart = await verifyParticipantsLocally(for: startConfig, storage: gm.storage)
@@ -461,6 +661,7 @@ public final class LiveSyncCoordinator {
         "gameType": snapshot.gameType.rawValue
       ]
     )
+    let snapshotContext = LogContext.current(gameId: snapshot.gameId)
 
     // If participants are unknown locally, request roster once (watch bootstrap path)
     do {
@@ -491,17 +692,33 @@ public final class LiveSyncCoordinator {
     let game = existing ?? Game(id: snapshot.gameId, gameType: snapshot.gameType)
 
     // Apply snapshot onto model
-    game.score1 = snapshot.score1
-    game.score2 = snapshot.score2
+    let canApplyScoreFromSnapshot = shouldAcceptRemoteMutation(
+      createdAt: snapshot.snapshotCreatedAt,
+      snapshot: scoreMutationSnapshot,
+      label: "sync.snapshot.score.ignored_lowPriority",
+      context: snapshotContext
+    )
+    if canApplyScoreFromSnapshot {
+      game.score1 = snapshot.score1
+      game.score2 = snapshot.score2
+      updateMutationSnapshot(&scoreMutationSnapshot, source: .remote, appliedAt: snapshot.snapshotCreatedAt)
+    }
     // Avoid overriding recent serve changes while actively playing to prevent UI flip-flop
     let isPlaying = (snapshot.gameState == .playing) && !game.isCompleted
     let recentServeWindow: TimeInterval = 0.25
-    let shouldApplyServeStateFromSnapshot = (!isPlaying) || (Date().timeIntervalSince(lastServeMutationAppliedAt) > recentServeWindow)
+    let serveSnapshotAccepted = shouldAcceptRemoteMutation(
+      createdAt: snapshot.snapshotCreatedAt,
+      snapshot: serveMutationSnapshot,
+      label: "sync.snapshot.serve.ignored_lowPriority",
+      context: snapshotContext
+    )
+    let shouldApplyServeStateFromSnapshot = serveSnapshotAccepted && ((!isPlaying) || (Date().timeIntervalSince(serveMutationSnapshot.appliedAt) > recentServeWindow))
     if shouldApplyServeStateFromSnapshot {
       game.currentServer = snapshot.currentServer
       // Reset server LWW tracking on authoritative snapshot
-      lastServerSetReceivedAt = Date()
-      lastServerValueReceived = snapshot.currentServer
+      let now = Date()
+      updateMutationSnapshot(&serveMutationSnapshot, source: .snapshot, appliedAt: now)
+      updateMutationSnapshot(&serverAssignmentSnapshot, source: .snapshot, appliedAt: now)
       game.serverNumber = snapshot.serverNumber
       game.serverPosition = snapshot.serverPosition
       game.sideOfCourt = snapshot.sideOfCourt
@@ -524,23 +741,37 @@ public final class LiveSyncCoordinator {
     game.side2PlayerIds = snapshot.side2PlayerIds
     game.side1TeamId = snapshot.side1TeamId
     game.side2TeamId = snapshot.side2TeamId
-
     try? await gm.updateGame(game)
+
+    // Treat a playing snapshot from the peer as an authoritative timer update
+    let timerSnapshotAccepted = shouldAcceptRemoteMutation(
+      createdAt: snapshot.snapshotCreatedAt,
+      snapshot: timerMutationSnapshot,
+      label: "sync.snapshot.timer.ignored_lowPriority",
+      context: snapshotContext
+    )
+    if snapshot.gameState == .playing, timerSnapshotAccepted {
+      let now = Date()
+      lastTimerSetReceivedAt = now
+      lastTimerElapsedAdjustedReceived = snapshot.elapsedTime
+      updateMutationSnapshot(&timerMutationSnapshot, source: .snapshot, appliedAt: now)
+      peerActivityState.recordTimerPulse(at: now)
+    }
 
     // Update timer: derive running state strictly from snapshot.gameState
     if let live = liveManager {
-      live.setElapsedTime(snapshot.elapsedTime)
-      switch snapshot.gameState {
-      case .playing:
-        // Use resume semantics so baseline aligns to received elapsed
-        live.resumeTimer()
-      case .paused:
-        live.pauseTimer()
-      case .completed:
-        live.pauseTimer()
-      case .initial, .serving:
-        // Maintain current timer run state; elapsed already updated
-        break
+      if timerSnapshotAccepted {
+        live.setElapsedTime(snapshot.elapsedTime)
+        switch snapshot.gameState {
+        case .playing:
+          live.resumeTimer()
+        case .paused:
+          live.pauseTimer()
+        case .completed:
+          live.pauseTimer()
+        case .initial, .serving:
+          break
+        }
       }
       await live.setCurrentGame(game)
     }
@@ -549,28 +780,84 @@ public final class LiveSyncCoordinator {
   private func handle(delta: LiveGameDeltaDTO) async {
     guard let gm = gameManager else { return }
     let target = try? await gm.storage.loadGame(id: delta.gameId)
+    if target == nil {
+      // If we can't resolve the game record but this is a completion for our
+      // currently active session, still clear the live session so the UI ends
+      if case .setGameState(let state) = delta.operation,
+         state == .completed,
+         let live = liveManager,
+         live.currentGame?.id == delta.gameId {
+        live.gameStateDidChange(to: .completed)
+        live.clearCurrentGame()
+      }
+      return
+    }
     guard let game = target else { return }
 
     // Apply operation via game manager to preserve persistence behaviors
     switch delta.operation {
-    case .score(let team):
-      try? await gm.scorePointAndLogEvent(for: team, in: game, at: delta.timestamp)
+    case .score(let team, let playerId, let playerName):
+      await applyScoreOperation(
+        team: team,
+        playerId: playerId,
+        playerName: playerName,
+        delta: delta,
+        game: game,
+        manager: gm,
+        assignsServe: false
+      )
+
+    case .scoreAndSetServe(let team, let playerId, let playerName):
+      await applyScoreOperation(
+        team: team,
+        playerId: playerId,
+        playerName: playerName,
+        delta: delta,
+        game: game,
+        manager: gm,
+        assignsServe: true
+      )
 
     case .undoLastPoint:
+      guard shouldAcceptRemoteMutation(
+        createdAt: delta.createdAt,
+        snapshot: scoreMutationSnapshot,
+        label: "sync.score.undo.ignored_lowPriority",
+        context: .current(gameId: game.id)
+      ) else { break }
       try? await gm.undoLastPoint(in: game)
       game.logEvent(.scoreUndone, at: delta.timestamp)
+      peerActivityState.recordScoreMutation()
+      updateMutationSnapshot(&scoreMutationSnapshot, source: .remote, appliedAt: delta.createdAt)
 
     case .decrement(let team):
+      guard shouldAcceptRemoteMutation(
+        createdAt: delta.createdAt,
+        snapshot: scoreMutationSnapshot,
+        label: "sync.score.decrement.ignored_lowPriority",
+        context: .current(gameId: game.id)
+      ) else { break }
       try? await gm.decrementScore(for: team, in: game)
+      peerActivityState.recordScoreMutation()
+      updateMutationSnapshot(&scoreMutationSnapshot, source: .remote, appliedAt: delta.createdAt)
 
     case .setGameState(let state):
+      if state != .completed {
+        guard shouldAcceptRemoteMutation(
+          createdAt: delta.createdAt,
+          snapshot: lifecycleMutationSnapshot,
+          label: "sync.lifecycle.ignored_lowPriority",
+          context: .current(gameId: game.id)
+        ) else { break }
+      }
+      updateMutationSnapshot(&lifecycleMutationSnapshot, source: .remote, appliedAt: delta.createdAt)
       game.gameState = state
       try? await gm.updateGame(game)
       // If transitioning to playing, pre-apply the most recent authoritative elapsed
       // so the resume baseline matches the phone precisely.
       if state == .playing {
         // Arm a brief window to force-snap subsequent elapsed updates as well
-        pendingForceSnapUntil = Date().addingTimeInterval(1.0)
+        pendingForceSnapUntil = Date().addingTimeInterval(timerForceSnapWindow)
         if let live = liveManager,
            let adjusted = lastTimerElapsedAdjustedReceived,
            Date().timeIntervalSince(lastTimerSetReceivedAt) < 2.0 {
@@ -590,71 +877,88 @@ public final class LiveSyncCoordinator {
       // If remote set playing/paused/completed, they become effective source; stop local pulse
       switch state {
       case .playing:
-        isTimerPulseLeader = false
-        stopTimerPulse()
+        assumeRemoteTimerLeadership()
       case .paused, .completed:
-        isTimerPulseLeader = false
-        stopTimerPulse()
+        clearTimerLeadership()
       default:
         break
       }
+      peerActivityState.recordLifecycleMutation()
 
     case .switchServer:
-      if delta.createdAt > lastServeMutationAppliedAt {
-        lastServeMutationAppliedAt = delta.createdAt
+      if shouldAcceptRemoteMutation(
+        createdAt: delta.createdAt,
+        snapshot: serveMutationSnapshot,
+        label: "sync.server.switch.ignored_lowPriority",
+        context: .current(gameId: game.id)
+      ) {
         try? await gm.switchServer(in: game)
+        peerActivityState.recordServeMutation()
+        updateMutationSnapshot(&serveMutationSnapshot, source: .remote, appliedAt: delta.createdAt)
       }
 
     case .setServer(let team):
-      // LWW: accept only if this delta is newer than our last applied server update
-      if delta.createdAt > lastServerSetReceivedAt {
-        lastServerSetReceivedAt = delta.createdAt
-        lastServerValueReceived = team
+      if shouldAcceptRemoteMutation(
+        createdAt: delta.createdAt,
+        snapshot: serverAssignmentSnapshot,
+        label: "sync.server.set.ignored_lowPriority",
+        context: .current(gameId: game.id)
+      ) {
         try? await gm.setServer(to: team, in: game)
-        lastServeMutationAppliedAt = delta.createdAt
-      } else {
-        // Older delta received - log conflict but don't apply
-        Log.event(
-          .serverSwitched,
-          level: .debug,
-          message: "sync.server.ignored_older",
-          context: .current(gameId: game.id),
-          metadata: [
-            "receivedTeam": "\(team)",
-            "receivedAt": delta.createdAt.ISO8601Format(),
-            "lastAppliedAt": lastServerSetReceivedAt.ISO8601Format(),
-            "currentServer": "\(game.currentServer)"
-          ]
-        )
+        peerActivityState.recordServeMutation()
+        updateMutationSnapshot(&serveMutationSnapshot, source: .remote, appliedAt: delta.createdAt)
+        updateMutationSnapshot(&serverAssignmentSnapshot, source: .remote, appliedAt: delta.createdAt)
       }
 
     case .switchServingPlayer:
-      if delta.createdAt > lastServeMutationAppliedAt {
-        lastServeMutationAppliedAt = delta.createdAt
+      if shouldAcceptRemoteMutation(
+        createdAt: delta.createdAt,
+        snapshot: serveMutationSnapshot,
+        label: "sync.server.switchPlayer.ignored_lowPriority",
+        context: .current(gameId: game.id)
+      ) {
         try? await gm.switchServingPlayer(in: game)
+        peerActivityState.recordServeMutation()
+        updateMutationSnapshot(&serveMutationSnapshot, source: .remote, appliedAt: delta.createdAt)
       }
 
     case .startSecondServe:
-      if delta.createdAt > lastServeMutationAppliedAt {
-        lastServeMutationAppliedAt = delta.createdAt
+      if shouldAcceptRemoteMutation(
+        createdAt: delta.createdAt,
+        snapshot: serveMutationSnapshot,
+        label: "sync.server.secondServe.ignored_lowPriority",
+        context: .current(gameId: game.id)
+      ) {
         try? await gm.startSecondServeForCurrentTeam(in: game)
+        peerActivityState.recordServeMutation()
+        updateMutationSnapshot(&serveMutationSnapshot, source: .remote, appliedAt: delta.createdAt)
       }
 
     case .fault(let event, let team):
-      if delta.createdAt > lastServeMutationAppliedAt {
-        lastServeMutationAppliedAt = delta.createdAt
-        // First, log with the pre-change team attribution
+      if shouldAcceptRemoteMutation(
+        createdAt: delta.createdAt,
+        snapshot: serveMutationSnapshot,
+        label: "sync.server.fault.ignored_lowPriority",
+        context: .current(gameId: game.id)
+      ) {
         game.logEvent(event, at: delta.timestamp, teamAffected: team)
-        // Then, advance serve locally if applicable
         if event.typicallyChangesServe {
           try? await gm.handleServiceFault(in: game)
         }
+        peerActivityState.recordServeMutation()
+        updateMutationSnapshot(&serveMutationSnapshot, source: .remote, appliedAt: delta.createdAt)
       }
 
     case .nonServingTeamTap(let team):
-      if delta.createdAt > lastServeMutationAppliedAt {
-        lastServeMutationAppliedAt = delta.createdAt
+      if shouldAcceptRemoteMutation(
+        createdAt: delta.createdAt,
+        snapshot: serveMutationSnapshot,
+        label: "sync.server.tap.ignored_lowPriority",
+        context: .current(gameId: game.id)
+      ) {
         try? await gm.handleNonServingTeamTap(on: team, in: game)
+        peerActivityState.recordServeMutation()
+        updateMutationSnapshot(&serveMutationSnapshot, source: .remote, appliedAt: delta.createdAt)
       }
 
     case .reset:
@@ -662,29 +966,32 @@ public final class LiveSyncCoordinator {
       break
 
     case .setElapsedTime(let elapsed, let isRunning):
-      // LWW: accept only if this delta is newer than our last applied timer update
-      if delta.createdAt > lastTimerSetReceivedAt {
+      if shouldAcceptRemoteTimerMutation(createdAt: delta.createdAt) {
         lastTimerSetReceivedAt = delta.createdAt
         if let live = liveManager {
           // Compensate for transport delay only when state is playing
           let isPlaying = (game.gameState == .playing) && !game.isCompleted
           let lag = max(0, Date().timeIntervalSince(delta.createdAt))
           let adjustedElapsed = isPlaying ? (elapsed + lag) : elapsed
-          // Record last adjusted elapsed from peer regardless of drift
-          lastTimerElapsedAdjustedReceived = adjustedElapsed
-          // Force-snap if we're within the post-resume window; otherwise use drift threshold
           let shouldForceSnap = (pendingForceSnapUntil?.timeIntervalSinceNow ?? -1) > 0
-          let drift = abs(live.elapsedTime - adjustedElapsed)
-          if shouldForceSnap || drift > timerDriftThreshold {
-            live.setElapsedTime(adjustedElapsed)
+          let resolvedElapsed = timerDriftResolver.resolve(
+            currentElapsed: live.elapsedTime,
+            targetElapsed: adjustedElapsed,
+            forceSnap: shouldForceSnap
+          )
+          if resolvedElapsed != live.elapsedTime {
+            live.setElapsedTime(resolvedElapsed)
           }
-          // Do not start/pause timers here; timer state is controlled by gameState changes
+          lastTimerElapsedAdjustedReceived = resolvedElapsed
         }
+        updateMutationSnapshot(&timerMutationSnapshot, source: .remote, appliedAt: delta.createdAt)
+        peerActivityState.recordTimerPulse()
       }
       // Remote timer updates imply remote leadership; stop local pulse when remote is running
       if isRunning {
-        isTimerPulseLeader = false
-        stopTimerPulse()
+        assumeRemoteTimerLeadership()
+      } else {
+        clearTimerLeadership()
       }
     }
 
@@ -692,6 +999,56 @@ public final class LiveSyncCoordinator {
     if let live = liveManager, live.currentGame?.id == game.id {
       await live.setCurrentGame(game)
     }
+  }
+
+  private func applyScoreOperation(
+    team: Int,
+    playerId: UUID?,
+    playerName: String?,
+    delta: LiveGameDeltaDTO,
+    game: Game,
+    manager: SwiftDataGameManager,
+    assignsServe: Bool
+  ) async {
+    guard shouldAcceptRemoteMutation(
+      createdAt: delta.createdAt,
+      snapshot: scoreMutationSnapshot,
+      label: assignsServe ? "sync.scoreServe.ignored_lowPriority" : "sync.score.ignored_lowPriority",
+      context: .current(gameId: game.id)
+    ) else {
+      return
+    }
+
+    let description = resolveScoreDescription(playerId: playerId, fallbackName: playerName)
+    try? await manager.scorePointAndLogEvent(
+      for: team,
+      in: game,
+      at: delta.timestamp,
+      customDescription: description
+    )
+    peerActivityState.recordScoreMutation()
+    updateMutationSnapshot(&scoreMutationSnapshot, source: .remote, appliedAt: delta.createdAt)
+
+    guard assignsServe else { return }
+    try? await manager.setServer(to: team, in: game)
+    peerActivityState.recordServeMutation()
+    updateMutationSnapshot(&serveMutationSnapshot, source: .remote, appliedAt: delta.createdAt)
+    updateMutationSnapshot(&serverAssignmentSnapshot, source: .remote, appliedAt: delta.createdAt)
+  }
+
+  private func resolveScoreDescription(
+    playerId: UUID?,
+    fallbackName: String?
+  ) -> String? {
+    if let fallbackName {
+      return "\(fallbackName) scored"
+    }
+    guard let playerId else { return nil }
+    if let storage = (gameManager?.storage as? SwiftDataStorage),
+       let player = try? storage.loadPlayer(id: playerId) {
+      return "\(player.name) scored"
+    }
+    return nil
   }
 
   // MARK: - Event forwarding hooks
@@ -871,6 +1228,28 @@ public final class LiveSyncCoordinator {
   }
 
   // MARK: - Timer Pulse Helpers
+
+  private func assumeLocalTimerLeadership() {
+    if timerLeadership != .local {
+      timerLeadership = .local
+    }
+    startTimerPulse()
+  }
+
+  private func assumeRemoteTimerLeadership() {
+    if timerLeadership != .remote {
+      timerLeadership = .remote
+    }
+    stopTimerPulse()
+  }
+
+  private func clearTimerLeadership() {
+    if timerLeadership != .none {
+      timerLeadership = .none
+    }
+    stopTimerPulse()
+  }
+
   private func startTimerPulse() {
     guard timerPulseTask == nil else { return }
     guard let live = liveManager else { return }
@@ -879,6 +1258,9 @@ public final class LiveSyncCoordinator {
       while let self, self.isTimerPulseLeader {
         if live.isTimerRunning, let current = live.currentGame {
           let elapsed = live.elapsedTime
+          let now = Date()
+          self.localActivityState.recordTimerPulse(at: now)
+          self.updateMutationSnapshot(&self.timerMutationSnapshot, source: .local, appliedAt: now)
           try? await self.service.sendLiveDelta(LiveGameDeltaDTO(
             gameId: current.id,
             timestamp: elapsed,
@@ -893,6 +1275,172 @@ public final class LiveSyncCoordinator {
   private func stopTimerPulse() {
     timerPulseTask?.cancel()
     timerPulseTask = nil
+  }
+
+  private func recordTimerLeadershipChange(for leadership: TimerLeadership, at date: Date = Date()) {
+    switch leadership {
+    case .local:
+      localActivityState.recordTimerLeadershipChange(at: date)
+    case .remote:
+      peerActivityState.recordTimerLeadershipChange(at: date)
+    case .none:
+      break
+    }
+  }
+
+  private func localActivityScore(now: Date = Date()) -> Double {
+    localActivityState.activityScore(now: now, lookbackWindow: activityLookbackWindow)
+  }
+
+  private func peerActivityScore(now: Date = Date()) -> Double {
+    peerActivityState.activityScore(now: now, lookbackWindow: activityLookbackWindow)
+  }
+
+  private func preferredDeviceRole(now: Date = Date()) -> DeviceActivityRole {
+    let localScore = localActivityScore(now: now)
+    let peerScore = peerActivityScore(now: now)
+    if abs(localScore - peerScore) <= activityTieBreakerEpsilon {
+      return .local
+    }
+    return localScore >= peerScore ? .local : .peer
+  }
+
+  private func updateMutationSnapshot(
+    _ snapshot: inout MutationPrioritySnapshot,
+    source: DeviceMutationSource,
+    appliedAt: Date
+  ) {
+    let now = Date()
+    snapshot = MutationPrioritySnapshot(
+      appliedAt: appliedAt,
+      source: source,
+      localScore: localActivityScore(now: now),
+      peerScore: peerActivityScore(now: now)
+    )
+  }
+
+  private func shouldAcceptRemoteMutation(
+    createdAt: Date,
+    snapshot: MutationPrioritySnapshot,
+    label: String,
+    context: LogContext?
+  ) -> Bool {
+    if createdAt >= snapshot.appliedAt + mutationTieWindow {
+      return true
+    }
+    if createdAt <= snapshot.appliedAt - mutationTieWindow {
+      logMutationRejection(
+        label: label,
+        context: context,
+        createdAt: createdAt,
+        snapshot: snapshot,
+        reason: "olderThanWindow"
+      )
+      return false
+    }
+
+    let now = Date()
+    let localScore = localActivityScore(now: now)
+    let peerScore = peerActivityScore(now: now)
+
+    if peerScore - localScore >= activityDominanceThreshold {
+      return true
+    }
+    if localScore - peerScore >= activityDominanceThreshold {
+      logMutationRejection(
+        label: label,
+        context: context,
+        createdAt: createdAt,
+        snapshot: snapshot,
+        reason: "localDominant"
+      )
+      return false
+    }
+
+    if snapshot.source == .local {
+      logMutationRejection(
+        label: label,
+        context: context,
+        createdAt: createdAt,
+        snapshot: snapshot,
+        reason: "localTieBreaker"
+      )
+      return false
+    }
+
+    return true
+  }
+
+  private func logMutationRejection(
+    label: String,
+    context: LogContext?,
+    createdAt: Date,
+    snapshot: MutationPrioritySnapshot,
+    reason: String
+  ) {
+    let resolvedContext = context ?? LogContext.current()
+    let metadata: [String: String] = [
+      "reason": reason,
+      "incomingCreatedAt": createdAt.ISO8601Format(),
+      "lastAppliedAt": snapshot.appliedAt.ISO8601Format(),
+      "lastSource": "\(snapshot.source)",
+      "snapshotLocalActivity": String(format: "%.3f", snapshot.localScore),
+      "snapshotPeerActivity": String(format: "%.3f", snapshot.peerScore)
+    ]
+    Log.event(
+      .realtimeEvent,
+      level: .debug,
+      message: label,
+      context: resolvedContext,
+      metadata: metadata
+    )
+  }
+
+  private func shouldAcceptRemoteTimerMutation(createdAt: Date) -> Bool {
+    if createdAt >= lastTimerSetReceivedAt + mutationTieWindow {
+      return true
+    }
+    if createdAt <= lastTimerSetReceivedAt - mutationTieWindow {
+      logMutationRejection(
+        label: "sync.timer.ignored_lowPriority",
+        context: nil,
+        createdAt: createdAt,
+        snapshot: timerMutationSnapshot,
+        reason: "olderThanWindow"
+      )
+      return false
+    }
+
+    let now = Date()
+    let localScore = localActivityScore(now: now)
+    let peerScore = peerActivityScore(now: now)
+
+    if peerScore - localScore >= activityDominanceThreshold {
+      return true
+    }
+    if localScore - peerScore >= activityDominanceThreshold {
+      logMutationRejection(
+        label: "sync.timer.ignored_lowPriority",
+        context: nil,
+        createdAt: createdAt,
+        snapshot: timerMutationSnapshot,
+        reason: "localDominant"
+      )
+      return false
+    }
+
+    if timerMutationSnapshot.source == .local {
+      logMutationRejection(
+        label: "sync.timer.ignored_lowPriority",
+        context: nil,
+        createdAt: createdAt,
+        snapshot: timerMutationSnapshot,
+        reason: "localTieBreaker"
+      )
+      return false
+    }
+
+    return true
   }
 }
 

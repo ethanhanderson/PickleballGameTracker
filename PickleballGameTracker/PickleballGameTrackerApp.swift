@@ -32,10 +32,6 @@ struct PickleballGameTrackerApp: App {
       AppRootView()
         .tint(.accentColor)
         .modelContainer(SwiftDataContainer.shared.modelContainer)
-        .environment(liveGameStateManager)
-        .environment(liveGameStateManager.gameManager!)
-        .environment(rosterManager)
-        .environment(syncCoordinator)
         .modifier(AppLifecycleModifier(liveGameStateManager: liveGameStateManager))
         .task {
           UNUserNotificationCenter.current().delegate = notificationDelegate
@@ -110,6 +106,10 @@ struct PickleballGameTrackerApp: App {
             )
           }
         }
+        .environment(liveGameStateManager)
+        .environment(liveGameStateManager.gameManager!)
+        .environment(rosterManager)
+        .environment(syncCoordinator)
     }
   }
 }
@@ -169,6 +169,7 @@ final class NotificationDelegate: NSObject, UIApplicationDelegate, UNUserNotific
 private struct AppLifecycleModifier: ViewModifier {
   @Environment(\.scenePhase) private var scenePhase
   let liveGameStateManager: LiveGameStateManager
+  @Environment(LiveSyncCoordinator.self) private var syncCoordinator
   
   func body(content: Content) -> some View {
     content
@@ -176,6 +177,10 @@ private struct AppLifecycleModifier: ViewModifier {
         if newPhase == .background {
           Task {
             await liveGameStateManager.persistSessionOnly()
+          }
+        } else if newPhase == .active {
+          Task {
+            try? await syncCoordinator.requestLiveStatus()
           }
         }
       }

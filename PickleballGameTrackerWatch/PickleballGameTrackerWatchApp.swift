@@ -10,6 +10,7 @@ import SwiftUI
 import GameTrackerWatchFeature
 import GameTrackerCore
 import WidgetKit
+import HealthKit
 
 @main
 struct PickleballGameTrackingWatchApp: App {
@@ -24,6 +25,8 @@ struct PickleballGameTrackingWatchApp: App {
     return LiveSyncCoordinator(service: NoopSyncService())
     #endif
   }()
+  @State private var workoutManager: WorkoutManager = WorkoutManager()
+  @State private var extendedRuntimeManager: ExtendedRuntimeManager = ExtendedRuntimeManager()
   
   init() {
     Task { await LoggingService.shared.configure(sinks: [OSLogSink(), ConsoleSink()], minimumLevel: .warn) }
@@ -41,6 +44,8 @@ struct PickleballGameTrackingWatchApp: App {
         .environment(liveGameStateManager.gameManager!)
         .environment(rosterManager)
         .environment(syncCoordinator)
+        .environment(workoutManager)
+        .environment(extendedRuntimeManager)
         .task {
           if let gm = liveGameStateManager.gameManager {
             syncCoordinator.bind(liveManager: liveGameStateManager, gameManager: gm)
@@ -67,6 +72,7 @@ struct PickleballGameTrackingWatchApp: App {
 private struct WatchAppLifecycleHandler: View {
   @Environment(\.scenePhase) private var scenePhase
   let liveGameStateManager: LiveGameStateManager
+  @Environment(LiveSyncCoordinator.self) private var syncCoordinator
   
   var body: some View {
     Color.clear
@@ -76,6 +82,10 @@ private struct WatchAppLifecycleHandler: View {
         if newPhase == .background {
           Task { @MainActor in
             await liveGameStateManager.persistSessionOnly()
+          }
+        } else if newPhase == .active {
+          Task { @MainActor in
+            try? await syncCoordinator.requestLiveStatus()
           }
         }
       }

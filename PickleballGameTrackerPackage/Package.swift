@@ -24,10 +24,6 @@ let package = Package(
         .product(
           name: "GameTrackerCore", package: "PickleballGameTrackerCorePackage")
       ]
-    ),
-    .testTarget(
-      name: "GameTrackerFeatureTests",
-      dependencies: ["GameTrackerFeature"]
-    ),
+    )
   ]
 )

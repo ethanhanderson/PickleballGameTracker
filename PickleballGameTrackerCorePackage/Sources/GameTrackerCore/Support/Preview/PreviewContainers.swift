@@ -302,6 +302,199 @@ public enum PreviewContainers {
             rosterManager: rosterManager
         )
     }
+
+    // MARK: - Dynamic Example Game Fetching
+
+    /// Fetches an example game from the given container using dynamic parameters, falling back gracefully.
+    /// - Parameters:
+    ///   - container: The preview model container.
+    ///   - type: Optional specific `GameType` to prefer.
+    ///   - preferTeamSize: Optional team size preference (1 singles, 2 doubles) used as a soft filter.
+    ///   - desiredState: Preferred game state to select (default: `.playing`).
+    ///   - showWonGame: When true, returns a game that may already be at or beyond the winning score (no clamping). Defaults to false.
+    ///   - nearEndOffset: When `showWonGame` is false, caps scores below `winningScore - nearEndOffset`.
+    ///   - cutthroatPlayers: Optional exact total players to seed for cutthroat games. If nil, a random value in [min,max] is chosen.
+    ///   - customSideSizes: Optional exact side sizes to seed for custom games (side1, side2). If nil, each side size is randomized per-side within type limits.
+    ///   - randomizeParticipants: If true (default), this will reseed participants for cutthroat/custom as described above.
+    /// - Returns: A `Game` instance suitable for previews, potentially reseeded with participants.
+    public static func exampleGame(
+        in container: ModelContainer,
+        type: GameType? = nil,
+        preferTeamSize: Int? = nil,
+        desiredState: GameState? = .playing,
+        showWonGame: Bool = false,
+        nearEndOffset: Int = 3,
+        cutthroatPlayers: Int? = nil,
+        customSideSizes: (Int, Int)? = nil,
+        randomizeParticipants: Bool = true
+    ) -> Game {
+        let ctx = container.mainContext
+        let all: [Game] = (try? ctx.fetch(
+            FetchDescriptor<Game>(
+                sortBy: [SortDescriptor<Game>(\.createdDate, order: .reverse)]
+            )
+        )) ?? []
+
+        func matchesSoftFilters(_ g: Game) -> Bool {
+            if let t = type, g.gameType != t { return false }
+            if let ts = preferTeamSize, (g.effectiveTeamSize != ts) { return false }
+            return true
+        }
+
+        func matchesDesiredState(_ g: Game) -> Bool {
+            guard let desired = desiredState else { return true }
+            switch desired {
+            case .completed:
+                return g.isCompleted
+            default:
+                return !g.isCompleted && g.gameState == desired
+            }
+        }
+
+        func reseeded(_ g: Game) -> Game {
+            guard randomizeParticipants else { return g }
+            let effectiveType = type ?? g.gameType
+            switch effectiveType {
+            case .cutthroat:
+                reseedCutthroatParticipants(for: g, in: ctx, explicitCount: cutthroatPlayers)
+            case .custom:
+                reseedCustomParticipants(for: g, in: ctx, explicitSizes: customSideSizes)
+            default:
+                break
+            }
+            return g
+        }
+
+        // 1) Prefer matches with desired state
+        if let match = all.first(where: { matchesDesiredState($0) && matchesSoftFilters($0) }) {
+            return adjusted(game: reseeded(match), showWonGame: showWonGame, nearEndOffset: nearEndOffset)
+        }
+
+        // 3) Fallback: any game matching soft filters
+        if let match = all.first(where: { matchesSoftFilters($0) }) {
+            return adjusted(game: reseeded(match), showWonGame: showWonGame, nearEndOffset: nearEndOffset)
+        }
+
+        // 4) Last resort: create a simple game of requested type
+        let createdType = type ?? .recreational
+        let created = Game(gameType: createdType)
+        // Insert into context so SwiftData-backed properties resolve in previews
+        ctx.insert(created)
+        // Normalize desired state for previews
+        if let desired = desiredState {
+            switch desired {
+            case .completed:
+                created.isCompleted = true
+                created.gameState = .completed
+            default:
+                created.isCompleted = false
+                created.gameState = desired
+            }
+        } else {
+            created.isCompleted = false
+            created.gameState = .playing
+        }
+        // Seed participants for certain types when creating fallback games
+        _ = reseeded(created)
+        return adjusted(game: created, showWonGame: showWonGame, nearEndOffset: nearEndOffset)
+    }
+
+    /// Optionally clamp scores below winning threshold and normalize state for previews.
+    private static func adjusted(game: Game, showWonGame: Bool, nearEndOffset: Int) -> Game {
+        guard showWonGame == false else { return game }
+        let cap = max(0, game.winningScore - max(0, nearEndOffset))
+        if game.isCompleted || game.score1 >= game.winningScore || game.score2 >= game.winningScore {
+            game.isCompleted = false
+            game.gameState = .playing
+            game.score1 = min(game.score1, cap)
+            game.score2 = min(game.score2, cap)
+        }
+        return game
+    }
+}
+
+// MARK: - Participant Reseeding
+
+private extension PreviewContainers {
+    static func reseedCutthroatParticipants(for game: Game, in context: ModelContext, explicitCount: Int?) {
+        let minPlayers = game.gameType.minPlayersTotal
+        let maxPlayers = game.gameType.maxPlayersTotal
+        let target = max(minPlayers, min(explicitCount ?? Int.random(in: minPlayers...maxPlayers), maxPlayers))
+
+        var players = (try? context.fetch(
+            FetchDescriptor<PlayerProfile>(predicate: #Predicate { !$0.isArchived })
+        )) ?? []
+        if players.count < target {
+            // Create guest players to fill
+            let needed = target - players.count
+            for i in 1...needed {
+                let id = UUID()
+                let guest = PlayerProfile(
+                    id: id,
+                    name: "Guest \(i)",
+                    isGuest: true,
+                    accentColor: StoredRGBAColor.fromSeed(id)
+                )
+                context.insert(guest)
+                players.append(guest)
+            }
+        }
+
+        let shuffled = players.shuffled().prefix(target)
+        let side1 = shuffled.enumerated().compactMap { $0.offset % 2 == 0 ? $0.element.id : nil }
+        let side2 = shuffled.enumerated().compactMap { $0.offset % 2 == 1 ? $0.element.id : nil }
+
+        game.participantMode = .players
+        game.teamSize = 1
+        game.side1TeamId = nil
+        game.side2TeamId = nil
+        game.side1PlayerIds = Array(side1)
+        game.side2PlayerIds = Array(side2)
+        game.lastModified = Date()
+    }
+
+    static func reseedCustomParticipants(for game: Game, in context: ModelContext, explicitSizes: (Int, Int)?) {
+        let minSize = game.gameType.minTeamSize
+        let maxSize = game.gameType.maxTeamSize
+        let sizes: (Int, Int) = {
+            if let explicit = explicitSizes {
+                return (max(minSize, min(explicit.0, maxSize)), max(minSize, min(explicit.1, maxSize)))
+            } else {
+                return (Int.random(in: minSize...maxSize), Int.random(in: minSize...maxSize))
+            }
+        }()
+
+        let totalNeeded = sizes.0 + sizes.1
+        var players = (try? context.fetch(
+            FetchDescriptor<PlayerProfile>(predicate: #Predicate { !$0.isArchived })
+        )) ?? []
+        if players.count < totalNeeded {
+            let needed = totalNeeded - players.count
+            for i in 1...needed {
+                let id = UUID()
+                let guest = PlayerProfile(
+                    id: id,
+                    name: "Guest \(i)",
+                    isGuest: true,
+                    accentColor: StoredRGBAColor.fromSeed(id)
+                )
+                context.insert(guest)
+                players.append(guest)
+            }
+        }
+
+        let shuffled = players.shuffled()
+        let side1 = shuffled.prefix(sizes.0).map { $0.id }
+        let side2 = shuffled.dropFirst(sizes.0).prefix(sizes.1).map { $0.id }
+
+        game.participantMode = .players
+        game.teamSize = max(sizes.0, sizes.1)
+        game.side1TeamId = nil
+        game.side2TeamId = nil
+        game.side1PlayerIds = Array(side1)
+        game.side2PlayerIds = Array(side2)
+        game.lastModified = Date()
+    }
 }
 
 // MARK: - Resumeable History Helpers

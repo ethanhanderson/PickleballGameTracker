@@ -1,134 +1,170 @@
 import GameTrackerCore
 import SwiftUI
 
+@MainActor
 struct GameControlsView: View {
   let game: Game
   @Environment(LiveGameStateManager.self) private var liveGameStateManager
+  @Environment(WorkoutManager.self) private var workoutManager
   let isGamePaused: Bool
   let isGameInitial: Bool
   let isToggling: Bool
   @Binding var showingCompleteAlert: Bool
   @Binding var showingSettings: Bool
   let onToggleGame: () -> Void
+  let onOpenWorkout: (() -> Void)?
 
   var body: some View {
-    ScrollView {
-      VStack(spacing: DesignSystem.Spacing.md) {
-        HStack(spacing: DesignSystem.Spacing.md) {
-          Button {
-            onToggleGame()
-          } label: {
-            VStack(spacing: DesignSystem.Spacing.xs) {
-              Group {
-                Image(systemName: gameStatusButtonIcon)
-                  .font(.title2)
-                  .foregroundStyle(.white)
-                  .frame(width: 28, height: 28)
+    Group {
+      if game.isDetachedFromContext {
+        Color.clear
+      } else {
+        ScrollView {
+          VStack(spacing: DesignSystem.Spacing.md) {
+            HStack(spacing: DesignSystem.Spacing.md) {
+              Button {
+                onToggleGame()
+              } label: {
+                VStack(spacing: DesignSystem.Spacing.xs) {
+                  Group {
+                    Image(systemName: gameStatusButtonIcon)
+                      .font(.title2)
+                      .foregroundStyle(.white)
+                      .frame(width: 28, height: 28)
+                  }
+                  .frame(maxWidth: .infinity)
+                  .padding(.vertical, 12)
+                  .glassEffect(.regular.tint(gameStatusButtonColor.opacity(0.45)))
+                  Text(gameStatusButtonShortText)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.white)
+                }
+                .opacity(dimOpacity(forDisabled: isGameStatusButtonDisabled))
               }
-              .frame(maxWidth: .infinity)
-              .padding(.vertical, 12)
-              .glassEffect(.regular.tint(gameStatusButtonColor.opacity(0.45)))
-              Text(gameStatusButtonShortText)
-                .font(.caption)
-                .fontWeight(.medium)
-                .foregroundStyle(.white)
-            }
-            .opacity(dimOpacity(forDisabled: isGameStatusButtonDisabled))
-          }
-          .buttonSizing(.flexible)
-          .buttonStyle(.plain)
-          .disabled(isGameStatusButtonDisabled)
+              .buttonSizing(.flexible)
+              .buttonStyle(.plain)
+              .disabled(isGameStatusButtonDisabled)
 
-          if !hasWinner {
-            Button {
-              if !game.safeIsCompleted {
-                showingCompleteAlert = true
-              }
-            } label: {
-              VStack(spacing: DesignSystem.Spacing.xs) {
-                Group {
-                  Image(systemName: "flag.checkered")
-                    .font(.title2)
-                    .foregroundStyle(.white)
-                    .frame(width: 28, height: 28)
+              if !hasWinner {
+                Button {
+                  if !game.safeIsCompleted {
+                    showingCompleteAlert = true
+                  }
+                } label: {
+                  VStack(spacing: DesignSystem.Spacing.xs) {
+                    Group {
+                      Image(systemName: "flag.checkered")
+                        .font(.title2)
+                        .foregroundStyle(.white)
+                        .frame(width: 28, height: 28)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .glassEffect(.regular.tint(.red.opacity(0.8)))
+                    Text("End")
+                      .font(.caption)
+                      .fontWeight(.medium)
+                      .foregroundStyle(.white)
+                  }
+                  .opacity(dimOpacity(forDisabled: isEndGameButtonDisabled))
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .glassEffect(.regular.tint(.red.opacity(0.8)))
-                Text("End")
-                  .font(.caption)
-                  .fontWeight(.medium)
-                  .foregroundStyle(.white)
-              }
-              .opacity(dimOpacity(forDisabled: isEndGameButtonDisabled))
-            }
-            .buttonSizing(.flexible)
-            .buttonStyle(.plain)
-            .disabled(isEndGameButtonDisabled)
-          } else {
-            Button {
-              showingSettings = true
-            } label: {
-              VStack(spacing: DesignSystem.Spacing.xs) {
-                Group {
-                  Image(systemName: "gearshape.fill")
-                    .font(.title2)
-                    .foregroundStyle(.white)
-                    .frame(width: 28, height: 28)
+                .buttonSizing(.flexible)
+                .buttonStyle(.plain)
+                .disabled(isEndGameButtonDisabled)
+              } else {
+                Button {
+                  showingSettings = true
+                } label: {
+                  VStack(spacing: DesignSystem.Spacing.xs) {
+                    Group {
+                      Image(systemName: "gearshape.fill")
+                        .font(.title2)
+                        .foregroundStyle(.white)
+                        .frame(width: 28, height: 28)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .glassEffect(.regular.tint(.gray.opacity(0.6)))
+                    Text("Settings")
+                      .font(.caption)
+                      .fontWeight(.medium)
+                      .foregroundStyle(.white)
+                  }
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .glassEffect(.regular.tint(.gray.opacity(0.6)))
-                Text("Settings")
-                  .font(.caption)
-                  .fontWeight(.medium)
-                  .foregroundStyle(.white)
+                .buttonSizing(.flexible)
+                .buttonStyle(.plain)
               }
             }
-            .buttonSizing(.flexible)
-            .buttonStyle(.plain)
-          }
-        }
 
-        if !hasWinner {
-          HStack(spacing: DesignSystem.Spacing.md) {
-            Button {
-              showingSettings = true
-            } label: {
-              VStack(spacing: DesignSystem.Spacing.xs) {
-                Group {
-                  Image(systemName: "gearshape.fill")
-                    .font(.title2)
-                    .foregroundStyle(.white)
-                    .frame(width: 28, height: 28)
+            if !hasWinner {
+              HStack(spacing: DesignSystem.Spacing.md) {
+                Button {
+                  showingSettings = true
+                } label: {
+                  VStack(spacing: DesignSystem.Spacing.xs) {
+                    Group {
+                      Image(systemName: "gearshape.fill")
+                        .font(.title2)
+                        .foregroundStyle(.white)
+                        .frame(width: 28, height: 28)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .glassEffect(.regular.tint(.gray.opacity(0.6)))
+                    Text("Settings")
+                      .font(.caption)
+                      .fontWeight(.medium)
+                      .foregroundStyle(.white)
+                  }
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .glassEffect(.regular.tint(.gray.opacity(0.6)))
-                Text("Settings")
-                  .font(.caption)
-                  .fontWeight(.medium)
-                  .foregroundStyle(.white)
+                .buttonSizing(.flexible)
+                .buttonStyle(.plain)
+                
+                if workoutManager.isAuthorized && (workoutManager.isActive || workoutManager.isPrepared) {
+                  Button {
+                    onOpenWorkout?()
+                  } label: {
+                    VStack(spacing: DesignSystem.Spacing.xs) {
+                      Group {
+                        Image(systemName: "heart.fill")
+                          .font(.title2)
+                          .foregroundStyle(.white)
+                          .frame(width: 28, height: 28)
+                      }
+                      .frame(maxWidth: .infinity)
+                      .padding(.vertical, 12)
+                      .glassEffect(.regular.tint(.blue.opacity(0.6)))
+                      Text("Workout")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.white)
+                    }
+                  }
+                  .buttonSizing(.flexible)
+                  .buttonStyle(.plain)
+                  .accessibilityIdentifier("openWorkoutButton")
+                } else {
+                  Color.clear
+                    .frame(maxWidth: .infinity)
+                }
               }
             }
-            .buttonSizing(.flexible)
-            .buttonStyle(.plain)
-            
-            Color.clear
-              .frame(maxWidth: .infinity)
           }
+          .padding(.horizontal)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(.rect)
+        .scrollClipDisabled()
+        .navigationTitle {
+          let title = liveGameStateManager.currentGameTypeDisplayName ?? game.gameType.displayName
+          let color = liveGameStateManager.currentGameTypeColor ?? game.gameType.color
+          Text(title)
+            .foregroundStyle(color)
+        }
+        .toolbarTitleDisplayMode(.inline)
       }
-      .padding(.horizontal)
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .contentShape(.rect)
-    .scrollClipDisabled()
-    .navigationTitle {
-      Text(game.gameType.displayName)
-        .foregroundStyle(game.gameType.color)
-    }
-    .toolbarTitleDisplayMode(.inline)
   }
 
   // MARK: - Computed Properties
@@ -176,6 +212,8 @@ struct GameControlsView: View {
   private var isInitialState: Bool { game.safeGameState == .initial }
   
   private var hasWinner: Bool {
+    // Avoid touching SwiftData-backed properties if the model has been detached
+    if game.isDetachedFromContext { return false }
     guard game.isCompleted else { return false }
     return game.score1 != game.score2
   }

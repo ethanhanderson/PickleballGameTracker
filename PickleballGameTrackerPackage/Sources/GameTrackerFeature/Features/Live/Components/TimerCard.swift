@@ -7,13 +7,6 @@ struct TimerCard: View {
   @Bindable var game: Game
   @Environment(LiveGameStateManager.self) private var activeGameStateManager
   let formattedElapsedTime: String
-  let isTimerPaused: Bool
-  let isGameLive: Bool
-  let isResetting: Bool
-  let isToggling: Bool
-  let pulseAnimation: Bool
-  let resetTrigger: Bool
-  let playPauseTrigger: Bool
 
   private var gameTypeColor: Color {
     activeGameStateManager.currentGameTypeColor ?? Color.accentColor
@@ -30,6 +23,7 @@ struct TimerCard: View {
         .font(.system(size: 20, weight: .semibold))
         .foregroundStyle(timerIconColor.gradient)
         .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 2)
+        
       Text(formattedElapsedTime)
         .font(.system(.title2, design: .monospaced))
         .fontWeight(.semibold)
@@ -40,8 +34,7 @@ struct TimerCard: View {
     .padding(.horizontal, DesignSystem.Spacing.lg)
     .padding(.vertical, DesignSystem.Spacing.md)
     .glassEffect(.regular.tint(timerBackgroundColor.opacity(0.35)), in: Capsule())
-    .opacity(game.safeIsCompleted ? 0.6 : (pulseAnimation ? 0.6 : 1.0))
-    .animation(.easeInOut(duration: 0.3), value: pulseAnimation)
+    .opacity(game.safeIsCompleted ? 0.6 : 1.0)
     .animation(.easeInOut(duration: 0.2), value: game.safeIsCompleted)
   }
 }
@@ -49,84 +42,8 @@ struct TimerCard: View {
 #Preview("Live Game Timer") {
   TimerCard(
     game: PreviewGameData.earlyGame,
-    formattedElapsedTime: "02:05.67",
-    isTimerPaused: false,
-    isGameLive: true,
-    isResetting: false,
-    isToggling: false,
-    pulseAnimation: false,
-    resetTrigger: false,
-    playPauseTrigger: false
+    formattedElapsedTime: "02:05.67"
   )
   .padding()
-  .modelContainer(PreviewContainers.standard())
-  .tint(.green)
-}
-
-#Preview("Basic Timer") {
-  TimerCard(
-    game: PreviewGameData.earlyGame,
-    formattedElapsedTime: "02:05.67",
-    isTimerPaused: false,
-    isGameLive: true,
-    isResetting: false,
-    isToggling: false,
-    pulseAnimation: false,
-    resetTrigger: false,
-    playPauseTrigger: false
-  )
-  .padding()
-  .modelContainer(PreviewContainers.minimal())
-  .tint(.green)
-}
-
-#Preview("Timer Paused") {
-  TimerCard(
-    game: PreviewGameData.trainingGame,
-    formattedElapsedTime: "01:07.23",
-    isTimerPaused: true,
-    isGameLive: true,
-    isResetting: false,
-    isToggling: false,
-    pulseAnimation: false,
-    resetTrigger: false,
-    playPauseTrigger: false
-  )
-  .padding()
-  .modelContainer(PreviewContainers.minimal())
-  .tint(.green)
-}
-
-#Preview("Game Paused") {
-  TimerCard(
-    game: PreviewGameData.pausedGame,
-    formattedElapsedTime: "01:07.23",
-    isTimerPaused: true,
-    isGameLive: false,
-    isResetting: false,
-    isToggling: false,
-    pulseAnimation: false,
-    resetTrigger: false,
-    playPauseTrigger: false
-  )
-  .padding()
-  .modelContainer(PreviewContainers.minimal())
-  .tint(.green)
-}
-
-#Preview("Game Completed") {
-  TimerCard(
-    game: PreviewGameData.completedGame,
-    formattedElapsedTime: "03:45.78",
-    isTimerPaused: true,
-    isGameLive: false,
-    isResetting: false,
-    isToggling: false,
-    pulseAnimation: false,
-    resetTrigger: false,
-    playPauseTrigger: false
-  )
-  .padding()
-  .modelContainer(PreviewContainers.minimal())
-  .tint(.green)
+  .previewContainer(PreviewEnvironment.liveGame())
 }

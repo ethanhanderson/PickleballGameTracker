@@ -10,6 +10,10 @@ struct SideScoreSection: View {
     let isGameLive: Bool
     let currentTimestamp: TimeInterval
     let onEventLogged: ((GameEvent) -> Void)?
+    let singlePlayer: PlayerProfile?
+    let isExpanded: Bool
+    let onTopCardTapped: (() -> Void)?
+    let onOutClearsServe: (() -> Void)?
     @Environment(\.modelContext) private var modelContext
     @Environment(SwiftDataGameManager.self) private var gameManager
 
@@ -19,7 +23,11 @@ struct SideScoreSection: View {
         teamName: String,
         isGameLive: Bool,
         currentTimestamp: TimeInterval,
-        onEventLogged: ((GameEvent) -> Void)? = nil
+        onEventLogged: ((GameEvent) -> Void)? = nil,
+        singlePlayer: PlayerProfile? = nil,
+        isExpanded: Bool = false,
+        onTopCardTapped: (() -> Void)? = nil,
+        onOutClearsServe: (() -> Void)? = nil
     ) {
         self.game = game
         self.teamNumber = teamNumber
@@ -27,38 +35,65 @@ struct SideScoreSection: View {
         self.isGameLive = isGameLive
         self.currentTimestamp = currentTimestamp
         self.onEventLogged = onEventLogged
+        self.singlePlayer = singlePlayer
+        self.isExpanded = isExpanded
+        self.onTopCardTapped = onTopCardTapped
+        self.onOutClearsServe = onOutClearsServe
     }
 
-    private var teamTintColor: Color {
-        game.teamTintColor(for: teamNumber, context: modelContext)
+    private var sectionTintColor: Color {
+        if let singlePlayer { return singlePlayer.accentColor }
+        return game.teamTintColor(for: teamNumber, context: modelContext)
     }
 
     var body: some View {
-        VStack(spacing: DesignSystem.Spacing.md) {
-            SideScoreTopCard(
-                game: game,
-                teamNumber: teamNumber,
-                teamName: teamName,
-                isGameLive: isGameLive,
-                showTapIndicator: game.safeGameState == .playing || game.safeGameState == .paused,
-                tintOverride: teamTintColor
-            )
-            .animation(
-                Animation.spring(response: 0.3, dampingFraction: 0.8),
-                value: teamNumber == 1 ? game.score1 : game.score2
-            )
+        Group {
+            // If the model is detached, render nothing; parent will dismiss the live view.
+            if game.isDetachedFromContext {
+                Color.clear
+            } else {
+                // Safe to access SwiftData-backed properties after guard
+                let isPlayersLayout = (game.layoutStyle == .players)
+                VStack(spacing: DesignSystem.Spacing.md) {
+                    SideScoreTopCard(
+                        game: game,
+                        teamNumber: teamNumber,
+                        teamName: teamName,
+                        isGameLive: isGameLive,
+                        showTapIndicator: game.safeGameState == .playing || game.safeGameState == .paused,
+                        tintOverride: sectionTintColor,
+                        isServingPlayer: isExpanded,
+                        onTapped: onTopCardTapped,
+                        displayScore: (isPlayersLayout ? (singlePlayer.map { game.playerScore(for: $0) }) : nil)
+                    )
+                    .animation(
+                        Animation.spring(response: 0.3, dampingFraction: 0.8),
+                        value: (isPlayersLayout ? (singlePlayer.map { game.playerScore(for: $0) } ?? 0) : (teamNumber == 1 ? game.score1 : game.score2))
+                    )
 
-            if isGameLive && game.currentServer == teamNumber && game.safeGameState == .playing {
-                EventButtonsCard(
-                    game: game,
-                    currentTimestamp: currentTimestamp,
-                    tintColor: teamTintColor,
-                    teamNumber: teamNumber,
-                    onEventLogged: onEventLogged
-                )
-                .accessibilityIdentifier(
-                    "SideScoreCard.events.team\(teamNumber)"
-                )
+                    let shouldShowEvents: Bool = {
+                        if isPlayersLayout {
+                            return isExpanded && isGameLive && game.safeGameState == .playing
+                        }
+                        return isGameLive && game.currentServer == teamNumber && game.safeGameState == .playing
+                    }()
+
+                    if shouldShowEvents {
+                        EventButtonsCard(
+                            game: game,
+                            currentTimestamp: currentTimestamp,
+                            tintColor: sectionTintColor,
+                            teamNumber: teamNumber,
+                            onEventLogged: onEventLogged,
+                            layout: game.gameType == .cutthroat ? .scoreAndOutInline : .standard,
+                            singlePlayer: singlePlayer,
+                            onOutTapped: onOutClearsServe
+                        )
+                        .accessibilityIdentifier(
+                            "SideScoreCard.events.team\(teamNumber)"
+                        )
+                    }
+                }
             }
         }
     }
@@ -89,23 +124,23 @@ private struct SideScorePreviewHost: View {
 #Preview("Random Player") {
     let container = PreviewContainers.liveGame()
     let (gameManager, _) = PreviewContainers.managers(for: container)
-    let context = container.mainContext
-    let game: Game = (try? context.fetch(FetchDescriptor<Game>()).first(where: { $0.effectiveTeamSize == 1 }))
-        ?? ((try? context.fetch(FetchDescriptor<Game>()))?.first ?? Game(gameType: .recreational))
+    let syncCoordinator = LiveSyncCoordinator(service: NoopSyncService())
+    let game: Game = PreviewContainers.exampleGame(in: container, preferTeamSize: 1)
 
     SideScorePreviewHost(game: game)
         .modelContainer(container)
         .environment(gameManager)
+        .environment(syncCoordinator)
 }
 
 #Preview("Random Team") {
     let container = PreviewContainers.liveGame()
     let (gameManager, _) = PreviewContainers.managers(for: container)
-    let context = container.mainContext
-    let game: Game = (try? context.fetch(FetchDescriptor<Game>()).first(where: { $0.effectiveTeamSize > 1 }))
-        ?? ((try? context.fetch(FetchDescriptor<Game>()))?.first ?? Game(gameType: .recreational))
+    let syncCoordinator = LiveSyncCoordinator(service: NoopSyncService())
+    let game: Game = PreviewContainers.exampleGame(in: container, preferTeamSize: 2)
 
     SideScorePreviewHost(game: game)
         .modelContainer(container)
         .environment(gameManager)
+        .environment(syncCoordinator)
 }

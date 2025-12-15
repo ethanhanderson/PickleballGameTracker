@@ -8,6 +8,22 @@ import UIKit
 // MARK: - Game SwiftUI Extensions
 
 extension Game {
+  // Layout styles for rendering a live game
+  public enum LayoutStyle {
+    case sides   // Render two sides (standard)
+    case players // Render per-player rows (cutthroat, free-for-all)
+  }
+
+  /// Determines how the game should be rendered in live views
+  public var layoutStyle: LayoutStyle {
+    switch gameType {
+    case .cutthroat:
+      return .players
+    default:
+      return .sides
+    }
+  }
+
   /// Configuration for each team to support dynamic UI rendering
   public struct TeamConfig: Identifiable {
     public var id: Int { teamNumber }
@@ -46,6 +62,36 @@ extension Game {
     return []
   }
 
+  // Participant rows for player-based layouts
+  public struct ParticipantRow: Identifiable, Hashable {
+    public var id: UUID { player.id }
+    public let player: PlayerProfile
+    public let teamNumber: Int
+  }
+
+  /// Returns per-player participant rows when using a player-based layout
+  public func participantRows(context: ModelContext) -> [ParticipantRow] {
+    guard layoutStyle == .players else { return [] }
+    guard !isDetachedFromContext else { return [] }
+    let side1 = resolveSide1Players(context: context) ?? []
+    let side2 = resolveSide2Players(context: context) ?? []
+    let rows1 = side1.map { ParticipantRow(player: $0, teamNumber: 1) }
+    let rows2 = side2.map { ParticipantRow(player: $0, teamNumber: 2) }
+    return rows1 + rows2
+  }
+
+  /// Derived per-player score for player-based layouts by counting playerScored events with matching description.
+  /// Note: This is a UI-only convenience for previews and player-row displays; engine scoring remains team-based.
+  public func playerScore(for player: PlayerProfile) -> Int {
+    guard layoutStyle == .players else { return 0 }
+    let namePrefix = "\(player.name) scored"
+    return events.reduce(0) { acc, ev in
+      guard ev.eventType == .playerScored else { return acc }
+      if let desc = ev.customDescription, desc.hasPrefix(namePrefix) { return acc + 1 }
+      return acc
+    }
+  }
+
   /// Convenience property for views without ModelContext
   public var teamsWithLabels: [TeamConfig] {
     // No context available — return an empty list to avoid accidental crashes
@@ -73,7 +119,11 @@ extension Game {
 // MARK: - Game State Helpers
 
 extension Game {
-  /// Get primary game events for UI display
+  /// Primary quick-action events rendered in live views.
+  ///
+  /// Each event listed here is expected to respect `GameEventType.typicallyChangesServe`
+  /// so that UI affordances that rely on this array can automatically advance or retain
+  /// serving order without bespoke logic per button.
   public var primaryGameEvents: [GameEventType] {
     [
       .serviceFault,
@@ -110,6 +160,17 @@ extension Game {
   /// Check if serving indicator should be visible for a team
   public func shouldShowServingIndicator(for teamNumber: Int) -> Bool {
     isServing(teamNumber: teamNumber) && !isCompleted
+  }
+
+  /// Flexible serving indicator visibility that respects layout style
+  public func shouldShowServingIndicator(layout: LayoutStyle, teamNumber: Int) -> Bool {
+    switch layout {
+    case .players:
+      // Avoid showing multiple serving indicators when rendering per-player rows
+      return false
+    case .sides:
+      return shouldShowServingIndicator(for: teamNumber)
+    }
   }
 }
 
@@ -168,6 +229,10 @@ extension GameType {
       return .purple
     case .custom:
       return .gray
+    case .cutthroat:
+      return .teal
+    case .groupPlay:
+      return .indigo
     }
   }
 }

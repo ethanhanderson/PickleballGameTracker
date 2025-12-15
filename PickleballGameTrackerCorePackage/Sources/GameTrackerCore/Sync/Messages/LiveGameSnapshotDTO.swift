@@ -9,6 +9,7 @@ import Foundation
 public struct LiveGameSnapshotDTO: Codable, Sendable, Identifiable {
   public let id: UUID
   public let gameId: UUID
+  public let snapshotCreatedAt: Date
 
   // Timer snapshot
   public let elapsedTime: TimeInterval
@@ -46,6 +47,7 @@ public struct LiveGameSnapshotDTO: Codable, Sendable, Identifiable {
   public init(
     id: UUID = UUID(),
     gameId: UUID,
+    snapshotCreatedAt: Date = Date(),
     elapsedTime: TimeInterval,
     isTimerRunning: Bool,
     gameType: GameType,
@@ -74,6 +76,7 @@ public struct LiveGameSnapshotDTO: Codable, Sendable, Identifiable {
   ) {
     self.id = id
     self.gameId = gameId
+    self.snapshotCreatedAt = snapshotCreatedAt
     self.elapsedTime = elapsedTime
     self.isTimerRunning = isTimerRunning
     self.gameType = gameType

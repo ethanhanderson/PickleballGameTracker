@@ -1,7 +1,8 @@
 import Foundation
 public struct LiveGameDeltaDTO: Codable, Sendable, Identifiable {
   public enum Operation: Codable, Sendable {
-    case score(team: Int)
+    case score(team: Int, playerId: UUID? = nil, playerName: String? = nil)
+    case scoreAndSetServe(team: Int, playerId: UUID? = nil, playerName: String? = nil)
     case undoLastPoint
     case decrement(team: Int)
     case setGameState(GameState)

@@ -58,6 +58,17 @@ public extension LogEvent {
   static let appLaunch = LogEvent("appLaunch", category: .app)
   static let appTerminate = LogEvent("appTerminate", category: .app)
   static let settingsChanged = LogEvent("settingsChanged", category: .app)
+
+  // Watch / Workout
+  static let permissionGranted = LogEvent("permissionGranted", category: .watch)
+  static let permissionDenied = LogEvent("permissionDenied", category: .watch)
+  static let createSucceeded = LogEvent("workoutPrepared", category: .watch)
+  static let createFailed = LogEvent("workoutPrepareFailed", category: .watch)
+  static let start = LogEvent("workoutStart", category: .watch)
+  static let startFailed = LogEvent("workoutStartFailed", category: .watch)
+  static let pause = LogEvent("workoutPause", category: .watch)
+  static let resume = LogEvent("workoutResume", category: .watch)
+  static let end = LogEvent("workoutEnd", category: .watch)
 }
 
 
