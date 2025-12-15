@@ -265,7 +265,7 @@ public enum GameType: String, CaseIterable, Codable, Hashable, Sendable {
   /// Minimum total players supported for this game type (not per side)
   public var minPlayersTotal: Int {
     switch self {
-    case .cutthroat: return 2
+    case .cutthroat: return 3
     case .groupPlay: return 2
     default: return 2
     }
