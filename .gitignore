@@ -79,3 +79,21 @@ Makefile
 # xcode-build-server files
 buildServer.json
 .compile
+
+# Added for upload hygiene
+.DS_Store
+**/.DS_Store
+.build/
+build/
+build-ios/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+buildServer.json
+.env
+.env.*
+*.local.json
+Secrets.xcconfig
+node_modules/
+.next/
+supabase/.temp/

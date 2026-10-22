@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "xcode-tools": {
+      "type": "stdio",
+      "command": "xcrun",
+      "args": ["mcpbridge"]
+    },
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=upociuofzihseweiygfv"
+    }
+  }
+}
